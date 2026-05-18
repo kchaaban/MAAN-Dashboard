@@ -18,7 +18,7 @@ const users = {
     'viewer': { password: 'password', role: 'Viewer' }
 };
 
-app.post('/api/login', (req, res) => {
+app.post('/maan-dashboard/api/login', (req, res) => {
     const { username, password } = req.body;
     const user = users[username];
     if (user && user.password === password) {
@@ -51,7 +51,7 @@ const requireRole = (roles) => (req, res, next) => {
 };
 
 // Secure Data Endpoint
-app.get('/api/data/:filename', authenticateToken, (req, res) => {
+app.get('/maan-dashboard/api/data/:filename', authenticateToken, (req, res) => {
     const filename = req.params.filename;
     
     // Only allow specific js files
@@ -80,10 +80,10 @@ app.get('/api/data/:filename', authenticateToken, (req, res) => {
 
 // Serve frontend static files
 const distPath = path.join(__dirname, '..', 'dist');
-app.use(express.static(distPath));
+app.use('/maan-dashboard', express.static(distPath));
 
 // Catch-all to serve index.html for SPA routing (if any)
-app.get('*', (req, res) => {
+app.get('/maan-dashboard/*', (req, res) => {
     if (fs.existsSync(path.join(distPath, 'index.html'))) {
         res.sendFile(path.join(distPath, 'index.html'));
     } else {

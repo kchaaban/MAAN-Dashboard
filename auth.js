@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = '/maan-dashboard/api';
 
 document.addEventListener('DOMContentLoaded', () => {
     // Hide dashboard initially
