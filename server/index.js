@@ -33,9 +33,9 @@ app.post('/maan-dashboard/api/login', (req, res) => {
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    
+
     if (!token) return res.sendStatus(401);
-    
+
     jwt.verify(token, JWT_SECRET, (err, user) => {
         if (err) return res.sendStatus(403);
         req.user = user;
@@ -53,7 +53,7 @@ const requireRole = (roles) => (req, res, next) => {
 // Secure Data Endpoint
 app.get('/maan-dashboard/api/data/:filename', authenticateToken, (req, res) => {
     const filename = req.params.filename;
-    
+
     // Only allow specific js files
     const allowedFiles = ['data.js', 'assign_camps.js', 'assign_residences.js', 'service_companies.js'];
     if (!allowedFiles.includes(filename)) {
