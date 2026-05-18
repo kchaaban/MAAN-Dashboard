@@ -1,0 +1,83 @@
+const express = require('express');
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const fs = require('fs');
+const path = require('path');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'maan-super-secret-key';
+
+app.use(cors());
+app.use(express.json());
+
+// Mock Users with RBAC
+const users = {
+    'admin': { password: 'password', role: 'Administrator' },
+    'manager': { password: 'password', role: 'Operations Manager' },
+    'viewer': { password: 'password', role: 'Viewer' }
+};
+
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+    const user = users[username];
+    if (user && user.password === password) {
+        const token = jwt.sign({ username, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
+        res.json({ token, role: user.role });
+    } else {
+        res.status(401).json({ error: 'Invalid credentials' });
+    }
+});
+
+// Middleware
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) return res.sendStatus(401);
+    
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
+        next();
+    });
+};
+
+const requireRole = (roles) => (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+        return res.status(403).json({ error: 'Access denied: insufficient permissions' });
+    }
+    next();
+};
+
+// Secure Data Endpoint
+app.get('/api/data/:filename', authenticateToken, (req, res) => {
+    const filename = req.params.filename;
+    
+    // Only allow specific js files
+    const allowedFiles = ['data.js', 'assign_camps.js', 'assign_residences.js', 'service_companies.js'];
+    if (!allowedFiles.includes(filename)) {
+        return res.status(403).json({ error: 'File not allowed' });
+    }
+
+    // Role-Based Access Control
+    if (['assign_camps.js', 'assign_residences.js'].includes(filename)) {
+        if (!['Operations Manager', 'Administrator'].includes(req.user.role)) {
+            // For viewers, return an empty string so the frontend doesn't crash but data is hidden
+            return res.status(200).send('// Access denied to detailed assignments');
+        }
+    }
+
+    const filePath = path.join(__dirname, 'data', filename);
+    if (fs.existsSync(filePath)) {
+        // Send as Javascript
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        res.sendFile(filePath);
+    } else {
+        res.status(404).json({ error: 'File not found' });
+    }
+});
+
+app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+});
