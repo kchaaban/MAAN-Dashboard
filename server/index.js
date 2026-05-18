@@ -78,6 +78,19 @@ app.get('/api/data/:filename', authenticateToken, (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+// Serve frontend static files
+const distPath = path.join(__dirname, '..', 'dist');
+app.use(express.static(distPath));
+
+// Catch-all to serve index.html for SPA routing (if any)
+app.get('*', (req, res) => {
+    if (fs.existsSync(path.join(distPath, 'index.html'))) {
+        res.sendFile(path.join(distPath, 'index.html'));
+    } else {
+        res.status(404).send('Please run "npm run build" in the root directory first.');
+    }
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
 });
