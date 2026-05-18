@@ -34,6 +34,7 @@ let serviceCompanyNameByKey = new Map();
 let serviceCenterNamesByKey = new Map();
 let plansCsvLoadSequence = 0;
 let activePlansCsvSource = '';
+let dashboardResizeFrameId = null;
 const TOP_RING_CANVAS_SIZE = 52;
 
 const MAP_RENDER_LIMIT = 300;
@@ -45,16 +46,16 @@ const SIDEBAR_WIDTH_STORAGE_KEY = 'dashboard-sidebar-width';
 const RIGHT_PANEL_WIDTH_STORAGE_KEY = 'dashboard-right-panel-width';
 const CHART_POPOUT_WINDOW_FEATURES = 'noopener,noreferrer,width=1200,height=760';
 const DISTRICT_COLOR_PALETTE = [
-    "#2563eb",
-    "#0d9488",
-    "#f59e0b",
-    "#db2777",
-    "#7c3aed",
-    "#16a34a",
-    "#ea580c",
-    "#0891b2",
-    "#be123c",
-    "#4f46e5"
+    "#2A9D90",
+    "#4EC9B9",
+    "#EBC468",
+    "#C25858",
+    "#791C2A",
+    "#7D7150",
+    "#A88047",
+    "#1D5751",
+    "#791C2A",
+    "#CAAB79"
 ];
 
 // Helper to normalize Arabic text for matching (e.g., 'حى' to 'حي', 'ه' to 'ة')
@@ -273,7 +274,7 @@ const barValueLabelPlugin = {
         ctx.fillStyle = color;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        ctx.font = `800 ${fontSize}px Cairo, sans-serif`;
+        ctx.font = `800 ${fontSize}px Inter, IBM Plex Sans Arabic, sans-serif`;
 
         chart.data.datasets.forEach((dataset, datasetIndex) => {
             const meta = chart.getDatasetMeta(datasetIndex);
@@ -368,7 +369,7 @@ async function openChartElementInNewPage(element) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${title}</title>
   <style>
-    body { margin: 0; font-family: Cairo, sans-serif; background: #0b1220; color: #e2e8f0; }
+    body { margin: 0; font-family: Inter, IBM Plex Sans Arabic, sans-serif; background: #0b1220; color: #e2e8f0; }
     .wrap { min-height: 100vh; display: flex; flex-direction: column; gap: 10px; padding: 18px; box-sizing: border-box; }
     h1 { margin: 0; font-size: 20px; font-weight: 800; }
     .panel { flex: 1; border-radius: 12px; background: #0f172a; border: 1px solid #243249; padding: 14px; display: grid; place-items: center; }
@@ -442,6 +443,26 @@ function initChartViewer() {
     });
 }
 
+function resizePlotlyCharts() {
+    if (!window.Plotly?.Plots?.resize) return;
+
+    ['periodChart', 'entranceChart', 'pathChart'].forEach(id => {
+        const element = document.getElementById(id);
+        if (!element) return;
+        Plotly.Plots.resize(element);
+    });
+}
+
+function requestDashboardResize() {
+    if (dashboardResizeFrameId) cancelAnimationFrame(dashboardResizeFrameId);
+
+    dashboardResizeFrameId = requestAnimationFrame(() => {
+        dashboardResizeFrameId = null;
+        if (map) map.invalidateSize();
+        resizePlotlyCharts();
+    });
+}
+
 function initResizablePanels() {
     const root = document.documentElement;
     const sidebar = document.querySelector('.sidebar');
@@ -462,9 +483,8 @@ function initResizablePanels() {
         root.style.setProperty('--right-panel-width', `${savedRightPanelWidth}px`);
     }
 
-    const scheduleMapResize = () => {
-        if (!map) return;
-        requestAnimationFrame(() => map.invalidateSize());
+    const scheduleDashboardResize = () => {
+        requestDashboardResize();
     };
 
     const startDrag = ({ handle, panel, minWidth, maxWidth, cssVarName, storageKey }) => (event) => {
@@ -486,7 +506,7 @@ function initResizablePanels() {
             const delta = moveEvent.clientX - startX;
             const nextWidth = Math.max(minWidth, Math.min(maxWidth, startWidth + (delta * directionFactor)));
             root.style.setProperty(cssVarName, `${Math.round(nextWidth)}px`);
-            scheduleMapResize();
+            scheduleDashboardResize();
         };
 
         const onUp = () => {
@@ -497,7 +517,7 @@ function initResizablePanels() {
             document.body.style.userSelect = '';
             window.removeEventListener('mousemove', onMove);
             window.removeEventListener('mouseup', onUp);
-            scheduleMapResize();
+            scheduleDashboardResize();
         };
 
         window.addEventListener('mousemove', onMove);
@@ -532,18 +552,23 @@ function initResizablePanels() {
             const next = Math.max(minWidth, Math.min(maxWidth, current + delta));
             root.style.setProperty(cssVarName, `${Math.round(next)}px`);
             localStorage.setItem(storageKey, String(Math.round(next)));
-            scheduleMapResize();
+            scheduleDashboardResize();
         });
     };
 
     addKeyboardResize(leftHandle, '--sidebar-width', SIDEBAR_WIDTH_STORAGE_KEY, 280, 560);
     addKeyboardResize(rightHandle, '--right-panel-width', RIGHT_PANEL_WIDTH_STORAGE_KEY, 320, 760);
 
-    window.addEventListener('resize', scheduleMapResize);
+    if (typeof ResizeObserver !== 'undefined') {
+        const panelResizeObserver = new ResizeObserver(scheduleDashboardResize);
+        panelResizeObserver.observe(rightPanel);
+    }
+
+    window.addEventListener('resize', scheduleDashboardResize);
 }
 
 function initTheme() {
-    const savedTheme = localStorage.getItem('dashboard-theme') || 'light';
+    const savedTheme = localStorage.getItem('dashboard-theme') || 'dark';
     applyTheme(savedTheme);
 }
 
@@ -980,12 +1005,8 @@ function loadData() {
                 return null;
             }
 
-            return fetch('data/simulation_data_view_202605151651.csv')
-                .then(response => {
-                    if (!response.ok) throw new Error(`Could not load latest plans CSV: ${response.status}`);
-                    return response.text();
-                })
-                .then(csvText => parsePlansCsv(csvText, { loadId, source: 'data/simulation_data_view_202605151651.csv' }));
+            parsePlansCsv(CSV_DATA, { loadId, source: typeof PLANS_CSV_SOURCE !== 'undefined' ? PLANS_CSV_SOURCE : 'data.js' });
+            return null;
         })
         .catch(error => {
             console.warn(error);
@@ -2274,7 +2295,7 @@ function updateMap() {
                     let color = '#3b82f6';
                     let fillColor = '#93c5fd';
                     if (item.type === 'internal') { color = '#10b981'; fillColor = '#6ee7b7'; }
-                    else if (item.type === 'entrance') { color = '#f59e0b'; fillColor = '#fcd34d'; }
+                    else if (item.type === 'entrance') { color = '#EBC468'; fillColor = '#fcd34d'; }
                     else if (item.type === 'start') { color = '#22c55e'; fillColor = '#86efac'; }
                     else if (item.type === 'end') { color = '#ef4444'; fillColor = '#fca5a5'; }
 
@@ -2468,14 +2489,14 @@ function updateCharts(stats = getDashboardStats()) {
             text: periodValues.map(v => Number(v || 0).toLocaleString()),
             textposition: 'outside',
             cliponaxis: false,
-            marker: { color: 'rgba(59, 130, 246, 0.7)', line: { color: 'rgba(59, 130, 246, 1)', width: 1 } },
+            marker: { color: 'rgba(42, 157, 144, 0.82)', line: { color: 'rgba(42, 157, 144, 1)', width: 1 } },
             hovertemplate: '%{x}<br>%{y:,}<extra></extra>'
         };
         const periodLayout = {
             margin: { l: 46, r: 12, t: 22, b: 44 },
             paper_bgcolor: 'rgba(0,0,0,0)',
             plot_bgcolor: 'rgba(0,0,0,0)',
-            font: { color: chartTheme.text, family: 'Cairo, sans-serif' },
+            font: { color: chartTheme.text, family: 'Inter, IBM Plex Sans Arabic, sans-serif' },
             xaxis: { tickfont: { color: chartTheme.text }, showgrid: false, fixedrange: false },
             yaxis: { tickfont: { color: chartTheme.text }, gridcolor: chartTheme.grid, zeroline: false, fixedrange: false },
             showlegend: false,
@@ -2483,6 +2504,7 @@ function updateCharts(stats = getDashboardStats()) {
             dragmode: 'zoom'
         };
         Plotly.react(periodPlotEl, [periodTrace], periodLayout, plotlyConfig);
+        requestDashboardResize();
         periodPlotEl.on('plotly_click', event => {
             const point = event?.points?.[0];
             const label = point ? String(point.x || '').trim() : '';
@@ -2513,11 +2535,11 @@ function updateCharts(stats = getDashboardStats()) {
             datasets: [{
                 data: transValues,
                 backgroundColor: [
-                    'rgba(59, 130, 246, 0.32)',
-                    'rgba(139, 92, 246, 0.32)',
-                    'rgba(16, 185, 129, 0.32)',
-                    'rgba(245, 158, 11, 0.32)',
-                    'rgba(239, 68, 68, 0.32)'
+                    'rgba(42, 157, 144, 0.72)',
+                    'rgba(121, 28, 42, 0.72)',
+                    'rgba(78, 201, 185, 0.72)',
+                    'rgba(235, 196, 104, 0.72)',
+                    'rgba(194, 88, 88, 0.72)'
                 ],
                 borderWidth: 0
             }]
@@ -2565,11 +2587,11 @@ function updateCharts(stats = getDashboardStats()) {
     const periodsArray = Array.from(stats.allPeriodsForEntrance).sort((a, b) => Number(a) - Number(b));
 
     const colors = [
-        'rgba(59, 130, 246, 0.32)',
-        'rgba(16, 185, 129, 0.32)',
-        'rgba(245, 158, 11, 0.32)',
-        'rgba(139, 92, 246, 0.32)',
-        'rgba(239, 68, 68, 0.32)'
+        'rgba(42, 157, 144, 0.72)',
+        'rgba(78, 201, 185, 0.72)',
+        'rgba(235, 196, 104, 0.72)',
+        'rgba(121, 28, 42, 0.72)',
+        'rgba(194, 88, 88, 0.72)'
     ];
 
     const entranceDatasets = periodsArray.map((period, index) => {
@@ -2602,7 +2624,7 @@ function updateCharts(stats = getDashboardStats()) {
             margin: { l: 46, r: 12, t: 24, b: 58 },
             paper_bgcolor: 'rgba(0,0,0,0)',
             plot_bgcolor: 'rgba(0,0,0,0)',
-            font: { color: chartTheme.text, family: 'Cairo, sans-serif' },
+            font: { color: chartTheme.text, family: 'Inter, IBM Plex Sans Arabic, sans-serif' },
             barmode: 'group',
             xaxis: { tickangle: -35, tickfont: { color: chartTheme.text }, showgrid: false, fixedrange: false },
             yaxis: { tickfont: { color: chartTheme.text }, gridcolor: chartTheme.grid, zeroline: false, fixedrange: false },
@@ -2611,6 +2633,7 @@ function updateCharts(stats = getDashboardStats()) {
             dragmode: 'zoom'
         };
         Plotly.react(entrancePlotEl, entranceTraces, entranceLayout, plotlyConfig);
+        requestDashboardResize();
         entrancePlotEl.on('plotly_click', event => {
             const point = event?.points?.[0];
             const label = point ? String(point.x || '').trim() : '';
@@ -2632,14 +2655,14 @@ function updateCharts(stats = getDashboardStats()) {
             type: 'bar',
             x: pathLabels,
             y: pathValues,
-            marker: { color: 'rgba(16, 185, 129, 0.7)', line: { color: 'rgba(16, 185, 129, 1)', width: 1 } },
+            marker: { color: 'rgba(78, 201, 185, 0.82)', line: { color: 'rgba(78, 201, 185, 1)', width: 1 } },
             hovertemplate: '%{x}<br>%{y:,}<extra></extra>'
         };
         const pathLayout = {
             margin: { l: 46, r: 12, t: 16, b: 58 },
             paper_bgcolor: 'rgba(0,0,0,0)',
             plot_bgcolor: 'rgba(0,0,0,0)',
-            font: { color: chartTheme.text, family: 'Cairo, sans-serif' },
+            font: { color: chartTheme.text, family: 'Inter, IBM Plex Sans Arabic, sans-serif' },
             xaxis: { tickangle: -35, tickfont: { color: chartTheme.text }, showgrid: false, fixedrange: false },
             yaxis: { tickfont: { color: chartTheme.text }, gridcolor: chartTheme.grid, zeroline: false, fixedrange: false },
             showlegend: false,
@@ -2647,6 +2670,7 @@ function updateCharts(stats = getDashboardStats()) {
             dragmode: 'zoom'
         };
         Plotly.react(pathPlotEl, [pathTrace], pathLayout, plotlyConfig);
+        requestDashboardResize();
         pathPlotEl.on('plotly_click', event => {
             const point = event?.points?.[0];
             const label = point ? String(point.x || '').trim() : '';
@@ -2673,13 +2697,13 @@ function updateCharts(stats = getDashboardStats()) {
             datasets: [{
                 data: distValues,
                 backgroundColor: [
-                    'rgba(236, 72, 153, 0.32)',
-                    'rgba(6, 182, 212, 0.32)',
-                    'rgba(59, 130, 246, 0.32)',
-                    'rgba(139, 92, 246, 0.32)',
-                    'rgba(16, 185, 129, 0.32)',
-                    'rgba(245, 158, 11, 0.32)',
-                    'rgba(239, 68, 68, 0.32)'
+                    'rgba(125, 113, 80, 0.72)',
+                    'rgba(29, 87, 81, 0.72)',
+                    'rgba(42, 157, 144, 0.72)',
+                    'rgba(121, 28, 42, 0.72)',
+                    'rgba(78, 201, 185, 0.72)',
+                    'rgba(235, 196, 104, 0.72)',
+                    'rgba(194, 88, 88, 0.72)'
                 ],
                 borderWidth: 0
             }]
@@ -2841,8 +2865,8 @@ function renderCompletionSummaryChart(stats, chartTheme) {
                     data: ringValues,
                     backgroundColor: hasVisibleProgressData
                         ? (over > 0
-                            ? ['rgba(48, 220, 148, 0.92)', 'rgba(245, 158, 11, 0.72)']
-                            : ['rgba(48, 220, 148, 0.92)', 'rgba(148, 163, 184, 0.28)'])
+                            ? ['rgba(42, 157, 144, 0.96)', 'rgba(235, 196, 104, 0.86)']
+                            : ['rgba(42, 157, 144, 0.96)', 'rgba(148, 163, 184, 0.28)'])
                         : ['rgba(48, 220, 148, 0)', 'rgba(148, 163, 184, 0.34)'],
                     borderColor: chartTheme.border,
                     borderWidth: 2
@@ -2896,7 +2920,7 @@ function renderResidenceAssignmentChart(chartTheme) {
                 `مراكز لها مساكن: ${coverage.assigned.toLocaleString()}`,
                 `إجمالي مراكز assign_camps: ${coverage.total.toLocaleString()}`
             ],
-            colors: ['rgba(48, 220, 148, 0.92)', 'rgba(239, 68, 68, 0.78)']
+            colors: ['rgba(42, 157, 144, 0.96)', 'rgba(194, 88, 88, 0.86)']
         },
         {
             label: 'مساكن تروية',
@@ -2910,7 +2934,7 @@ function renderResidenceAssignmentChart(chartTheme) {
                 `تروية فقط: ${mix.tarwiyahOnly.toLocaleString()}`,
                 `إجمالي المساكن: ${mix.total.toLocaleString()}`
             ],
-            colors: ['rgba(59, 130, 246, 0.92)', 'rgba(148, 163, 184, 0.34)']
+            colors: ['rgba(78, 201, 185, 0.96)', 'rgba(148, 163, 184, 0.34)']
         },
         {
             label: 'مساكن تصعيد مباشر',
@@ -2924,7 +2948,7 @@ function renderResidenceAssignmentChart(chartTheme) {
                 `تصعيد مباشر فقط: ${mix.directTaseedOnly.toLocaleString()}`,
                 `إجمالي المساكن: ${mix.total.toLocaleString()}`
             ],
-            colors: ['rgba(16, 185, 129, 0.92)', 'rgba(148, 163, 184, 0.34)']
+            colors: ['rgba(42, 157, 144, 0.96)', 'rgba(148, 163, 184, 0.34)']
         },
         {
             label: 'مساكن مختلط',
@@ -2938,7 +2962,7 @@ function renderResidenceAssignmentChart(chartTheme) {
                 `مختلط: ${mix.mixed.toLocaleString()}`,
                 `إجمالي المساكن: ${mix.total.toLocaleString()}`
             ],
-            colors: ['rgba(245, 158, 11, 0.92)', 'rgba(148, 163, 184, 0.34)']
+            colors: ['rgba(235, 196, 104, 0.96)', 'rgba(148, 163, 184, 0.34)']
         }
     ];
 

@@ -1667,3 +1667,324 @@ body.dark-mode .leaflet-control-layers {
         min-height: 220px;
     }
 }
+
+/* Intelmatix x RCMC design guide application */
+:root {
+    color-scheme: dark;
+    --bg-color: #000000;
+    --surface: #181818;
+    --surface-soft: #111111;
+    --sidebar-bg: #000000;
+    --card-bg: #09090b;
+    --text-primary: #fafafa;
+    --text-secondary: #afafaf;
+    --text-muted: #71717a;
+    --accent-primary: #7d7150;
+    --accent-secondary: #2a9d90;
+    --accent-soft: rgba(125, 113, 80, 0.22);
+    --accent-glow: rgba(202, 171, 121, 0.18);
+    --border-color: #27272a;
+    --shadow-sm: 0 10px 24px rgba(0, 0, 0, 0.28);
+    --shadow-md: 0 24px 56px rgba(0, 0, 0, 0.46);
+    --success: #2a9d90;
+    --warning: #ebc468;
+    --danger: #ef4444;
+    --brand-primary: #7d7150;
+    --brand-light: #caab79;
+    --brand-secondary: #1d5751;
+    --brand-teal: #2a9d90;
+    --brand-mint: #4ec9b9;
+    --chart-1: #2a9d90;
+    --chart-2: #4ec9b9;
+    --chart-3: #ebc468;
+    --chart-4: #c25858;
+    --chart-5: #791c2a;
+    --chart-6: #7d7150;
+    --chart-cap: #1e1e20;
+    --sidebar-width: 256px;
+}
+
+body.light-mode {
+    color-scheme: light;
+    --bg-color: #ffffff;
+    --surface: #ffffff;
+    --surface-soft: #fafafa;
+    --sidebar-bg: #ffffff;
+    --card-bg: #ffffff;
+    --text-primary: #09090b;
+    --text-secondary: #4a4a4f;
+    --text-muted: #71717a;
+    --accent-primary: #7d7150;
+    --accent-secondary: #2a9d90;
+    --accent-soft: rgba(202, 171, 121, 0.24);
+    --accent-glow: rgba(125, 113, 80, 0.16);
+    --border-color: #e4e4e7;
+    --shadow-sm: 0 10px 24px rgba(24, 24, 27, 0.08);
+    --shadow-md: 0 24px 56px rgba(24, 24, 27, 0.14);
+}
+
+body.dark-mode {
+    color-scheme: dark;
+    --bg-color: #000000;
+    --surface: #181818;
+    --surface-soft: #111111;
+    --sidebar-bg: #000000;
+    --card-bg: #09090b;
+    --text-primary: #fafafa;
+    --text-secondary: #afafaf;
+    --text-muted: #71717a;
+    --accent-primary: #7d7150;
+    --accent-secondary: #2a9d90;
+    --accent-soft: rgba(125, 113, 80, 0.22);
+    --accent-glow: rgba(202, 171, 121, 0.18);
+    --border-color: #27272a;
+    --shadow-sm: 0 10px 24px rgba(0, 0, 0, 0.28);
+    --shadow-md: 0 24px 56px rgba(0, 0, 0, 0.46);
+    --success: #2a9d90;
+    --warning: #ebc468;
+    --danger: #ef4444;
+}
+
+*,
+.map-static-label span {
+    font-family: 'Inter', 'IBM Plex Sans Arabic', sans-serif;
+    letter-spacing: 0;
+}
+
+html,
+body {
+    background: var(--bg-color);
+}
+
+body {
+    background:
+        linear-gradient(90deg, rgba(125, 113, 80, 0.08), transparent 26%),
+        radial-gradient(circle at 12% 0%, rgba(42, 157, 144, 0.08), transparent 24%),
+        var(--bg-color);
+}
+
+.dashboard-container {
+    grid-template-columns: var(--sidebar-width) 10px minmax(0, 1fr);
+}
+
+.sidebar,
+.top-nav,
+.rings-summary-section .completion-top-card,
+.rings-summary-section .residence-top-card,
+.rings-summary-section .transport-top-card,
+.card,
+.chart-card,
+.entity-table-section,
+.plan-item,
+.search-bar input,
+select,
+.load-csv-btn,
+.theme-toggle-btn,
+.chart-floating-legend,
+.map-overlay-card,
+.map-selection-title,
+.map-status {
+    background: var(--card-bg);
+    border-color: var(--border-color);
+    border-radius: 8px;
+}
+
+.top-nav {
+    border: 1px solid var(--border-color);
+    padding: 0.65rem 0.75rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.sidebar {
+    gap: 1rem;
+    padding: 1rem;
+    box-shadow: inset -1px 0 0 var(--border-color);
+}
+
+.sidebar-header {
+    border-bottom-color: var(--border-color);
+    padding-bottom: 0.85rem;
+}
+
+.sidebar-header h2,
+.page-title h1,
+.chart-card h3,
+.filters-section h3,
+.plan-list-section h3,
+.entity-section-header h3 {
+    font-weight: 800;
+}
+
+.sidebar-header p,
+.page-title span,
+.section-label {
+    color: var(--brand-light);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+}
+
+.logo {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--brand-primary);
+    color: #fafafa;
+    box-shadow: none;
+    font-weight: 800;
+    font-size: 0.78rem;
+}
+
+.glass {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+}
+
+.entity-table-wrap,
+.entity-table thead th,
+.plan-item,
+.search-bar input,
+select,
+.chart-floating-legend {
+    background: var(--surface-soft);
+}
+
+.entity-table thead th,
+.entity-table tbody td,
+.plan-item,
+.chart-floating-legend,
+.leaflet-popup-content-wrapper,
+.leaflet-tooltip.custom-tooltip {
+    border-color: var(--border-color);
+}
+
+.table-clear-btn,
+.load-csv-btn,
+.theme-toggle-btn,
+.chart-open-btn,
+.plan-type-option {
+    background: var(--surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.table-clear-btn:hover,
+.table-clear-btn:focus-visible,
+.load-csv-btn:hover,
+.theme-toggle-btn:hover,
+.load-csv-btn:focus-visible,
+.theme-toggle-btn:focus-visible,
+.chart-open-btn:hover,
+.chart-open-btn:focus-visible,
+.plan-type-option:hover,
+.plan-type-option:focus-visible {
+    color: var(--brand-light);
+    border-color: var(--brand-light);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.plan-item:hover,
+.plan-item.active,
+.entity-table-row.active,
+.completion-plan-ring.active {
+    background: rgba(125, 113, 80, 0.18);
+    border-color: var(--brand-light);
+    box-shadow: inset 0 0 0 1px rgba(202, 171, 121, 0.35);
+}
+
+.plan-company,
+.chart-card h3 i,
+.map-overlay-card h3 i,
+.section-label i,
+.page-title span {
+    color: var(--brand-light);
+}
+
+.kpi-card {
+    min-height: 88px;
+    padding: 0.6rem;
+    background: linear-gradient(180deg, rgba(24, 24, 27, 0.94), rgba(9, 9, 11, 0.96));
+}
+
+body.light-mode .kpi-card {
+    background: #ffffff;
+}
+
+.kpi-card:hover {
+    border-color: var(--brand-light);
+    box-shadow: var(--shadow-md);
+}
+
+.kpi-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    box-shadow: none;
+}
+
+.pilgrims-icon { background: var(--chart-1) !important; }
+.buses-icon { background: var(--chart-2) !important; }
+.plans-icon { background: var(--chart-3) !important; }
+.trips-icon { background: var(--chart-4) !important; }
+.residence-icon { background: var(--chart-5) !important; }
+.camp-icon { background: var(--chart-6) !important; }
+.service-center-icon { background: var(--brand-secondary) !important; }
+
+.kpi-info h4 {
+    color: var(--text-secondary);
+    font-size: 0.56rem;
+}
+
+.kpi-info h2 {
+    color: var(--text-primary);
+    font-size: 0.92rem;
+}
+
+.completion-badge {
+    background: rgba(42, 157, 144, 0.16);
+    color: var(--success);
+    border-radius: 8px;
+}
+
+.progress-ring-wrap span {
+    color: var(--brand-mint);
+}
+
+.rings-summary-section .completion-top-card,
+.rings-summary-section .residence-top-card,
+.rings-summary-section .transport-top-card {
+    height: 88px;
+    background: linear-gradient(180deg, rgba(24, 24, 27, 0.92), rgba(9, 9, 11, 0.96));
+}
+
+body.light-mode .rings-summary-section .completion-top-card,
+body.light-mode .rings-summary-section .residence-top-card,
+body.light-mode .rings-summary-section .transport-top-card {
+    background: #ffffff;
+}
+
+#map {
+    background: #101012 !important;
+}
+
+body.light-mode #map {
+    background: #fafafa !important;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--brand-primary);
+}
+
+.map-static-label span {
+    background: rgba(9, 9, 11, 0.92) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color);
+    box-shadow: var(--shadow-sm);
+}
+
+@media (max-width: 1100px) {
+    .dashboard-container {
+        grid-template-columns: 1fr;
+    }
+}
