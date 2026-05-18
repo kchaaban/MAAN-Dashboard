@@ -83,7 +83,7 @@ const distPath = path.join(__dirname, '..', 'dist');
 app.use('/maan-dashboard', express.static(distPath));
 
 // Catch-all to serve index.html for SPA routing (if any)
-app.get('/maan-dashboard(.*)', (req, res) => {
+app.use('/maan-dashboard', (req, res) => {
     if (fs.existsSync(path.join(distPath, 'index.html'))) {
         res.sendFile(path.join(distPath, 'index.html'));
     } else {
