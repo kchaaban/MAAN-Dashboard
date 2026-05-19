@@ -6,16 +6,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Create Login Modal
     const loginHtml = `
-        <div id="loginModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:#0b1220; display:flex; align-items:center; justify-content:center; z-index:9999; flex-direction:column;">
-            <div style="background:#1e293b; padding:40px; border-radius:12px; box-shadow:0 10px 25px rgba(0,0,0,0.5); width:320px; text-align:center;">
-                <h2 style="color:white; margin-top:0; font-family: 'IBM Plex Sans Arabic', sans-serif;">تسجيل الدخول</h2>
-                <p style="color:#94a3b8; font-size:14px; margin-bottom:24px;">RCMC Operations Platform</p>
-                <form id="loginForm" style="display:flex; flex-direction:column; gap:16px;">
-                    <input type="text" id="username" placeholder="اسم المستخدم" style="padding:12px; border-radius:6px; border:1px solid #334155; background:#0f172a; color:white;" required>
-                    <input type="password" id="password" placeholder="كلمة المرور" style="padding:12px; border-radius:6px; border:1px solid #334155; background:#0f172a; color:white;" required>
-                    <button type="submit" style="padding:12px; border-radius:6px; border:none; background:#3b82f6; color:white; font-weight:bold; cursor:pointer;">دخول</button>
-                    <div id="loginError" style="color:#ef4444; font-size:14px; display:none;">بيانات الدخول غير صحيحة</div>
-                </form>
+        <div id="loginModal" style="position:fixed; top:0; left:0; width:100%; height:100%; display:flex; z-index:9999; font-family: 'IBM Plex Sans Arabic', sans-serif; direction: rtl;">
+            <!-- Right Side: Background Image Area -->
+            <div style="flex:1; background-color:#0b1220; background-image: url('bus-image.png'); background-size: cover; background-position: center; background-repeat: no-repeat;"></div>
+            
+            <!-- Left Side: Login Panel -->
+            <div style="width: 450px; display:flex; flex-direction:column; box-shadow: -10px 0 25px rgba(0,0,0,0.5);">
+                <!-- Top Logo Section -->
+                <div style="flex: 1; background-color: #b0b3b8; display:flex; justify-content:center; align-items:center; padding: 20px;">
+                    <img src="rcmc-logo.jpeg" alt="RCMC Logo" style="max-width: 85%; max-height: 80%; object-fit: contain;">
+                </div>
+                
+                <!-- Middle Login Form Section -->
+                <div style="background-color: #0f172a; padding: 50px 40px; display:flex; flex-direction:column; align-items:center; border-top: 2px solid #1e293b; border-bottom: 2px solid #1e293b;">
+                    <h2 style="color:white; margin: 0 0 5px 0; font-size: 22px; font-weight: 600;">تسجيل الدخول</h2>
+                    <p style="color:#94a3b8; font-size:12px; margin: 0 0 30px 0;">RCMC Operations Platform</p>
+                    
+                    <form id="loginForm" style="display:flex; flex-direction:column; gap:16px; width: 100%; max-width: 300px;">
+                        <input type="text" id="username" placeholder="اسم المستخدم" style="padding:14px; border-radius:4px; border:1px solid #334155; background:#1e293b; color:white; font-family: inherit; font-size: 14px;" required>
+                        <input type="password" id="password" placeholder="كلمة المرور" style="padding:14px; border-radius:4px; border:1px solid #334155; background:#1e293b; color:white; font-family: inherit; font-size: 14px;" required>
+                        <button type="submit" style="padding:14px; border-radius:4px; border:none; background:#3b82f6; color:white; font-weight:bold; font-family: inherit; font-size: 15px; cursor:pointer; transition: background 0.2s; margin-top: 10px;">دخول</button>
+                        <div id="loginError" style="color:#ef4444; font-size:14px; display:none; text-align: center;">بيانات الدخول غير صحيحة</div>
+                    </form>
+                </div>
+                
+                <!-- Bottom Logo Section -->
+                <div style="flex: 1; background-color: #b0b3b8; display:flex; justify-content:center; align-items:center; padding: 20px;">
+                    <img src="gtc-logo.jpeg" alt="GTC Logo" style="max-width: 85%; max-height: 80%; object-fit: contain;">
+                </div>
             </div>
         </div>
     `;
@@ -26,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const username = document.getElementById('username').value;
         const password = document.getElementById('password').value;
         const errorDiv = document.getElementById('loginError');
-        
+
         try {
             const res = await fetch(`${API_BASE}/login`, {
                 method: 'POST',
@@ -55,6 +73,16 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('loginModal').style.display = 'none';
         loadSecureDataAndStart(token);
     }
+
+    // Logout Handler
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            localStorage.removeItem('maan_token');
+            localStorage.removeItem('maan_role');
+            window.location.reload();
+        });
+    }
 });
 
 async function loadSecureDataAndStart(token) {
@@ -68,12 +96,12 @@ async function loadSecureDataAndStart(token) {
 
     try {
         const filesToLoad = ['data.js', 'assign_camps.js', 'assign_residences.js', 'service_companies.js'];
-        
+
         for (const file of filesToLoad) {
             const res = await fetch(`${API_BASE}/data/${file}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            
+
             if (res.status === 401 || res.status === 403) {
                 localStorage.removeItem('maan_token');
                 window.location.reload();
@@ -81,7 +109,7 @@ async function loadSecureDataAndStart(token) {
             }
 
             const code = await res.text();
-            
+
             // Inject script securely
             await new Promise((resolve, reject) => {
                 const blob = new Blob([code], { type: 'application/javascript' });

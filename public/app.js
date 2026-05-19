@@ -201,8 +201,7 @@ function getCampAssignmentStats() {
 }
 
 
-// Initialize Application
-document.addEventListener('DOMContentLoaded', () => {
+function runApp() {
     initResizablePanels();
     initEntityTableColumnAutosize();
     initChartViewer();
@@ -210,7 +209,14 @@ document.addEventListener('DOMContentLoaded', () => {
     initMap();
     loadData();
     setupEventListeners();
-});
+}
+
+// Initialize Application
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', runApp);
+} else {
+    runApp();
+}
 
 function getCellContentWidth(cell) {
     if (!cell) return 0;
