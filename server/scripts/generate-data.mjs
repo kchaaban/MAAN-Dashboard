@@ -9,7 +9,7 @@ const dataDir = path.join(repoRoot, 'data');
 const outputPath = path.join(dataDir, 'data.js');
 
 function getLatestPlansCsv() {
-    const preferred = process.env.PLANS_CSV || process.argv[2] || 'simulation_data_view_202605131935.csv';
+    const preferred = process.env.PLANS_CSV || process.argv[2] || 'simulation_data_view_tarwiya_taseed.csv';
     const preferredPath = path.join(dataDir, preferred);
     if (fs.existsSync(preferredPath)) return preferredPath;
 

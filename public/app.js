@@ -5,7 +5,7 @@ let contextFilteredData = [];
 let map;
 let routeLayerGroup;
 let periodChartInstance = null;
-let transportChartInstance = null;
+let transportChartInstances = [];
 let entranceChartInstance = null;
 let pathChartInstance = null;
 let districtChartInstance = null;
@@ -34,6 +34,7 @@ let serviceCompanyNameByKey = new Map();
 let serviceCenterNamesByKey = new Map();
 let plansCsvLoadSequence = 0;
 let activePlansCsvSource = '';
+let simulationPlansData = [];
 let dashboardResizeFrameId = null;
 const TOP_RING_CANVAS_SIZE = 52;
 
@@ -101,7 +102,7 @@ function buildDistrictMapStats(rows) {
             plans: 0
         };
 
-        current.pilgrims += toNumber(row["number_of_haj"]);
+        current.pilgrims += getPlannedHajj(row);
         current.plans += 1;
         stats.set(key, current);
         maxPilgrims = Math.max(maxPilgrims, current.pilgrims);
@@ -128,13 +129,32 @@ function getDistrictPolygonStyle(districtName, districtStats, maxPilgrims) {
 
 // Parse camp label to extract numerator and denominator (e.g., "1/608" → {num: 1, denom: 608})
 function parseCampLabel(label) {
-    const safeLabel = String(label || '').trim();
-    if (!safeLabel || !safeLabel.includes('/')) return null;
-    const parts = safeLabel.split('/');
+    const safeLabel = String(label || "").trim();
+    if (!safeLabel || !safeLabel.includes("/")) return null;
+    const parts = safeLabel.split("/");
     return {
-        num: String(parts[0] || '').trim(),
-        denom: String(parts[1] || '').trim()
+        num: String(parts[0] || "").trim(),
+        denom: String(parts[1] || "").trim()
     };
+}
+
+function getUniquePilgrimKey(row) {
+    const campLabel = String(row["camp_label"] || "").trim();
+    const company = row["owner_company_name"] ?? row["service_company_name"] ?? "";
+    const centerNumber = row["owner_office_number"] ?? row["office_number"] ?? "";
+    if (campLabel) {
+        return centerKey(company, centerNumber) + "|" + campLabel;
+    }
+
+    const planId = String(row["plan_id"] || "").trim();
+    if (planId) {
+        return "plan:" + planId;
+    }
+
+    const period = String(row["period"] || "").trim();
+    const startPoint = String(row["start_point_name"] || "").trim();
+    const endPoint = String(row["end_point_name"] || "").trim();
+    return centerKey(company, centerNumber) + "|" + period + "|" + startPoint + "|" + endPoint;
 }
 
 function calculateCampAssignmentStats(rows) {
@@ -142,28 +162,37 @@ function calculateCampAssignmentStats(rows) {
     const campDenominators = new Set();
     const uniqueCampLabels = new Set();
     const serviceCenters = new Set();
+    const uniquePilgrims = new Map();
+    const uniqueCampKeys = new Set();
     let totalCampAssignments = 0;
-    let totalPilgrims = 0;
 
     rows.forEach(d => {
-        const campLabel = d['camp_label'];
-        if (campLabel) {
-            uniqueCampLabels.add(String(campLabel).trim());
+        const campLabel = String(d["camp_label"] || "").trim();
+        const company = d["service_company_name"] ?? d["owner_company_name"] ?? "";
+        const centerNumber = d["office_number"] ?? d["owner_office_number"];
+        const hasCampLabel = Boolean(campLabel);
+        const campKey = hasCampLabel ? centerKey(company, centerNumber) + "|" + campLabel : null;
+
+        if (hasCampLabel) {
+            uniqueCampLabels.add(campLabel);
+            if (!uniqueCampKeys.has(campKey)) {
+                uniqueCampKeys.add(campKey);
+                totalCampAssignments++;
+            }
             const parsed = parseCampLabel(campLabel);
             if (parsed && parsed.num && parsed.denom) {
                 campNumerators.add(parsed.num);
                 campDenominators.add(parsed.denom);
-                totalCampAssignments++;
             }
         }
 
-        const centerNumber = d['office_number'] ?? d['owner_office_number'];
         if (centerNumber !== undefined && centerNumber !== null && String(centerNumber).trim()) {
-            const company = d['service_company_name'] ?? d['owner_company_name'] ?? '';
             serviceCenters.add(centerKey(company, centerNumber));
         }
 
-        totalPilgrims += toNumber(d['number_of_piligrim'] ?? d['number_of_haj']);
+        const uniqueKey = getUniquePilgrimKey(d);
+        const value = toNumber(d["number_of_piligrim"] ?? d["number_of_haj"]);
+        uniquePilgrims.set(uniqueKey, Math.max(uniquePilgrims.get(uniqueKey) || 0, value));
     });
 
     return {
@@ -172,7 +201,7 @@ function calculateCampAssignmentStats(rows) {
         totalAssignments: totalCampAssignments,
         uniqueCampCount: uniqueCampLabels.size,
         serviceCenterCount: serviceCenters.size,
-        totalPilgrims,
+        totalPilgrims: Array.from(uniquePilgrims.values()).reduce((sum, value) => sum + value, 0),
         allNumerators: Array.from(campNumerators).sort(),
         allDenominators: Array.from(campDenominators).sort()
     };
@@ -183,20 +212,31 @@ function getCampAssignmentStats() {
     const { company, owner } = getSelectedCompanyAndOwner();
     const campLabels = new Set();
     const serviceCenters = new Set();
-    let totalPilgrims = 0;
+    const uniquePilgrims = new Map();
 
     campAssignmentRecords.forEach(row => {
         if (!matchesCompanyOwnerFilters(row.company, row.centerNumber, company, owner)) return;
 
-        if (row.campLabel) campLabels.add(row.campLabel);
+        const campLabel = String(row.campLabel || "").trim();
+        if (campLabel) campLabels.add(campLabel);
         serviceCenters.add(centerKey(row.company, row.centerNumber));
-        totalPilgrims += row.pilgrims;
+
+        const uniqueKey = getUniquePilgrimKey({
+            camp_label: row.campLabel,
+            owner_company_name: row.company,
+            owner_office_number: row.centerNumber,
+            plan_id: row.planId,
+            period: row.period,
+            start_point_name: row.startPointName,
+            end_point_name: row.endPointName
+        });
+        uniquePilgrims.set(uniqueKey, Math.max(uniquePilgrims.get(uniqueKey) || 0, row.pilgrims));
     });
 
     return {
         uniqueCampCount: campLabels.size,
         serviceCenterCount: serviceCenters.size,
-        totalPilgrims
+        totalPilgrims: Array.from(uniquePilgrims.values()).reduce((sum, value) => sum + value, 0)
     };
 }
 
@@ -604,11 +644,11 @@ function applyTheme(theme) {
 }
 
 function getThemeColors() {
-    const styles = getComputedStyle(document.body);
+    const isDark = document.body.classList.contains('dark-mode');
     return {
-        text: styles.getPropertyValue('--text-secondary').trim() || '#64748b',
-        grid: document.body.classList.contains('dark-mode') ? 'rgba(148, 163, 184, 0.14)' : 'rgba(100, 116, 139, 0.18)',
-        border: styles.getPropertyValue('--border-color').trim() || '#e2e8f0'
+        text: isDark ? '#f8fafc' : '#111827',
+        grid: isDark ? 'rgba(148, 163, 184, 0.14)' : 'rgba(100, 116, 139, 0.18)',
+        border: isDark ? 'rgba(148, 163, 184, 0.26)' : '#e2e8f0'
     };
 }
 
@@ -686,6 +726,31 @@ function toNumber(value) {
     return Number.isFinite(number) ? number : 0;
 }
 
+function firstNumericField(row, fieldNames) {
+    for (const fieldName of fieldNames) {
+        if (row[fieldName] !== undefined && row[fieldName] !== null && row[fieldName] !== '') {
+            return toNumber(row[fieldName]);
+        }
+    }
+    return 0;
+}
+
+function getPlannedHajj(row) {
+    return firstNumericField(row, ['num_of_haj', 'num_of_hajj', 'nom_of_hajj', 'nom_of_haj', 'number_of_haj', 'Number of haj']);
+}
+
+function getAllocatedHajj(row) {
+    return firstNumericField(row, ['allocated_hajj', 'allocated_haj', 'allocated_haji', 'allocated_hajjs', 'Allocated hajj']);
+}
+
+function getAllocationCampKey(row) {
+    const company = row['owner_company_name'] ?? row['service_company_name'] ?? '';
+    const centerNumber = row['owner_office_number'] ?? row['office_number'] ?? '';
+    const campLabel = String(row['camp_label'] || '').trim();
+    const fallback = String(row['plan_id'] || row['end_point_name'] || row['start_point_name'] || '').trim();
+    return `${centerKey(company, centerNumber)}|${campLabel || fallback}`;
+}
+
 function normalizeTextKey(value) {
     return normalizeArabic(String(value || ''))
         .replace(/\s+/g, ' ')
@@ -751,9 +816,15 @@ function loadCampAssignments() {
     campAssignmentStats = null;
     serviceCenterNamesByKey = new Map();
 
-    if (typeof ASSIGN_CAMPS_DATA === 'undefined') return;
+    // Allow a persisted override in localStorage so the last-loaded CSV
+    // remains across page refreshes. If `assign_camps_csv` exists in
+    // localStorage, parse that; otherwise fall back to the bundled
+    // `ASSIGN_CAMPS_DATA` constant (if present).
+    const persisted = (typeof localStorage !== 'undefined') ? localStorage.getItem('assign_camps_csv') : null;
+    const sourceCsv = persisted || (typeof ASSIGN_CAMPS_DATA !== 'undefined' ? ASSIGN_CAMPS_DATA : null);
+    if (!sourceCsv) return;
 
-    Papa.parse(ASSIGN_CAMPS_DATA, {
+    Papa.parse(sourceCsv, {
         header: true,
         dynamicTyping: false,
         skipEmptyLines: true,
@@ -784,6 +855,31 @@ function loadCampAssignments() {
             console.error("Error parsing assign_camps data:", error);
         }
     });
+}
+
+// Helpers to persist/clear the last-loaded assign_camps CSV in localStorage.
+function setAssignCampsCSV(csvText) {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('assign_camps_csv', String(csvText || ''));
+            loadCampAssignments();
+            scheduleDashboardUpdate();
+        }
+    } catch (e) {
+        console.error('Failed to save assign_camps CSV to localStorage', e);
+    }
+}
+
+function clearAssignCampsCSV() {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem('assign_camps_csv');
+            loadCampAssignments();
+            scheduleDashboardUpdate();
+        }
+    } catch (e) {
+        console.error('Failed to clear assign_camps CSV from localStorage', e);
+    }
 }
 
 function loadResidenceAssignmentKeys() {
@@ -927,14 +1023,14 @@ function getResidenceMixNameSets() {
 
     residenceAssignmentRecords.forEach(row => {
         if (!matchesCompanyOwnerFilters(row.company, row.centerNumber, company, owner)) return;
-        if (!row.residenceName) return;
-        const nameKey = normalizeTextKey(row.residenceName);
-        if (!nameKey) return;
+        if (!row.residenceKey) return;
+        const residenceKey = row.residenceKey;
+        if (!residenceKey) return;
 
-        const current = residenceMap.get(nameKey) || { tarwiyah: 0, taseed: 0 };
+        const current = residenceMap.get(residenceKey) || { tarwiyah: 0, taseed: 0 };
         current.tarwiyah += toNumber(row.tarwiyahCount);
         current.taseed += toNumber(row.taseedCount);
-        residenceMap.set(nameKey, current);
+        residenceMap.set(residenceKey, current);
     });
 
     residenceMap.forEach((item, nameKey) => {
@@ -1001,22 +1097,35 @@ function loadData() {
         });
     }
 
+    // Always parse the bundled simulation CSV (`CSV_DATA`) into `simulationPlansData`
+    if (typeof CSV_DATA !== 'undefined') {
+        try {
+            const parsed = Papa.parse(CSV_DATA, { header: true, dynamicTyping: true, skipEmptyLines: true });
+            simulationPlansData = normalizePlanRows(parsed.data || []);
+        } catch (e) {
+            simulationPlansData = [];
+            console.warn('Failed to parse bundled CSV_DATA for simulationPlansData', e);
+        }
+    } else {
+        simulationPlansData = [];
+    }
+
 
     const loadId = ++plansCsvLoadSequence;
     getCachedPlansCsv()
         .then(cached => {
             if (loadId !== plansCsvLoadSequence) return null;
             if (cached?.csvText) {
-                parsePlansCsv(cached.csvText, { loadId, source: cached.source || localStorage.getItem(PLANS_CSV_SOURCE_STORAGE_KEY) || 'cached uploaded CSV' });
+                parsePlansCsv(cached.csvText, { loadId, source: cached.source || localStorage.getItem(PLANS_CSV_SOURCE_STORAGE_KEY) || "cached uploaded CSV" });
                 return null;
             }
 
-            parsePlansCsv(CSV_DATA, { loadId, source: typeof PLANS_CSV_SOURCE !== 'undefined' ? PLANS_CSV_SOURCE : 'data.js' });
+            parsePlansCsv(CSV_DATA, { loadId, source: typeof PLANS_CSV_SOURCE !== "undefined" ? PLANS_CSV_SOURCE : "data.js" });
             return null;
         })
         .catch(error => {
             console.warn(error);
-            parsePlansCsv(CSV_DATA, { loadId, source: 'data.js fallback' });
+            parsePlansCsv(CSV_DATA, { loadId, source: "data.js fallback" });
         });
 }
 
@@ -1055,7 +1164,10 @@ function normalizePlanRows(rows) {
         plan_id: row['plan_id'] ?? row['ID'],
         camp_label: row['camp_label'] ?? row['End point name'],
         number_of_buses: row['number_of_buses'] ?? row['Number of buses'],
-        number_of_haj: row['number_of_haj'] ?? row['Number of haj'],
+        number_of_haj: row['number_of_haj'] ?? row['Number of haj'] ?? row['num_of_haj'] ?? row['num_of_hajj'] ?? row['nom_of_hajj'] ?? row['nom_of_haj'],
+        num_of_haj: row['num_of_haj'] ?? row['num_of_hajj'] ?? row['number_of_haj'] ?? row['Number of haj'] ?? row['nom_of_hajj'] ?? row['nom_of_haj'],
+        nom_of_hajj: row['nom_of_hajj'] ?? row['nom_of_haj'] ?? row['num_of_haj'] ?? row['num_of_hajj'] ?? row['number_of_haj'] ?? row['Number of haj'],
+        allocated_hajj: row['allocated_hajj'] ?? row['allocated_haj'] ?? row['Allocated hajj'],
         period: row['period'] ?? row['Period'],
         timing_start_at: row['timing_start_at'] ?? row['Start time'],
         timing_end_at: row['timing_end_at'] ?? row['End time'],
@@ -1658,7 +1770,12 @@ function setupEventListeners() {
 
         event.target.value = '';
     });
+
+    
 }
+
+// UI helper: show whether a persisted assign_camps CSV is active
+
 
 // Apply Filters
 function applyFilters() {
@@ -1759,13 +1876,16 @@ function ensureCenterMetricsEntry(map, company, centerNumber, centerName = '') {
 function collectPlannedMetrics(rows) {
     const companyMetrics = new Map();
     const centerMetrics = new Map();
+    const allocatedByCompanyCamp = new Map();
+    const allocatedByCenterCamp = new Map();
 
     rows.forEach(row => {
         const company = row['owner_company_name'];
         const centerNumber = row['owner_office_number'];
         const companyEntry = ensureCompanyMetricsEntry(companyMetrics, company);
         const centerEntry = ensureCenterMetricsEntry(centerMetrics, company, centerNumber);
-        const plannedPilgrims = toNumber(row['number_of_haj']);
+        const plannedPilgrims = getPlannedHajj(row);
+        const allocatedPilgrims = getAllocatedHajj(row);
         const planTypeCode = String(row['plan_type_code'] || row['plan_type_name'] || '').trim();
         const residenceName = String(
             (row['start_point_type'] === 'residence' && row['start_point_name'])
@@ -1775,6 +1895,12 @@ function collectPlannedMetrics(rows) {
 
         companyEntry.plannedPilgrims += plannedPilgrims;
         centerEntry.plannedPilgrims += plannedPilgrims;
+
+        const allocationCenterKey = centerKey(company, centerNumber);
+        const allocationCampKey = getAllocationCampKey(row);
+        const allocationCompanyCampKey = companyKey(company) + '|' + allocationCampKey;
+        allocatedByCompanyCamp.set(allocationCompanyCampKey, Math.max(allocatedByCompanyCamp.get(allocationCompanyCampKey) || 0, allocatedPilgrims));
+        allocatedByCenterCamp.set(allocationCampKey, Math.max(allocatedByCenterCamp.get(allocationCampKey) || 0, allocatedPilgrims));
         if (planTypeCode) {
             companyEntry.planTypeCodes.add(planTypeCode);
             centerEntry.planTypeCodes.add(planTypeCode);
@@ -1787,19 +1913,45 @@ function collectPlannedMetrics(rows) {
         }
     });
 
+    allocatedByCompanyCamp.forEach((allocatedPilgrims, key) => {
+        const companyKeyValue = key.split('|')[0];
+        const companyEntry = companyMetrics.get(companyKeyValue);
+        if (companyEntry) companyEntry.totalPilgrims += allocatedPilgrims;
+    });
+
+    allocatedByCenterCamp.forEach((allocatedPilgrims, key) => {
+        const centerKeyValue = key.split('|').slice(0, 2).join('|');
+        const centerEntry = centerMetrics.get(centerKeyValue);
+        if (centerEntry) centerEntry.totalPilgrims += allocatedPilgrims;
+    });
+
     return { companyMetrics, centerMetrics };
 }
 
 function collectAssignmentMetrics() {
     const companyMetrics = new Map();
     const centerMetrics = new Map();
+    const seenCampKeys = new Set();
 
     campAssignmentRecords.forEach(row => {
+        const campLabel = String(row.campLabel || '').trim();
+        const campKey = campLabel
+            ? `${row.company || ''}|${String(row.centerNumber || '').trim()}|${campLabel}`
+            : null;
+
         const companyEntry = ensureCompanyMetricsEntry(companyMetrics, row.company);
         const centerEntry = ensureCenterMetricsEntry(centerMetrics, row.company, row.centerNumber, row.serviceCenterName);
 
-        companyEntry.totalPilgrims += row.pilgrims;
-        centerEntry.totalPilgrims += row.pilgrims;
+        if (campKey) {
+            if (!seenCampKeys.has(campKey)) {
+                seenCampKeys.add(campKey);
+                companyEntry.totalPilgrims += row.pilgrims;
+                centerEntry.totalPilgrims += row.pilgrims;
+            }
+        } else {
+            companyEntry.totalPilgrims += row.pilgrims;
+            centerEntry.totalPilgrims += row.pilgrims;
+        }
     });
 
     residenceAssignmentRecords.forEach(row => {
@@ -1866,8 +2018,7 @@ function buildServiceCompanyRows(rows) {
             || totalEntry?.companyName
             || 'غير معروف';
         const plannedPilgrims = plannedEntry?.plannedPilgrims || 0;
-        const totalPilgrims = totalEntry?.totalPilgrims || 0;
-        const completionTargetPilgrims = totalPilgrims * getPlanTypeTargetMultiplier(plannedEntry);
+        const totalPilgrims = plannedEntry?.totalPilgrims || 0;
         const residences = totalEntry?.totalResidenceKeys.size || 0;
 
         return {
@@ -1876,7 +2027,7 @@ function buildServiceCompanyRows(rows) {
             label,
             totalPilgrims,
             residences,
-            completion: calculateCompletionPercentage(plannedPilgrims, completionTargetPilgrims)
+            completion: calculateCompletionPercentage(plannedPilgrims, totalPilgrims)
         };
     }));
 }
@@ -1904,8 +2055,7 @@ function buildServiceCenterRows(rows) {
         const centerNumber = plannedEntry?.centerNumber || totalEntry?.centerNumber || '';
         const centerName = plannedEntry?.centerName || totalEntry?.centerName || centerNumber || 'بدون مركز';
         const plannedPilgrims = plannedEntry?.plannedPilgrims || 0;
-        const totalPilgrims = totalEntry?.totalPilgrims || 0;
-        const completionTargetPilgrims = totalPilgrims * getPlanTypeTargetMultiplier(plannedEntry);
+        const totalPilgrims = plannedEntry?.totalPilgrims || 0;
         const residences = totalEntry?.totalResidenceKeys.size || 0;
 
         rowsByCenter.push({
@@ -1917,7 +2067,7 @@ function buildServiceCenterRows(rows) {
             sublabel: companyName,
             totalPilgrims,
             residences,
-            completion: calculateCompletionPercentage(plannedPilgrims, completionTargetPilgrims)
+            completion: calculateCompletionPercentage(plannedPilgrims, totalPilgrims)
         });
     });
 
@@ -2077,6 +2227,7 @@ function updateDashboard() {
 function getDashboardStats() {
     const stats = {
         totalPilgrims: 0,
+        totalAllocatedPilgrims: 0,
         totalBuses: 0,
         totalTrips: 0,
         uniqueCamps: new Set(),
@@ -2092,10 +2243,13 @@ function getDashboardStats() {
         completionByCenterPlan: {},
         campAssignmentStats: getCampAssignmentStats()
     };
-    const countedTargets = new Set();
+    const uniquePlannedPilgrimCounts = new Map();
+    const allocatedByCamp = new Map();
+    const allocatedByPlanTypeCamp = new Map();
 
     filteredData.forEach(d => {
-        const haj = Number(d['number_of_haj']) || 0;
+        const haj = getPlannedHajj(d);
+        const allocatedHaj = getAllocatedHajj(d);
         const buses = Number(d['number_of_buses']) || 0;
         const period = d['period'] || 'غير معروف';
         const transportType = d['transport_type_name'] || 'غير معروف';
@@ -2104,12 +2258,13 @@ function getDashboardStats() {
         const district = d['start_point_district'] || 'بدون حي';
         const planTypeCode = d['plan_type_code'] || 'unknown';
         const planTypeName = d['plan_type_name'] || planTypeCode || 'غير معروف';
-        const assignment = getAssignmentTotalForPlan(d);
         const completionKey = planTypeCode;
 
-        stats.totalPilgrims += haj;
+        const uniquePilgrimKey = getUniquePlannedPilgrimKey(d);
+        uniquePlannedPilgrimCounts.set(uniquePilgrimKey, Math.max(uniquePlannedPilgrimCounts.get(uniquePilgrimKey) || 0, haj));
         stats.totalBuses += buses;
-        stats.totalTrips += getTripCount(d, buses);
+        const trips = getTripCount(d, buses);
+        stats.totalTrips += trips;
 
         if (d['camp_label']) stats.uniqueCamps.add(d['camp_label']);
         if (d['start_point_type'] === 'residence' && d['start_point_name']) stats.uniqueResidences.add(d['start_point_name']);
@@ -2144,29 +2299,53 @@ function getDashboardStats() {
         }
         stats.completionByCenterPlan[centerCompletionKey].planned += haj;
 
-        const targetKey = `${completionKey}|${centerKey(d['owner_company_name'], d['owner_office_number'])}`;
-        if (!countedTargets.has(targetKey)) {
-            const target = getPlanTypeTarget(planTypeCode, assignment);
-            stats.completionByPlanType[completionKey].target += target;
-            stats.completionByCenterPlan[centerCompletionKey].target += target;
-            countedTargets.add(targetKey);
+        const allocationCampKey = getAllocationCampKey(d);
+        allocatedByCamp.set(allocationCampKey, Math.max(allocatedByCamp.get(allocationCampKey) || 0, allocatedHaj));
+
+        const planTypeCampKey = `${completionKey}|${allocationCampKey}`;
+        allocatedByPlanTypeCamp.set(planTypeCampKey, Math.max(allocatedByPlanTypeCamp.get(planTypeCampKey) || 0, allocatedHaj));
+    });
+
+    allocatedByPlanTypeCamp.forEach((allocatedHaj, key) => {
+        const keyParts = key.split('|');
+        const completionKey = keyParts[0] || key;
+        const centerCompletionKey = keyParts.length >= 3 ? keyParts.slice(0, 3).join('|') : key;
+        if (stats.completionByPlanType[completionKey]) {
+            stats.completionByPlanType[completionKey].target += allocatedHaj;
+        }
+        if (stats.completionByCenterPlan[centerCompletionKey]) {
+            stats.completionByCenterPlan[centerCompletionKey].target += allocatedHaj;
         }
     });
+
+    stats.totalPilgrims = filteredData.reduce((sum, row) => sum + getPlannedHajj(row), 0);
+    stats.totalAllocatedPilgrims = Array.from(allocatedByCamp.values()).reduce((sum, value) => sum + value, 0);
 
     return stats;
 }
 
+function getUniquePlannedPilgrimKey(row) {
+    const campLabel = String(row['camp_label'] || '').trim();
+    if (campLabel) {
+        return `${centerKey(row['owner_company_name'], row['owner_office_number'])}|${campLabel}`;
+    }
+    return String(row['plan_id'] || `${row['owner_company_name'] || ''}|${row['owner_office_number'] || ''}|${row['start_point_name'] || ''}|${row['end_point_name'] || ''}`);
+}
+
 function getTripCount(row, buses) {
     const transportType = row['transport_type_name'] || '';
-    if (transportType.includes('ردين')) return buses * 2;
-    if (transportType.includes('ترددي')) return buses * 3;
-    if (transportType.includes('رد') || transportType.includes('ىد')) return buses;
+    const t = String(transportType || '').trim();
+    // Treat trains and any 'ترددي' types as the same (higher trip multiplier)
+    if (t.includes('ردين')) return buses * 2;
+    if (t.includes('ترددي') || t.includes('قطار') || t.toLowerCase().includes('train')) return buses * 3;
+    if (t.includes('رد') || t.includes('ىد')) return buses;
     return buses;
 }
 
 // Update KPI Cards
 function updateKPIs(stats) {
     const totalPilgrims = stats.totalPilgrims;
+    const totalAllocatedPilgrims = stats.totalAllocatedPilgrims;
     const totalBuses = stats.totalBuses;
     const totalPlans = filteredData.length;
     const totalTrips = stats.totalTrips;
@@ -2178,12 +2357,19 @@ function updateKPIs(stats) {
 
     // Animate numbers
     const pilgrimsElement = document.getElementById('kpiPilgrims');
-    pilgrimsElement.textContent = `${totalPilgrims.toLocaleString()}/${campStats.totalPilgrims.toLocaleString()}`;
+    pilgrimsElement.textContent = `${totalPilgrims.toLocaleString()}/${totalAllocatedPilgrims.toLocaleString()}`;
     pilgrimsElement.previousElementSibling.textContent = 'الحجاج (مخطط/إجمالي)';
-    pilgrimsElement.title = 'إجمالي الحجاج المخطط من الخطط / إجمالي الحجاج من assign_camps';
+    pilgrimsElement.title = 'الحجاج المخطط من num_of_haj / إجمالي الحجاج من allocated_hajj بدون تكرار حسب شركة الخدمة ورقم المركز والمخيم';
     document.getElementById('kpiBuses').textContent = totalBuses.toLocaleString();
     document.getElementById('kpiPlans').textContent = totalPlans.toLocaleString();
     document.getElementById('kpiTrips').textContent = totalTrips.toLocaleString();
+
+    const tripsDetailElement = document.getElementById('kpiTripsDetail');
+    if (tripsDetailElement) {
+        tripsDetailElement.textContent = '';
+        tripsDetailElement.title = '';
+    }
+
     const serviceCentersElement = document.getElementById('kpiServiceCenters');
     if (serviceCentersElement) {
         serviceCentersElement.textContent = `${plannedServiceCenters.toLocaleString()}/${campStats.serviceCenterCount.toLocaleString()}`;
@@ -2424,9 +2610,10 @@ function bindPopupToLayer(layer, row) {
     const popupContent = `
         <div style="padding: 5px; direction: rtl;">
             <h4 style="margin:0 0 5px 0; color: #3b82f6;">${row['owner_company_name'] || 'شركة غير معروفة'}</h4>
-            <p style="margin:0; font-size: 12px;"><strong>الحافلات:</strong> ${row['number_of_buses']}</p>
-            <p style="margin:0; font-size: 12px;"><strong>الحجاج:</strong> ${row['number_of_haj']}</p>
+            <p style="margin:0; font-size: 12px;"><strong>الحافلات:</strong> ${row['number_of_buses']} حافلة</p>
+            <p style="margin:0; font-size: 12px;"><strong>الحجاج:</strong> ${getPlannedHajj(row)} حاج</p>
             <p style="margin:0; font-size: 12px;"><strong>من:</strong> ${row['start_point_name'] || 'غير متوفر'}</p>
+            <p style="margin:0; font-size: 12px;"><strong>إلى:</strong> ${row['end_point_name'] || 'غير متوفر'}</p>
             <p style="margin:0; font-size: 12px;"><strong>الوقت:</strong> ${row['timing_start_at']} - ${row['timing_end_at']}</p>
         </div>
     `;
@@ -2523,71 +2710,94 @@ function updateCharts(stats = getDashboardStats()) {
         });
     }
 
-    const transLabels = Object.keys(stats.transportCounts);
-    const transValues = transLabels.map(l => stats.transportCounts[l]);
+    const transportRingContainer = document.getElementById("transportTypeRings");
+    transportChartInstances.forEach(chart => chart.destroy());
+    transportChartInstances = [];
+    if (transportRingContainer) {
+        transportRingContainer.replaceChildren();
+        const transportEntries = Object.entries(stats.transportCounts)
+            .filter(([, value]) => value > 0)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3);
+        const transportTotal = Object.values(stats.transportCounts).reduce((total, value) => total + value, 0);
+        const transportColors = [
+            ["rgba(42, 157, 144, 0.96)", "rgba(148, 163, 184, 0.28)"],
+            ["rgba(235, 196, 104, 0.96)", "rgba(148, 163, 184, 0.28)"],
+            ["rgba(194, 88, 88, 0.96)", "rgba(148, 163, 184, 0.28)"]
+        ];
 
-    if (transportChartInstance) transportChartInstance.destroy();
-    const transportCanvas = document.getElementById('transportChart');
-    transportCanvas.width = TOP_RING_CANVAS_SIZE;
-    transportCanvas.height = TOP_RING_CANVAS_SIZE;
-    transportCanvas.style.width = TOP_RING_CANVAS_SIZE + 'px';
-    transportCanvas.style.height = TOP_RING_CANVAS_SIZE + 'px';
-    const ctxTrans = transportCanvas.getContext('2d');
+        transportEntries.forEach(([label, value], index) => {
+            const percent = transportTotal > 0 ? Math.round((value / transportTotal) * 1000) / 10 : 0;
+            const rest = Math.max(transportTotal - value, 0);
+            const item = document.createElement("div");
+            const filterEl = document.getElementById("transportFilter");
+            const isActive = filterEl?.value === label;
 
-    transportChartInstance = new Chart(ctxTrans, {
-        type: 'doughnut',
-        data: {
-            labels: transLabels,
-            datasets: [{
-                data: transValues,
-                backgroundColor: [
-                    'rgba(42, 157, 144, 0.72)',
-                    'rgba(121, 28, 42, 0.72)',
-                    'rgba(78, 201, 185, 0.72)',
-                    'rgba(235, 196, 104, 0.72)',
-                    'rgba(194, 88, 88, 0.72)'
-                ],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: false,
-            maintainAspectRatio: true,
-            cutout: '72%',
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    rtl: true,
-                    textDirection: 'rtl',
-                    callbacks: {
-                        label: (context) => `${context.label}: ${context.raw.toLocaleString()}`
-                    }
+            item.className = "progress-ring-item transport-type-ring completion-plan-ring";
+            item.tabIndex = 0;
+            item.setAttribute("role", "button");
+            item.setAttribute("aria-pressed", isActive ? "true" : "false");
+            item.setAttribute("title", isActive ? "إلغاء تصفية نوع النقل" : "تصفية حسب " + label);
+            item.classList.toggle("active", isActive);
+            item.innerHTML = `<div class="progress-ring-wrap"><canvas></canvas><span>${percent}%</span></div><strong title="${label}">${label}</strong>`;
+
+            const toggleTransportFilter = () => {
+                const currentFilter = document.getElementById("transportFilter");
+                if (!currentFilter) return;
+                currentFilter.value = currentFilter.value === label ? "all" : label;
+                selectedPlanId = null;
+                selectedEntranceName = null;
+                selectedPathName = null;
+                selectedDistrict = null;
+                applyFilters();
+            };
+
+            item.addEventListener("click", toggleTransportFilter);
+            item.addEventListener("keydown", event => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    toggleTransportFilter();
                 }
-            },
-            onClick: (event, elements, chart) => {
-                if (elements && elements.length > 0) {
-                    const index = elements[0].index;
-                    const label = chart.data.labels[index];
-                    const filterEl = document.getElementById('transportFilter');
+            });
+            transportRingContainer.appendChild(item);
 
-                    if (filterEl.value === label) {
-                        // If already selected, reset to all
-                        filterEl.value = 'all';
-                    } else {
-                        // Select this filter
-                        for (let i = 0; i < filterEl.options.length; i++) {
-                            if (filterEl.options[i].value === label) {
-                                filterEl.value = label;
-                                break;
+            const ringCanvas = item.querySelector("canvas");
+            ringCanvas.width = TOP_RING_CANVAS_SIZE;
+            ringCanvas.height = TOP_RING_CANVAS_SIZE;
+            ringCanvas.style.width = TOP_RING_CANVAS_SIZE + "px";
+            ringCanvas.style.height = TOP_RING_CANVAS_SIZE + "px";
+            const ctx = ringCanvas.getContext("2d");
+            transportChartInstances.push(new Chart(ctx, {
+                type: "doughnut",
+                data: {
+                    labels: [label, "باقي أنواع النقل"],
+                    datasets: [{
+                        data: transportTotal > 0 ? [value, rest] : [0, 1],
+                        backgroundColor: transportTotal > 0 ? transportColors[index] : ["rgba(0,0,0,0)", "rgba(148, 163, 184, 0.34)"],
+                        borderColor: chartTheme.border,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: false,
+                    maintainAspectRatio: true,
+                    cutout: "72%",
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            rtl: true,
+                            textDirection: "rtl",
+                            callbacks: {
+                                title: () => label,
+                                label: context => context.label + ": " + Number(context.raw).toLocaleString(),
+                                afterBody: () => ["النسبة: " + percent + "%", "الحافلات: " + value.toLocaleString(), "الإجمالي: " + transportTotal.toLocaleString()]
                             }
                         }
                     }
-                    selectedPlanId = null;
-                    applyFilters();
                 }
-            }
-        }
-    });
+            }));
+        });
+    }
 
     const entranceLabels = Object.keys(stats.entranceCounts).sort();
     const periodsArray = Array.from(stats.allPeriodsForEntrance).sort((a, b) => Number(a) - Number(b));
@@ -2729,8 +2939,9 @@ function updateCharts(stats = getDashboardStats()) {
                     },
                     labels: {
                         color: chartTheme.text,
+                        fontColor: chartTheme.text,
                         boxWidth: 10,
-                        font: { size: 10 },
+                        font: { size: 10, weight: 700 },
                         generateLabels: (chart) => {
                             const data = chart.data;
                             if (data.labels.length && data.datasets.length) {
@@ -2739,6 +2950,8 @@ function updateCharts(stats = getDashboardStats()) {
                                     return {
                                         text: `${label} - ${value.toLocaleString()}`,
                                         fillStyle: data.datasets[0].backgroundColor[i],
+                                        strokeStyle: data.datasets[0].backgroundColor[i],
+                                        fontColor: chartTheme.text,
                                         hidden: isNaN(data.datasets[0].data[i]) || chart.getDatasetMeta(0).data[i].hidden,
                                         index: i
                                     };
@@ -3064,15 +3277,21 @@ function updatePlanList() {
         const div = document.createElement('div');
         div.className = 'plan-item' + (selectedPlanId === plan['plan_id'] ? ' active' : '');
 
+        const buses = Number(plan['number_of_buses']) || 0;
+        const trips = getTripCount(plan, buses);
+        const transportType = plan['transport_type_name'] || 'غير معروف';
+
         div.innerHTML = `
             <div class="plan-header">
                 <span class="plan-company">${plan['owner_company_name'] || 'غير معروف'}</span>
                 <span class="plan-time">${plan['timing_start_at'] || ''} - ${plan['timing_end_at'] || ''}</span>
             </div>
             <div class="plan-details">
-                <div class="plan-stat">🚌 ${plan['number_of_buses']}</div>
-                <div class="plan-stat">👥 ${plan['number_of_haj']}</div>
+                <div class="plan-stat">🚌 ${plan['number_of_buses']} حافلة</div>
+                <div class="plan-stat">👥 ${getPlannedHajj(plan).toLocaleString()} حاج</div>
                 <div class="plan-stat">⏱️ ${plan['period'] || ''}</div>
+                <div class="plan-stat">🛣️ ${trips.toLocaleString()} رحلة</div>
+                <div class="plan-stat plan-stat-transport">🚍 ${transportType}</div>
             </div>
         `;
 

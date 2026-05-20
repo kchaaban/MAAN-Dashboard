@@ -497,6 +497,14 @@ body.dark-mode ::-webkit-scrollbar-thumb {
     gap: 0.25rem;
 }
 
+.plan-stat-transport {
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .plan-list-more {
     color: var(--text-secondary);
     font-size: 0.75rem;
@@ -589,6 +597,27 @@ body.dark-mode ::-webkit-scrollbar-thumb {
     font-size: 0.78rem;
     font-weight: 800;
 }
+
+.page-title {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.8rem;
+    min-width: 0;
+}
+
+.page-title-logo {
+    width: auto;
+    height: 42px;
+    max-width: 116px;
+    object-fit: contain;
+    flex: 0 0 auto;
+}
+
+.page-title-copy {
+    min-width: 0;
+}
+
 
 .page-title h1 {
     font-size: clamp(1.25rem, 2vw, 1.85rem);
@@ -799,7 +828,7 @@ body.dark-mode ::-webkit-scrollbar-thumb {
 
 .residence-top-card .progress-rings-strip {
     justify-content: space-between;
-    gap: 0.35rem;
+    gap: 0.45rem;
     flex-wrap: nowrap;
 }
 
@@ -969,6 +998,19 @@ body.dark-mode ::-webkit-scrollbar-thumb {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.kpi-info .kpi-detail {
+    margin-top: 0.35rem;
+    color: var(--text-secondary);
+    font-size: 0.58rem;
+    line-height: 1.4;
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
 }
 
 /* Fraction styling for camp assignments */
@@ -1482,7 +1524,7 @@ body.dark-mode .leaflet-control-layers {
 .entrance-chart-container {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
-    gap: 0.28rem;
+    gap: 0.34rem;
 }
 
 .chart-floating-legend {
@@ -1668,7 +1710,7 @@ body.dark-mode .leaflet-control-layers {
     }
 }
 
-/* Intelmatix x RCMC design guide application */
+/* RCMC design guide application */
 :root {
     color-scheme: dark;
     --bg-color: #000000;
@@ -1976,15 +2018,113 @@ body.light-mode #map {
     background: var(--brand-primary);
 }
 
-.map-static-label span {
+body.dark-mode .map-static-label span {
     background: rgba(9, 9, 11, 0.92) !important;
-    color: var(--text-primary) !important;
-    border-color: var(--border-color);
+    color: #fafafa !important;
+    border-color: rgba(39, 39, 42, 0.92);
     box-shadow: var(--shadow-sm);
+}
+
+body.light-mode .map-static-label span {
+    background: rgba(255, 255, 255, 0.92) !important;
+    color: #111827 !important;
+    border-color: rgba(148, 163, 184, 0.42);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
 }
 
 @media (max-width: 1100px) {
     .dashboard-container {
         grid-template-columns: 1fr;
     }
+}
+
+/* Equalized top ring groups */
+.rings-summary-section.plan-type-menu-section {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.7rem;
+    min-height: 128px;
+}
+
+.rings-summary-section .completion-top-card,
+.rings-summary-section .residence-top-card,
+.rings-summary-section .transport-top-card {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: 140px;
+    min-height: 140px;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    align-items: center;
+    justify-items: stretch;
+    padding: 0.45rem 0.55rem 0.65rem;
+}
+
+.rings-summary-section .completion-top-card h3,
+.rings-summary-section .residence-top-card h3,
+.rings-summary-section .transport-top-card h3 {
+    margin: 0 0 0.38rem;
+    color: var(--text-primary);
+    font-size: 0.62rem;
+    font-weight: 800;
+    line-height: 1.1;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rings-summary-section .completion-top-card .progress-rings-strip,
+.rings-summary-section .residence-top-card .progress-rings-strip,
+.rings-summary-section .transport-top-card .progress-rings-strip {
+    height: 100%;
+    justify-content: space-evenly;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: nowrap;
+    padding-bottom: 0.12rem;
+}
+
+.rings-summary-section .completion-top-card .progress-ring-item,
+.rings-summary-section .residence-top-card .progress-ring-item,
+.rings-summary-section .transport-top-card .progress-ring-item {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.rings-summary-section .completion-top-card .progress-ring-wrap,
+.rings-summary-section .residence-top-card .progress-ring-wrap,
+.rings-summary-section .transport-top-card .progress-ring-wrap,
+.rings-summary-section .transport-type-ring .progress-ring-wrap {
+    width: var(--top-unified-ring-size) !important;
+    height: var(--top-unified-ring-size) !important;
+}
+
+.rings-summary-section .completion-top-card .progress-ring-wrap canvas,
+.rings-summary-section .residence-top-card .progress-ring-wrap canvas,
+.rings-summary-section .transport-top-card .progress-ring-wrap canvas {
+    width: var(--top-unified-ring-size) !important;
+    height: var(--top-unified-ring-size) !important;
+    display: block;
+}
+
+.rings-summary-section .progress-ring-item {
+    gap: 0.28rem;
+}
+
+.rings-summary-section .transport-type-ring strong {
+    max-width: 96px !important;
+}
+
+.rings-summary-section .progress-ring-wrap span {
+    font-size: 0.7rem;
+    line-height: 1;
+    white-space: nowrap;
+    letter-spacing: 0;
+    text-align: center;
+}
+
+.rings-summary-section .progress-ring-item strong {
+    line-height: 1.18 !important;
+    padding-bottom: 1px;
 }

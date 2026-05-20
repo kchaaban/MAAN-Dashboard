@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RCMC Operations Platform</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <!-- FontAwesome 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+  <link rel="stylesheet" crossorigin href="/maan-dashboard/assets/index-Cn7U38pS.css">
+</head>
+<body class="dark-mode">
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo"><span>RC</span></div>
+                <div>
+                    <h2>RCMC · 2026</h2>
+                    <p>Operations control platform</p>
+                </div>
+                <button id="logoutBtn" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; cursor: pointer; margin-right: auto; padding: 8px 12px; border-radius: 6px; font-size: 14px; display: flex; align-items: center; gap: 6px; transition: all 0.2s;" title="تسجيل الخروج">
+                    <i class="fa-solid fa-power-off"></i> خروج
+                </button>
+            </div>
+
+            <div class="selection-section">
+                <div class="entity-table-section glass">
+                    <div class="entity-section-header">
+                        <h3><i class="fa-solid fa-building"></i> &#1588;&#1585;&#1603;&#1575;&#1578; &#1575;&#1604;&#1582;&#1583;&#1605;&#1577;</h3>
+                        <button id="clearCompanySelectionBtn" class="table-clear-btn" type="button">&#1575;&#1604;&#1603;&#1604;</button>
+                    </div>
+                    <div class="entity-table-wrap">
+                        <table class="entity-table service-companies-table">
+                            <thead>
+                                <tr>
+                                    <th>&#1575;&#1604;&#1588;&#1585;&#1603;&#1577;</th>
+                                    <th>&#1575;&#1604;&#1581;&#1580;&#1575;&#1580;</th>
+                                    <th>&#1575;&#1604;&#1605;&#1587;&#1575;&#1603;&#1606;</th>
+                                    <th>&#1575;&#1604;&#1575;&#1603;&#1578;&#1605;&#1575;&#1604;</th>
+                                </tr>
+                            </thead>
+                            <tbody id="serviceCompaniesTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="entity-table-section glass">
+                    <div class="entity-section-header">
+                        <h3><i class="fa-solid fa-sitemap"></i> &#1605;&#1585;&#1575;&#1603;&#1586; &#1575;&#1604;&#1582;&#1583;&#1605;&#1577;</h3>
+                        <button id="clearCenterSelectionBtn" class="table-clear-btn" type="button">&#1575;&#1604;&#1603;&#1604;</button>
+                    </div>
+                    <div class="entity-table-wrap">
+                        <table class="entity-table service-centers-table">
+                            <thead>
+                                <tr>
+                                    <th>رقم المكتب</th>
+                                    <th>&#1575;&#1604;&#1605;&#1585;&#1603;&#1586;</th>
+                                    <th>&#1575;&#1604;&#1588;&#1585;&#1603;&#1577;</th>
+                                    <th>&#1575;&#1604;&#1581;&#1580;&#1575;&#1580;</th>
+                                    <th>&#1575;&#1604;&#1605;&#1587;&#1575;&#1603;&#1606;</th>
+                                    <th>&#1575;&#1604;&#1575;&#1603;&#1578;&#1605;&#1575;&#1604;</th>
+                                </tr>
+                            </thead>
+                            <tbody id="serviceCentersTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="visually-hidden" aria-hidden="true">
+                <select id="periodFilter">
+                    <option value="all">&#1580;&#1605;&#1610;&#1593; &#1575;&#1604;&#1601;&#1578;&#1585;&#1575;&#1578;</option>
+                </select>
+                <select id="transportFilter">
+                    <option value="all">&#1580;&#1605;&#1610;&#1593; &#1575;&#1604;&#1571;&#1606;&#1608;&#1575;&#1593;</option>
+                </select>
+                <select id="districtFilter">
+                    <option value="all">&#1603;&#1604; &#1575;&#1604;&#1571;&#1581;&#1610;&#1575;&#1569; (&#1575;&#1604;&#1603;&#1604;)</option>
+                </select>
+            </div>
+
+
+            <div class="plan-list-section">
+                <h3><i class="fa-solid fa-clock-rotate-left"></i> الخطط الأخيرة</h3>
+                <div class="plan-list" id="planList">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </aside>
+
+        <div id="leftPanelResizeHandle" class="panel-resize-handle" role="separator" aria-label="تغيير عرض اللوحة الجانبية" aria-orientation="vertical" tabindex="0"></div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-nav">
+                <div class="page-title">
+                    <img class="page-title-logo" src="gtc-logo.jpeg" alt="المركز العام للنقل">
+                    <div class="page-title-copy">
+                        <span>RCMC</span>
+                        <h1>تشغيل النقل في الحج</h1>
+                    </div>
+                </div>
+                <div class="top-nav-actions">
+                    <div class="search-bar">
+                        <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                        <input type="text" placeholder="البحث في الخطط...">
+                    </div>
+                    <input id="plansCsvInput" type="file" accept=".csv,text/csv" hidden>
+                    <button id="loadPlansCsvBtn" class="load-csv-btn" type="button" title="Load plans CSV">
+                        <i class="fa-solid fa-file-csv"></i>
+                        <span>Load CSV</span>
+                    </button>
+                    
+                    
+                    <button id="themeToggleBtn" class="theme-toggle-btn" type="button" aria-label="تبديل الوضع الداكن">
+                        <i class="fa-solid fa-moon"></i>
+                    </button>
+                </div>
+                <div class="user-profile">
+                    <div class="avatar">م</div>
+                    <span>المشرف</span>
+                </div>
+            </header>
+
+            <section class="plan-type-menu-section rings-summary-section glass" aria-label="اكتمال المراحل والمساكن">
+                <select id="planTypeFilter" class="visually-hidden" aria-label="المرحلة">
+                    <option value="all">الكل</option>
+                </select>
+                <div class="chart-card completion-top-card">
+                    <h3>المرحلة</h3>
+                    <div id="completionSummaryCharts" class="progress-rings-strip"></div>
+                </div>
+                <div class="chart-card residence-top-card">
+                    <h3>مؤشرات المساكن</h3>
+                    <div id="residenceAssignmentCharts" class="progress-rings-strip"></div>
+                </div>
+                <div class="chart-card transport-top-card" title="نمط النقل" aria-label="نمط النقل">
+                    <h3>نمط النقل</h3>
+                    <div id="transportTypeRings" class="progress-rings-strip"></div>
+                </div>
+            </section>
+
+            <!-- KPIs -->
+            <div class="metrics-row">
+                <div class="kpi-cards">
+                    <div class="kpi-card glass">
+                        <div class="kpi-icon pilgrims-icon"><i class="fa-solid fa-users fa-lg" style="color: white; z-index: 1;"></i></div>
+                        <div class="kpi-info">
+                            <h4>الحجاج (مخطط/إجمالي)</h4>
+                            <h2 id="kpiPilgrims">0</h2>
+                        </div>
+                    </div>
+                    <div class="kpi-card glass">
+                        <div class="kpi-icon buses-icon"><i class="fa-solid fa-bus-simple fa-lg" style="color: white; z-index: 1;"></i></div>
+                        <div class="kpi-info">
+                            <h4>إجمالي الحافلات</h4>
+                            <h2 id="kpiBuses">0</h2>
+                        </div>
+                    </div>
+                    <div class="kpi-card glass">
+                        <div class="kpi-icon plans-icon"><i class="fa-solid fa-clipboard-check fa-lg" style="color: white; z-index: 1;"></i></div>
+                        <div class="kpi-info">
+                            <h4>إجمالي الخطط</h4>
+                            <h2 id="kpiPlans">0</h2>
+                        </div>
+                    </div>
+                    <div class="kpi-card glass">
+                        <div class="kpi-icon trips-icon"><i class="fa-solid fa-road fa-lg" style="color: white; z-index: 1;"></i></div>
+                        <div class="kpi-info">
+                            <h4>إجمالي الرحلات</h4>
+                            <h2 id="kpiTrips">0</h2>
+                            <p class="kpi-detail" id="kpiTripsDetail"></p>
+                        </div>
+                    </div>
+                    <div class="kpi-card glass">
+                        <div class="kpi-icon residence-icon"><i class="fa-solid fa-house-chimney fa-lg" style="color: white; z-index: 1;"></i></div>
+                        <div class="kpi-info">
+                            <h4>عدد المساكن (مخطط/اجمالي)</h4>
+                            <h2 id="kpiResidences">0</h2>
+                        </div>
+                    </div>
+                    <div class="kpi-card glass">
+                        <div class="kpi-icon camp-icon"><i class="fa-solid fa-tent fa-lg" style="color: white; z-index: 1;"></i></div>
+                        <div class="kpi-info">
+                            <h4>مخيمات (مخطط/إجمالي)</h4>
+                            <h2 id="kpiCamps">0</h2>
+                        </div>
+                    </div>
+                    <div class="kpi-card glass">
+                        <div class="kpi-icon service-center-icon"><i class="fa-solid fa-sitemap fa-lg" style="color: white; z-index: 1;"></i></div>
+                        <div class="kpi-info">
+                            <h4>مراكز الخدمة (مخطط/إجمالي)</h4>
+                            <h2 id="kpiServiceCenters">0</h2>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- Content Grid -->
+            <div class="content-grid">
+                <!-- Center Map with Floating District Chart - Now DOM 1 (Right visual in RTL) -->
+                <div class="card glass map-container-card">
+                    <div id="mapStatus" class="map-status" hidden></div>
+                    <div id="mapSelectionTitle" class="map-selection-title" hidden></div>
+                    <div id="map"></div>
+
+                    <!-- Floating District Chart Overlay - Top Right -->
+                    <div class="map-overlay-card glass">
+                        <h3><i class="fa-solid fa-chart-pie"></i> الحجاج حسب الحي</h3>
+                        <div class="district-chart-container">
+                            <canvas id="districtChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="rightPanelResizeHandle" class="panel-resize-handle" role="separator" aria-label="تغيير عرض لوحة الرسوم" aria-orientation="vertical" tabindex="0"></div>
+
+
+                <!-- Operational Side Panel (Period, Entrance, Path) - Now DOM 2 (Left visual in RTL) -->
+                <div class="side-panel right-charts-panel">
+                    <div class="chart-card glass">
+                        <h3><i class="fa-solid fa-chart-column"></i> الحجاج حسب الفترة</h3>
+                        <div class="chart-container">
+                            <div id="periodChart" class="plotly-chart"></div>
+                        </div>
+                    </div>
+                    <div class="chart-card glass">
+                        <h3><i class="fa-solid fa-chart-bar"></i> عدد الحافلات لكل مدخل</h3>
+                        <div class="chart-container entrance-chart-container">
+                            <div id="entranceFloatingLegend" class="chart-floating-legend" aria-hidden="true"></div>
+                            <div id="entranceChart" class="plotly-chart"></div>
+                        </div>
+                    </div>
+                    <div class="chart-card glass">
+                        <h3><i class="fa-solid fa-chart-line"></i> الحافلات حسب المسار</h3>
+                        <div class="chart-container">
+                            <div id="pathChart" class="plotly-chart"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <!-- PapaParse for CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Plotly -->
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    
+    <!-- Authentication & Dynamic App Loader -->
+    <script src="auth.js"></script>
+</body>
+</html>

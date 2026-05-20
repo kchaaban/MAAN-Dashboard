@@ -99,8 +99,11 @@
         <main class="main-content">
             <header class="top-nav">
                 <div class="page-title">
-                    <span>RCMC · Intelmatix</span>
-                    <h1>تشغيل النقل في الحج</h1>
+                    <img class="page-title-logo" src="gtc-logo.jpeg" alt="المركز العام للنقل">
+                    <div class="page-title-copy">
+                        <span>RCMC</span>
+                        <h1>تشغيل النقل في الحج</h1>
+                    </div>
                 </div>
                 <div class="top-nav-actions">
                     <div class="search-bar">
@@ -112,6 +115,8 @@
                         <i class="fa-solid fa-file-csv"></i>
                         <span>Load CSV</span>
                     </button>
+                    
+                    
                     <button id="themeToggleBtn" class="theme-toggle-btn" type="button" aria-label="تبديل الوضع الداكن">
                         <i class="fa-solid fa-moon"></i>
                     </button>
@@ -127,16 +132,16 @@
                     <option value="all">الكل</option>
                 </select>
                 <div class="chart-card completion-top-card">
+                    <h3>المرحلة</h3>
                     <div id="completionSummaryCharts" class="progress-rings-strip"></div>
                 </div>
                 <div class="chart-card residence-top-card">
+                    <h3>مؤشرات المساكن</h3>
                     <div id="residenceAssignmentCharts" class="progress-rings-strip"></div>
                 </div>
-                <div class="chart-card transport-top-card" title="توزيع الحافلات حسب نمط النقل" aria-label="توزيع الحافلات حسب نمط النقل">
-                    <div class="transport-ring-container">
-                        <canvas id="transportChart"></canvas>
-                    </div>
-                    <strong>نمط النقل</strong>
+                <div class="chart-card transport-top-card" title="نمط النقل" aria-label="نمط النقل">
+                    <h3>نمط النقل</h3>
+                    <div id="transportTypeRings" class="progress-rings-strip"></div>
                 </div>
             </section>
 
@@ -169,6 +174,7 @@
                         <div class="kpi-info">
                             <h4>إجمالي الرحلات</h4>
                             <h2 id="kpiTrips">0</h2>
+                            <p class="kpi-detail" id="kpiTripsDetail"></p>
                         </div>
                     </div>
                     <div class="kpi-card glass">
