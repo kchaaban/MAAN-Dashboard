@@ -13,8 +13,9 @@
     <!-- Custom CSS -->
     <link rel="stylesheet" href="styles.css">
 </head>
-<body class="dark-mode">
-    <div class="dashboard-container">
+<body class="dark-mode auth-required">
+
+    <div id="dashboardApp" class="dashboard-container" hidden>
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
@@ -23,9 +24,6 @@
                     <h2>RCMC · 2026</h2>
                     <p>Operations control platform</p>
                 </div>
-                <button id="logoutBtn" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; cursor: pointer; margin-right: auto; padding: 8px 12px; border-radius: 6px; font-size: 14px; display: flex; align-items: center; gap: 6px; transition: all 0.2s;" title="تسجيل الخروج">
-                    <i class="fa-solid fa-power-off"></i> خروج
-                </button>
             </div>
 
             <div class="selection-section">
@@ -34,14 +32,18 @@
                         <h3><i class="fa-solid fa-building"></i> &#1588;&#1585;&#1603;&#1575;&#1578; &#1575;&#1604;&#1582;&#1583;&#1605;&#1577;</h3>
                         <button id="clearCompanySelectionBtn" class="table-clear-btn" type="button">&#1575;&#1604;&#1603;&#1604;</button>
                     </div>
+                    <div class="entity-table-search">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input id="serviceCompaniesSearch" type="search" placeholder="بحث في الشركات" autocomplete="off">
+                    </div>
                     <div class="entity-table-wrap">
-                        <table class="entity-table service-companies-table">
+                        <table class="entity-table service-companies-table" data-table-type="company">
                             <thead>
                                 <tr>
-                                    <th>&#1575;&#1604;&#1588;&#1585;&#1603;&#1577;</th>
-                                    <th>&#1575;&#1604;&#1581;&#1580;&#1575;&#1580;</th>
-                                    <th>&#1575;&#1604;&#1605;&#1587;&#1575;&#1603;&#1606;</th>
-                                    <th>&#1575;&#1604;&#1575;&#1603;&#1578;&#1605;&#1575;&#1604;</th>
+                                    <th data-sort-key="label">&#1575;&#1604;&#1588;&#1585;&#1603;&#1577;</th>
+                                    <th data-sort-key="totalPilgrims">&#1575;&#1604;&#1581;&#1580;&#1575;&#1580;</th>
+                                    <th data-sort-key="residences">&#1575;&#1604;&#1605;&#1587;&#1575;&#1603;&#1606;</th>
+                                    <th data-sort-key="completion">&#1575;&#1604;&#1575;&#1603;&#1578;&#1605;&#1575;&#1604;</th>
                                 </tr>
                             </thead>
                             <tbody id="serviceCompaniesTableBody"></tbody>
@@ -54,16 +56,20 @@
                         <h3><i class="fa-solid fa-sitemap"></i> &#1605;&#1585;&#1575;&#1603;&#1586; &#1575;&#1604;&#1582;&#1583;&#1605;&#1577;</h3>
                         <button id="clearCenterSelectionBtn" class="table-clear-btn" type="button">&#1575;&#1604;&#1603;&#1604;</button>
                     </div>
+                    <div class="entity-table-search">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input id="serviceCentersSearch" type="search" placeholder="بحث في المراكز" autocomplete="off">
+                    </div>
                     <div class="entity-table-wrap">
-                        <table class="entity-table service-centers-table">
+                        <table class="entity-table service-centers-table" data-table-type="center">
                             <thead>
                                 <tr>
-                                    <th>رقم المكتب</th>
-                                    <th>&#1575;&#1604;&#1605;&#1585;&#1603;&#1586;</th>
-                                    <th>&#1575;&#1604;&#1588;&#1585;&#1603;&#1577;</th>
-                                    <th>&#1575;&#1604;&#1581;&#1580;&#1575;&#1580;</th>
-                                    <th>&#1575;&#1604;&#1605;&#1587;&#1575;&#1603;&#1606;</th>
-                                    <th>&#1575;&#1604;&#1575;&#1603;&#1578;&#1605;&#1575;&#1604;</th>
+                                    <th data-sort-key="centerNumber">رقم المكتب</th>
+                                    <th data-sort-key="label">&#1575;&#1604;&#1605;&#1585;&#1603;&#1586;</th>
+                                    <th data-sort-key="sublabel">&#1575;&#1604;&#1588;&#1585;&#1603;&#1577;</th>
+                                    <th data-sort-key="totalPilgrims">&#1575;&#1604;&#1581;&#1580;&#1575;&#1580;</th>
+                                    <th data-sort-key="residences">&#1575;&#1604;&#1605;&#1587;&#1575;&#1603;&#1606;</th>
+                                    <th data-sort-key="completion">&#1575;&#1604;&#1575;&#1603;&#1578;&#1605;&#1575;&#1604;</th>
                                 </tr>
                             </thead>
                             <tbody id="serviceCentersTableBody"></tbody>
@@ -99,31 +105,24 @@
         <main class="main-content">
             <header class="top-nav">
                 <div class="page-title">
-                    <img class="page-title-logo" src="gtc-logo.jpeg" alt="المركز العام للنقل">
-                    <div class="page-title-copy">
-                        <span>RCMC</span>
-                        <h1>تشغيل النقل في الحج</h1>
-                    </div>
+                    <span>RCMC</span>
+                    <h1>الاركاب الذكي للحج</h1>
                 </div>
                 <div class="top-nav-actions">
                     <div class="search-bar">
                         <i class="fa-solid fa-magnifying-glass search-icon"></i>
                         <input type="text" placeholder="البحث في الخطط...">
                     </div>
-                    <input id="plansCsvInput" type="file" accept=".csv,text/csv" hidden>
-                    <button id="loadPlansCsvBtn" class="load-csv-btn" type="button" title="Load plans CSV">
-                        <i class="fa-solid fa-file-csv"></i>
-                        <span>Load CSV</span>
-                    </button>
-                    
-                    
                     <button id="themeToggleBtn" class="theme-toggle-btn" type="button" aria-label="تبديل الوضع الداكن">
                         <i class="fa-solid fa-moon"></i>
                     </button>
                 </div>
                 <div class="user-profile">
                     <div class="avatar">م</div>
-                    <span>المشرف</span>
+                    <span id="userRoleLabel">المشرف</span>
+                    <button id="logoutBtn" class="logout-btn" type="button" title="تسجيل الخروج" aria-label="تسجيل الخروج">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </button>
                 </div>
             </header>
 
@@ -132,16 +131,16 @@
                     <option value="all">الكل</option>
                 </select>
                 <div class="chart-card completion-top-card">
-                    <h3>المرحلة</h3>
+                    <h3 class="ring-group-title">أنواع الخطط</h3>
                     <div id="completionSummaryCharts" class="progress-rings-strip"></div>
                 </div>
                 <div class="chart-card residence-top-card">
-                    <h3>مؤشرات المساكن</h3>
+                    <h3 class="ring-group-title">المساكن</h3>
                     <div id="residenceAssignmentCharts" class="progress-rings-strip"></div>
                 </div>
-                <div class="chart-card transport-top-card" title="نمط النقل" aria-label="نمط النقل">
-                    <h3>نمط النقل</h3>
-                    <div id="transportTypeRings" class="progress-rings-strip"></div>
+                <div class="chart-card transport-top-card" title="توزيع الحافلات حسب نمط النقل" aria-label="توزيع الحافلات حسب نمط النقل">
+                    <h3 class="ring-group-title">أنماط النقل</h3>
+                    <div id="transportCharts" class="transport-rings-grid"></div>
                 </div>
             </section>
 
@@ -174,7 +173,6 @@
                         <div class="kpi-info">
                             <h4>إجمالي الرحلات</h4>
                             <h2 id="kpiTrips">0</h2>
-                            <p class="kpi-detail" id="kpiTripsDetail"></p>
                         </div>
                     </div>
                     <div class="kpi-card glass">
@@ -258,7 +256,10 @@
     <!-- Plotly -->
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     
-    <!-- Authentication & Dynamic App Loader -->
+    <!-- Data files -->
+    <script src="data/data.js"></script>
+    <script src="data/assign_camps.js"></script>
+    <!-- Auth and App Logic -->
     <script src="auth.js"></script>
 </body>
 </html>

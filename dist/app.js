@@ -2,6 +2,7 @@
 let rawData = [];
 let filteredData = [];
 let contextFilteredData = [];
+let planTypeBaseData = [];
 let map;
 let routeLayerGroup;
 let periodChartInstance = null;
@@ -26,26 +27,38 @@ let residenceAssignmentKeys = new Set();
 let residenceAssignmentRecords = [];
 let campAssignmentRecords = [];
 let campAssignmentStats = null;
-let selectedServiceCompany = 'all';
-let selectedServiceCenter = 'all';
+let assignCampRows = [];
+let assignmentTotalsFromCamps = { companyMetrics: new Map(), centerMetrics: new Map() };
+let selectedServiceCompanies = new Set();
+let selectedServiceCenters = new Set();
 let selectedResidenceMixFilter = 'all';
+const entityTableState = {
+    company: { search: '', sortKey: 'completion', sortDirection: 'desc' },
+    center: { search: '', sortKey: 'completion', sortDirection: 'desc' }
+};
+let selectedPlanTypes = new Set(['تروية']);
 let serviceCompaniesCatalog = [];
 let serviceCompanyNameByKey = new Map();
 let serviceCenterNamesByKey = new Map();
 let plansCsvLoadSequence = 0;
 let activePlansCsvSource = '';
-let simulationPlansData = [];
 let dashboardResizeFrameId = null;
 const TOP_RING_CANVAS_SIZE = 52;
+const RESIDENCE_RING_CANVAS_SIZE = TOP_RING_CANVAS_SIZE;
+const TRANSPORT_RING_CANVAS_SIZE = TOP_RING_CANVAS_SIZE;
 
 const MAP_RENDER_LIMIT = 300;
 const PLAN_LIST_LIMIT = 50;
 const MAP_FIT_MAX_ZOOM = 16;
+const MAP_LABEL_MIN_ZOOM = 15;
 const ASSIGNMENT_RENDER_LIMIT = 350;
 const MAP_DETAIL_LABEL_LIMIT = 18;
 const SIDEBAR_WIDTH_STORAGE_KEY = 'dashboard-sidebar-width';
 const RIGHT_PANEL_WIDTH_STORAGE_KEY = 'dashboard-right-panel-width';
 const CHART_POPOUT_WINDOW_FEATURES = 'noopener,noreferrer,width=1200,height=760';
+const AUTH_TOKEN_STORAGE_KEY = 'maan-dashboard-auth-token';
+const AUTH_ROLE_STORAGE_KEY = 'maan-dashboard-auth-role';
+const THEME_STORAGE_KEY = 'dashboard-theme';
 const DISTRICT_COLOR_PALETTE = [
     "#2A9D90",
     "#4EC9B9",
@@ -102,7 +115,7 @@ function buildDistrictMapStats(rows) {
             plans: 0
         };
 
-        current.pilgrims += getPlannedHajj(row);
+        current.pilgrims += toNumber(row["number_of_haj"]);
         current.plans += 1;
         stats.set(key, current);
         maxPilgrims = Math.max(maxPilgrims, current.pilgrims);
@@ -129,32 +142,13 @@ function getDistrictPolygonStyle(districtName, districtStats, maxPilgrims) {
 
 // Parse camp label to extract numerator and denominator (e.g., "1/608" → {num: 1, denom: 608})
 function parseCampLabel(label) {
-    const safeLabel = String(label || "").trim();
-    if (!safeLabel || !safeLabel.includes("/")) return null;
-    const parts = safeLabel.split("/");
+    const safeLabel = String(label || '').trim();
+    if (!safeLabel || !safeLabel.includes('/')) return null;
+    const parts = safeLabel.split('/');
     return {
-        num: String(parts[0] || "").trim(),
-        denom: String(parts[1] || "").trim()
+        num: String(parts[0] || '').trim(),
+        denom: String(parts[1] || '').trim()
     };
-}
-
-function getUniquePilgrimKey(row) {
-    const campLabel = String(row["camp_label"] || "").trim();
-    const company = row["owner_company_name"] ?? row["service_company_name"] ?? "";
-    const centerNumber = row["owner_office_number"] ?? row["office_number"] ?? "";
-    if (campLabel) {
-        return centerKey(company, centerNumber) + "|" + campLabel;
-    }
-
-    const planId = String(row["plan_id"] || "").trim();
-    if (planId) {
-        return "plan:" + planId;
-    }
-
-    const period = String(row["period"] || "").trim();
-    const startPoint = String(row["start_point_name"] || "").trim();
-    const endPoint = String(row["end_point_name"] || "").trim();
-    return centerKey(company, centerNumber) + "|" + period + "|" + startPoint + "|" + endPoint;
 }
 
 function calculateCampAssignmentStats(rows) {
@@ -162,38 +156,37 @@ function calculateCampAssignmentStats(rows) {
     const campDenominators = new Set();
     const uniqueCampLabels = new Set();
     const serviceCenters = new Set();
-    const uniquePilgrims = new Map();
-    const uniqueCampKeys = new Set();
+    const allocatedByAssignment = new Map();
     let totalCampAssignments = 0;
 
     rows.forEach(d => {
-        const campLabel = String(d["camp_label"] || "").trim();
-        const company = d["service_company_name"] ?? d["owner_company_name"] ?? "";
-        const centerNumber = d["office_number"] ?? d["owner_office_number"];
-        const hasCampLabel = Boolean(campLabel);
-        const campKey = hasCampLabel ? centerKey(company, centerNumber) + "|" + campLabel : null;
-
-        if (hasCampLabel) {
-            uniqueCampLabels.add(campLabel);
-            if (!uniqueCampKeys.has(campKey)) {
-                uniqueCampKeys.add(campKey);
-                totalCampAssignments++;
-            }
+        const campLabel = d['camp_label'];
+        if (campLabel) {
+            uniqueCampLabels.add(String(campLabel).trim());
             const parsed = parseCampLabel(campLabel);
             if (parsed && parsed.num && parsed.denom) {
                 campNumerators.add(parsed.num);
                 campDenominators.add(parsed.denom);
+                totalCampAssignments++;
             }
         }
 
+        const centerNumber = d['office_number'] ?? d['owner_office_number'];
         if (centerNumber !== undefined && centerNumber !== null && String(centerNumber).trim()) {
+            const company = d['service_company_name'] ?? d['owner_company_name'] ?? '';
             serviceCenters.add(centerKey(company, centerNumber));
         }
 
-        const uniqueKey = getUniquePilgrimKey(d);
-        const value = toNumber(d["number_of_piligrim"] ?? d["number_of_haj"]);
-        uniquePilgrims.set(uniqueKey, Math.max(uniquePilgrims.get(uniqueKey) || 0, value));
+        const assignmentKey = getAssignmentRecordKey(d);
+        if (assignmentKey && !assignmentKey.endsWith('|')) {
+            allocatedByAssignment.set(
+                assignmentKey,
+                Math.max(allocatedByAssignment.get(assignmentKey) || 0, getAllocatedPilgrims(d))
+            );
+        }
     });
+
+    const totalPilgrims = Array.from(allocatedByAssignment.values()).reduce((sum, value) => sum + value, 0);
 
     return {
         numeratorCount: campNumerators.size,
@@ -201,47 +194,163 @@ function calculateCampAssignmentStats(rows) {
         totalAssignments: totalCampAssignments,
         uniqueCampCount: uniqueCampLabels.size,
         serviceCenterCount: serviceCenters.size,
-        totalPilgrims: Array.from(uniquePilgrims.values()).reduce((sum, value) => sum + value, 0),
+        totalPilgrims,
         allNumerators: Array.from(campNumerators).sort(),
         allDenominators: Array.from(campDenominators).sort()
     };
 }
 
-// Calculate assignment statistics from assign_camps for the current company/office filter.
+// Calculate assignment statistics from the current filters. For the Tarwiya KPI,
+// the denominator is the Tarwiya movement total: Tarwiya + Taseed Tarwiya.
 function getCampAssignmentStats() {
     const { company, owner } = getSelectedCompanyAndOwner();
-    const campLabels = new Set();
-    const serviceCenters = new Set();
-    const uniquePilgrims = new Map();
-
-    campAssignmentRecords.forEach(row => {
-        if (!matchesCompanyOwnerFilters(row.company, row.centerNumber, company, owner)) return;
-
-        const campLabel = String(row.campLabel || "").trim();
-        if (campLabel) campLabels.add(campLabel);
-        serviceCenters.add(centerKey(row.company, row.centerNumber));
-
-        const uniqueKey = getUniquePilgrimKey({
-            camp_label: row.campLabel,
-            owner_company_name: row.company,
-            owner_office_number: row.centerNumber,
-            plan_id: row.planId,
-            period: row.period,
-            start_point_name: row.startPointName,
-            end_point_name: row.endPointName
-        });
-        uniquePilgrims.set(uniqueKey, Math.max(uniquePilgrims.get(uniqueKey) || 0, row.pilgrims));
-    });
+    const rows = planTypeBaseData.filter(row => (
+        isTarwiyaKpiTotalPlanType(row)
+        && matchesCompanyOwnerFilters(
+            row['owner_company_name'],
+            row['owner_office_number'],
+            company,
+            owner
+        )
+    ));
+    const stats = calculateCampAssignmentStats(rows);
 
     return {
-        uniqueCampCount: campLabels.size,
-        serviceCenterCount: serviceCenters.size,
-        totalPilgrims: Array.from(uniquePilgrims.values()).reduce((sum, value) => sum + value, 0)
+        ...stats,
+        serviceCenterCount: stats.serviceCenterCount,
+        totalPilgrims: calculateKpiTotalPilgrims(rows)
     };
 }
 
 
-function runApp() {
+function getLoginApiPath() {
+    return window.location.pathname.startsWith('/maan-dashboard')
+        ? '/maan-dashboard/api/login'
+        : '/maan-dashboard/api/login';
+}
+
+function setCookieValue(key, value, maxAgeSeconds = 60 * 60 * 24 * 30) {
+    document.cookie = encodeURIComponent(key) + "=" + encodeURIComponent(value) + "; path=/; max-age=" + maxAgeSeconds + "; SameSite=Lax";
+}
+
+function getCookieValue(key) {
+    const encodedKey = encodeURIComponent(key) + '=';
+    const cookieParts = document.cookie ? document.cookie.split('; ') : [];
+    for (const part of cookieParts) {
+        if (part.startsWith(encodedKey)) {
+            return decodeURIComponent(part.slice(encodedKey.length));
+        }
+    }
+    return '';
+}
+
+function removeCookieValue(key) {
+    document.cookie = encodeURIComponent(key) + "=; path=/; max-age=0; SameSite=Lax";
+}
+
+function setPersistentValue(key, value) {
+    try {
+        localStorage.setItem(key, value);
+    } catch (error) {
+        // Ignore storage exceptions and continue with cookie fallback.
+    }
+    setCookieValue(key, value);
+}
+
+function getPersistentValue(key) {
+    try {
+        const value = localStorage.getItem(key);
+        if (value !== null && value !== undefined) return value;
+    } catch (error) {
+        // Ignore storage exceptions and continue with cookie fallback.
+    }
+    return getCookieValue(key);
+}
+
+function removePersistentValue(key) {
+    try {
+        localStorage.removeItem(key);
+    } catch (error) {
+        // Ignore storage exceptions and continue with cookie fallback.
+    }
+    removeCookieValue(key);
+}
+
+function showLoginScreen(message = '') {
+    document.body.classList.add('auth-required');
+    document.body.classList.remove('authenticated');
+    const loginScreen = document.getElementById('loginScreen');
+    const dashboardApp = document.getElementById('dashboardApp');
+    const loginError = document.getElementById('loginError');
+
+    if (loginScreen) loginScreen.hidden = false;
+    if (dashboardApp) dashboardApp.hidden = true;
+    if (loginError) {
+        loginError.textContent = message;
+        loginError.hidden = !message;
+    }
+}
+
+function showDashboard(role = '') {
+    document.body.classList.remove('auth-required');
+    document.body.classList.add('authenticated');
+    const loginScreen = document.getElementById('loginScreen');
+    const dashboardApp = document.getElementById('dashboardApp');
+    const roleLabel = document.getElementById('userRoleLabel');
+
+    if (loginScreen) loginScreen.hidden = true;
+    if (dashboardApp) dashboardApp.hidden = false;
+    if (roleLabel) roleLabel.textContent = role || 'المشرف';
+}
+
+function logout() {
+    removePersistentValue(AUTH_TOKEN_STORAGE_KEY);
+    removePersistentValue(AUTH_ROLE_STORAGE_KEY);
+    window.location.reload();
+}
+
+async function handleLoginSubmit(event) {
+    event.preventDefault();
+    const usernameInput = document.getElementById('loginUsername');
+    const passwordInput = document.getElementById('loginPassword');
+    const submitBtn = document.getElementById('loginSubmitBtn');
+    const loginError = document.getElementById('loginError');
+    const username = usernameInput?.value.trim() || '';
+    const password = passwordInput?.value || '';
+
+    if (loginError) loginError.hidden = true;
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+        const response = await fetch(getLoginApiPath(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        if (!response.ok) throw new Error('login-failed');
+        const payload = await response.json();
+        const authToken = String(payload.token || payload.accessToken || payload.jwt || "authenticated");
+        const authRole = String(payload.role || payload.userRole || "المشرف");
+        setPersistentValue(AUTH_TOKEN_STORAGE_KEY, authToken);
+        setPersistentValue(AUTH_ROLE_STORAGE_KEY, authRole);
+        showDashboard(authRole);
+        initializeDashboardApp();
+    } catch (error) {
+        if (loginError) {
+            loginError.textContent = 'بيانات الدخول غير صحيحة';
+            loginError.hidden = false;
+        }
+    } finally {
+        if (submitBtn) submitBtn.disabled = false;
+    }
+}
+
+let dashboardInitialized = false;
+
+function initializeDashboardApp() {
+    if (dashboardInitialized) return;
+    dashboardInitialized = true;
     initResizablePanels();
     initEntityTableColumnAutosize();
     initChartViewer();
@@ -252,11 +361,20 @@ function runApp() {
 }
 
 // Initialize Application
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', runApp);
-} else {
-    runApp();
-}
+document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
+    document.getElementById('loginForm')?.addEventListener('submit', handleLoginSubmit);
+    document.getElementById('logoutBtn')?.addEventListener('click', logout);
+
+    const token = getPersistentValue(AUTH_TOKEN_STORAGE_KEY);
+    const role = getPersistentValue(AUTH_ROLE_STORAGE_KEY);
+    if (token) {
+        showDashboard(role);
+        initializeDashboardApp();
+    } else {
+        showLoginScreen();
+    }
+});
 
 function getCellContentWidth(cell) {
     if (!cell) return 0;
@@ -614,7 +732,7 @@ function initResizablePanels() {
 }
 
 function initTheme() {
-    const savedTheme = localStorage.getItem('dashboard-theme') || 'dark';
+    const savedTheme = getPersistentValue(THEME_STORAGE_KEY) || 'dark';
     applyTheme(savedTheme);
 }
 
@@ -622,7 +740,19 @@ function applyTheme(theme) {
     const isDark = theme === 'dark';
     document.body.classList.toggle('dark-mode', isDark);
     document.body.classList.toggle('light-mode', !isDark);
-    localStorage.setItem('dashboard-theme', isDark ? 'dark' : 'light');
+    setPersistentValue(THEME_STORAGE_KEY, isDark ? 'dark' : 'light');
+
+    const chartDefaults = getThemeColors();
+    if (window.Chart) {
+        Chart.defaults.color = chartDefaults.title;
+        Chart.defaults.font.family = "Inter, IBM Plex Sans Arabic, sans-serif";
+        Chart.defaults.plugins.legend.labels.color = chartDefaults.title;
+        Chart.defaults.plugins.tooltip.titleColor = chartDefaults.title;
+        Chart.defaults.plugins.tooltip.bodyColor = chartDefaults.text;
+        Chart.defaults.plugins.tooltip.backgroundColor = isDark ? 'rgba(9, 9, 11, 0.96)' : '#ffffff';
+        Chart.defaults.plugins.tooltip.borderColor = chartDefaults.border;
+        Chart.defaults.plugins.tooltip.borderWidth = 1;
+    }
 
     const themeBtn = document.getElementById('themeToggleBtn');
     if (themeBtn) {
@@ -644,11 +774,12 @@ function applyTheme(theme) {
 }
 
 function getThemeColors() {
-    const isDark = document.body.classList.contains('dark-mode');
+    const styles = getComputedStyle(document.body);
     return {
-        text: isDark ? '#f8fafc' : '#111827',
-        grid: isDark ? 'rgba(148, 163, 184, 0.14)' : 'rgba(100, 116, 139, 0.18)',
-        border: isDark ? 'rgba(148, 163, 184, 0.26)' : '#e2e8f0'
+        title: styles.getPropertyValue('--text-primary').trim() || '#fafafa',
+        text: styles.getPropertyValue('--text-secondary').trim() || '#afafaf',
+        grid: document.body.classList.contains('dark-mode') ? 'rgba(148, 163, 184, 0.14)' : 'rgba(100, 116, 139, 0.18)',
+        border: styles.getPropertyValue('--border-color').trim() || '#e2e8f0'
     };
 }
 
@@ -700,6 +831,30 @@ async function cachePlansCsv(csvText, source) {
     });
 }
 
+async function clearPlansCsvCache() {
+    localStorage.removeItem(PLANS_CSV_SOURCE_STORAGE_KEY);
+
+    try {
+        const db = await openPlansCsvDb();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction(PLANS_CSV_STORE_NAME, 'readwrite');
+            const request = tx.objectStore(PLANS_CSV_STORE_NAME).delete(PLANS_CSV_CACHE_KEY);
+            request.onerror = () => reject(request.error);
+            tx.oncomplete = () => {
+                db.close();
+                resolve();
+            };
+            tx.onerror = () => {
+                const error = tx.error || request.error;
+                db.close();
+                reject(error);
+            };
+        });
+    } catch (error) {
+        console.warn('Could not clear plans CSV cache:', error);
+    }
+}
+
 function debounce(fn, delay = 180) {
     let timeoutId;
     return (...args) => {
@@ -726,29 +881,15 @@ function toNumber(value) {
     return Number.isFinite(number) ? number : 0;
 }
 
-function firstNumericField(row, fieldNames) {
-    for (const fieldName of fieldNames) {
-        if (row[fieldName] !== undefined && row[fieldName] !== null && row[fieldName] !== '') {
-            return toNumber(row[fieldName]);
-        }
-    }
-    return 0;
+function getAllocatedPilgrims(row) {
+    return toNumber(row['allocated_haj'] ?? row['allocated_hajj'] ?? row['number_of_piligrim'] ?? row['number_of_haj']);
 }
 
-function getPlannedHajj(row) {
-    return firstNumericField(row, ['num_of_haj', 'num_of_hajj', 'nom_of_hajj', 'nom_of_haj', 'number_of_haj', 'Number of haj']);
-}
-
-function getAllocatedHajj(row) {
-    return firstNumericField(row, ['allocated_hajj', 'allocated_haj', 'allocated_haji', 'allocated_hajjs', 'Allocated hajj']);
-}
-
-function getAllocationCampKey(row) {
-    const company = row['owner_company_name'] ?? row['service_company_name'] ?? '';
-    const centerNumber = row['owner_office_number'] ?? row['office_number'] ?? '';
-    const campLabel = String(row['camp_label'] || '').trim();
-    const fallback = String(row['plan_id'] || row['end_point_name'] || row['start_point_name'] || '').trim();
-    return `${centerKey(company, centerNumber)}|${campLabel || fallback}`;
+function getAssignmentRecordKey(row) {
+    const company = row['service_company_name'] ?? row['owner_company_name'] ?? '';
+    const centerNumber = row['office_number'] ?? row['owner_office_number'] ?? '';
+    const campLabel = row['camp_label'] ?? '';
+    return centerKey(company, centerNumber) + '|' + String(campLabel || '').trim();
 }
 
 function normalizeTextKey(value) {
@@ -774,17 +915,92 @@ function centerNumberKey(centerNumber) {
     return `*|${centerNumberValue(centerNumber)}`;
 }
 
+function normalizeAssignCampRows(rows) {
+    return rows.map(row => {
+        const transportModeKey = Object.keys(row).find(key => normalizeTextKey(key) === 'transport_mode') || 'transport_mode';
+        return {
+            camp_label: row['camp_label'] ?? '',
+            service_company_name: row['service_company_name'] ?? row['owner_company_name'] ?? '',
+            office_number: row['office_number'] ?? row['owner_office_number'] ?? '',
+            nationality: row['nationality'] ?? '',
+            service_center_name: row['service_center_name'] ?? row['office_number'] ?? '',
+            piligrim_type: row['piligrim_type'] ?? '',
+            transport_mode: row[transportModeKey] ?? row['transport_mode'] ?? '',
+            platform_name: row['platform_name'] ?? '',
+            number_of_piligrim: toNumber(row['number_of_piligrim'] ?? row['number_of_pilgrim'] ?? row['number_of_haj'])
+        };
+    });
+}
+
+function buildAssignmentTotalsFromCampRows(rows) {
+    const companyMetrics = new Map();
+    const centerMetrics = new Map();
+
+    rows.forEach(row => {
+        const company = row.service_company_name;
+        const centerNumber = row.office_number;
+        const serviceCenterName = row.service_center_name;
+        const pilgrims = toNumber(row.number_of_piligrim);
+        const companyEntry = ensureCompanyMetricsEntry(companyMetrics, company);
+        const centerEntry = ensureCenterMetricsEntry(centerMetrics, company, centerNumber, serviceCenterName);
+        const residenceKey = normalizeTextKey(row.nationality);
+
+        companyEntry.totalPilgrims += pilgrims;
+        centerEntry.totalPilgrims += pilgrims;
+
+        if (residenceKey) {
+            companyEntry.totalResidenceKeys.add(residenceKey);
+            centerEntry.totalResidenceKeys.add(residenceKey);
+        }
+    });
+
+    return { companyMetrics, centerMetrics };
+}
+
+function loadAssignCampTotals() {
+    if (typeof ASSIGN_CAMPS_DATA === 'undefined' || !window.Papa) {
+        assignCampRows = [];
+        assignmentTotalsFromCamps = { companyMetrics: new Map(), centerMetrics: new Map() };
+        return;
+    }
+
+    const parsed = Papa.parse(ASSIGN_CAMPS_DATA, {
+        header: true,
+        dynamicTyping: true,
+        skipEmptyLines: true
+    });
+    assignCampRows = normalizeAssignCampRows(parsed.data || []);
+    assignmentTotalsFromCamps = buildAssignmentTotalsFromCampRows(assignCampRows);
+}
+
+function getAssignmentTotalsForDisplay(totalRows = []) {
+    if (assignCampRows.length) return assignmentTotalsFromCamps;
+    return collectAssignmentMetrics(totalRows);
+}
+
+function normalizeSelectionFilter(filter) {
+    if (filter instanceof Set) return filter;
+    if (!filter || filter === 'all') return new Set();
+    return new Set([filter]);
+}
+
 function getSelectedCompanyAndOwner() {
     return {
-        company: selectedServiceCompany,
-        owner: selectedServiceCenter
+        company: selectedServiceCompanies,
+        owner: selectedServiceCenters
     };
 }
 
-function matchesCompanyOwnerFilters(rowCompany, rowOwner, companyFilter, ownerFilter) {
-    if (companyFilter !== 'all' && companyKey(rowCompany) !== companyFilter) return false;
-    if (ownerFilter !== 'all' && centerKey(rowCompany, rowOwner) !== ownerFilter) return false;
+function matchesCompanyOwnerFilters(rowCompany, rowOwner, companyFilter = selectedServiceCompanies, ownerFilter = selectedServiceCenters) {
+    const companyFilterSet = normalizeSelectionFilter(companyFilter);
+    const ownerFilterSet = normalizeSelectionFilter(ownerFilter);
+    if (companyFilterSet.size && !companyFilterSet.has(companyKey(rowCompany))) return false;
+    if (ownerFilterSet.size && !ownerFilterSet.has(centerKey(rowCompany, rowOwner))) return false;
     return true;
+}
+
+function hasServiceEntitySelection() {
+    return selectedServiceCompanies.size > 0 || selectedServiceCenters.size > 0;
 }
 
 function getCompanyDisplayName(company) {
@@ -796,149 +1012,131 @@ function getCenterDisplayName(company, centerNumber, fallbackName = '') {
 }
 
 function getResidenceRecordKey(row) {
-    const license = String(row['License Number'] || '').trim();
-    const name = normalizeTextKey(row['Name']);
-    return `${license}|${name}`;
+    const license = String(row['License Number'] || row.licenseNumber || '').trim();
+    const name = normalizeTextKey(row['Name'] || row.residenceName);
+    return license + '|' + name;
 }
 
-function addAssignmentTotal(map, key, row) {
-    if (!key.endsWith('|')) {
-        const current = map.get(key) || { total: 0 };
-        current.total += toNumber(row['number_of_piligrim']);
-        map.set(key, current);
+function addAssignmentTotal(map, key, row, planTypeCode = '') {
+    if (key.endsWith('|')) return;
+
+    const assignmentKey = getAssignmentRecordKey(row);
+    const allocated = getAllocatedPilgrims(row);
+    const current = map.get(key) || {
+        total: 0,
+        byPlanType: new Map(),
+        assignments: new Map(),
+        assignmentsByPlanType: new Map()
+    };
+
+    const previous = current.assignments.get(assignmentKey) || 0;
+    if (allocated > previous) {
+        current.total += allocated - previous;
+        current.assignments.set(assignmentKey, allocated);
     }
+
+    if (planTypeCode) {
+        const typedKey = planTypeCode + '|' + assignmentKey;
+        const previousTyped = current.assignmentsByPlanType.get(typedKey) || 0;
+        if (allocated > previousTyped) {
+            current.byPlanType.set(planTypeCode, (current.byPlanType.get(planTypeCode) || 0) + allocated - previousTyped);
+            current.assignmentsByPlanType.set(typedKey, allocated);
+        }
+    }
+
+    map.set(key, current);
 }
 
-function loadCampAssignments() {
+function getResidenceNameFromPlan(row) {
+    return String(
+        (row['start_point_type'] === 'residence' && row['start_point_name'])
+        || (row['end_point_type'] === 'residence' && row['end_point_name'])
+        || ''
+    ).trim();
+}
+
+function getPlanResidenceKey(row) {
+    const residenceName = getResidenceNameFromPlan(row);
+    return residenceName ? normalizeTextKey(residenceName) : '';
+}
+
+function getPlanServiceCenterName(row) {
+    return String(row['owner_office_number'] || '').trim();
+}
+
+function buildDerivedDataSources(rows) {
     assignmentTotalsByCenter = new Map();
     assignmentTotalsByNumber = new Map();
     campAssignmentRecords = [];
     campAssignmentStats = null;
-    serviceCenterNamesByKey = new Map();
-
-    // Allow a persisted override in localStorage so the last-loaded CSV
-    // remains across page refreshes. If `assign_camps_csv` exists in
-    // localStorage, parse that; otherwise fall back to the bundled
-    // `ASSIGN_CAMPS_DATA` constant (if present).
-    const persisted = (typeof localStorage !== 'undefined') ? localStorage.getItem('assign_camps_csv') : null;
-    const sourceCsv = persisted || (typeof ASSIGN_CAMPS_DATA !== 'undefined' ? ASSIGN_CAMPS_DATA : null);
-    if (!sourceCsv) return;
-
-    Papa.parse(sourceCsv, {
-        header: true,
-        dynamicTyping: false,
-        skipEmptyLines: true,
-        complete: function (results) {
-            campAssignmentStats = calculateCampAssignmentStats(results.data);
-
-            results.data.forEach(row => {
-                const company = row['service_company_name'];
-                const centerNumber = row['office_number'];
-                if (!centerNumber) return;
-                const key = centerKey(company, centerNumber);
-                const serviceCenterName = String(row['service_center_name'] || '').trim();
-                if (serviceCenterName) serviceCenterNamesByKey.set(key, serviceCenterName);
-
-                campAssignmentRecords.push({
-                    company,
-                    centerNumber,
-                    centerKey: key,
-                    campLabel: String(row['camp_label'] || '').trim(),
-                    pilgrims: toNumber(row['number_of_piligrim']),
-                    serviceCenterName
-                });
-                addAssignmentTotal(assignmentTotalsByCenter, key, row);
-                addAssignmentTotal(assignmentTotalsByNumber, centerNumberKey(centerNumber), row);
-            });
-        },
-        error: function (error) {
-            console.error("Error parsing assign_camps data:", error);
-        }
-    });
-}
-
-// Helpers to persist/clear the last-loaded assign_camps CSV in localStorage.
-function setAssignCampsCSV(csvText) {
-    try {
-        if (typeof localStorage !== 'undefined') {
-            localStorage.setItem('assign_camps_csv', String(csvText || ''));
-            loadCampAssignments();
-            scheduleDashboardUpdate();
-        }
-    } catch (e) {
-        console.error('Failed to save assign_camps CSV to localStorage', e);
-    }
-}
-
-function clearAssignCampsCSV() {
-    try {
-        if (typeof localStorage !== 'undefined') {
-            localStorage.removeItem('assign_camps_csv');
-            loadCampAssignments();
-            scheduleDashboardUpdate();
-        }
-    } catch (e) {
-        console.error('Failed to clear assign_camps CSV from localStorage', e);
-    }
-}
-
-function loadResidenceAssignmentKeys() {
     residenceAssignmentKeys = new Set();
     residenceAssignmentRecords = [];
-
-    if (typeof ASSIGN_RESIDENCES_DATA === 'undefined') return;
-
-    Papa.parse(ASSIGN_RESIDENCES_DATA, {
-        header: true,
-        dynamicTyping: false,
-        skipEmptyLines: true,
-        complete: function (results) {
-            results.data.forEach(row => {
-                const company = row['Service_company'];
-                const centerNumber = row['Service_center_number'];
-                if (!company || !centerNumber) return;
-                const key = centerKey(company, centerNumber);
-                const serviceCenterName = String(row['Service_center_name'] || '').trim();
-                if (serviceCenterName) serviceCenterNamesByKey.set(key, serviceCenterName);
-                residenceAssignmentKeys.add(key);
-                residenceAssignmentRecords.push({
-                    company,
-                    centerNumber,
-                    centerKey: key,
-                    residenceKey: getResidenceRecordKey(row),
-                    pilgrims: toNumber(row['Pilgrims_count']),
-                    tarwiyahCount: toNumber(row['Tarwiyah_count']),
-                    taseedCount: toNumber(row['Taseed_count']),
-                    residenceName: String(row['Name'] || '').trim(),
-                    serviceCenterName
-                });
-            });
-        },
-        error: function (error) {
-            console.error("Error parsing assign_residences data:", error);
-        }
-    });
-}
-
-function loadServiceCompaniesCatalog() {
     serviceCompaniesCatalog = [];
     serviceCompanyNameByKey = new Map();
+    serviceCenterNamesByKey = new Map();
+    const companyKeys = new Set();
+    const residenceRowsByKey = new Map();
 
-    if (typeof SERVICE_COMPANIES_DATA === 'undefined' || !Array.isArray(SERVICE_COMPANIES_DATA)) return;
+    rows.forEach(row => {
+        const company = row['owner_company_name'];
+        const centerNumber = row['owner_office_number'];
+        const centerName = getPlanServiceCenterName(row);
+        const key = centerKey(company, centerNumber);
+        const planTypeCode = String(row['plan_type_code'] || row['plan_type_name'] || '').trim();
+        const planTypeText = normalizeTextKey(String(row['plan_type_code'] || '') + ' ' + String(row['plan_type_name'] || ''));
+        const residenceName = getResidenceNameFromPlan(row);
+        const residenceKey = getPlanResidenceKey(row);
+        const plannedPilgrims = toNumber(row['number_of_haj']);
+        const allocatedPilgrims = getAllocatedPilgrims(row);
 
-    SERVICE_COMPANIES_DATA.forEach(item => {
-        const name = String(item.name || '').trim();
-        const key = companyKey(name);
-        if (!key || serviceCompanyNameByKey.has(key)) return;
+        if (company) {
+            const key = companyKey(company);
+            if (!companyKeys.has(key)) {
+                companyKeys.add(key);
+                serviceCompanyNameByKey.set(key, getCompanyDisplayName(company));
+                serviceCompaniesCatalog.push({ id: key, key, name: getCompanyDisplayName(company), logo: '' });
+            }
+        }
 
-        serviceCompanyNameByKey.set(key, name);
-        serviceCompaniesCatalog.push({
-            id: item.id,
-            key,
-            name,
-            logo: String(item.logo || '').trim()
-        });
+        if (centerNumber) {
+            if (centerName) serviceCenterNamesByKey.set(key, centerName);
+            campAssignmentRecords.push({
+                company,
+                centerNumber,
+                centerKey: key,
+                campLabel: String(row['camp_label'] || '').trim(),
+                assignmentKey: getAssignmentRecordKey(row),
+                pilgrims: allocatedPilgrims,
+                serviceCenterName: centerName
+            });
+            addAssignmentTotal(assignmentTotalsByCenter, key, row, planTypeCode);
+            addAssignmentTotal(assignmentTotalsByNumber, centerNumberKey(centerNumber), row, planTypeCode);
+        }
+
+        if (residenceKey && centerNumber) {
+            const aggregateKey = key + '|' + residenceKey;
+            const current = residenceRowsByKey.get(aggregateKey) || {
+                company,
+                centerNumber,
+                centerKey: key,
+                residenceKey,
+                pilgrims: 0,
+                tarwiyahCount: 0,
+                taseedCount: 0,
+                residenceName,
+                serviceCenterName: centerName
+            };
+
+            current.pilgrims += plannedPilgrims;
+            if (planTypeText.includes('tarwia') || planTypeText.includes('تروية')) current.tarwiyahCount += plannedPilgrims;
+            if (planTypeText.includes('taseed') || planTypeText.includes('تصعيد')) current.taseedCount += plannedPilgrims;
+            residenceRowsByKey.set(aggregateKey, current);
+            residenceAssignmentKeys.add(key);
+        }
     });
+
+    residenceAssignmentRecords = Array.from(residenceRowsByKey.values());
+    campAssignmentStats = calculateCampAssignmentStats(rows);
 }
 
 function getResidenceAssignmentCoverage() {
@@ -1023,14 +1221,14 @@ function getResidenceMixNameSets() {
 
     residenceAssignmentRecords.forEach(row => {
         if (!matchesCompanyOwnerFilters(row.company, row.centerNumber, company, owner)) return;
-        if (!row.residenceKey) return;
-        const residenceKey = row.residenceKey;
-        if (!residenceKey) return;
+        if (!row.residenceName) return;
+        const nameKey = normalizeTextKey(row.residenceName);
+        if (!nameKey) return;
 
-        const current = residenceMap.get(residenceKey) || { tarwiyah: 0, taseed: 0 };
+        const current = residenceMap.get(nameKey) || { tarwiyah: 0, taseed: 0 };
         current.tarwiyah += toNumber(row.tarwiyahCount);
         current.taseed += toNumber(row.taseedCount);
-        residenceMap.set(residenceKey, current);
+        residenceMap.set(nameKey, current);
     });
 
     residenceMap.forEach((item, nameKey) => {
@@ -1054,7 +1252,7 @@ function getAssignmentTotalForPlan(row) {
 
 function getPlanTypeTarget(planTypeCode, assignment) {
     if (!assignment) return 0;
-    return assignment.total;
+    return assignment.byPlanType?.get(planTypeCode) || assignment.total;
 }
 
 // Load CSV Data
@@ -1064,75 +1262,25 @@ function loadData() {
         return;
     }
 
-    loadCampAssignments();
-    loadResidenceAssignmentKeys();
-    loadServiceCompaniesCatalog();
+    // GeoJSON data removed - using only core data files (assign_camps, assign_residences, data.js)
 
-    // Build GeoJSON Lookup from external files
-    if (typeof GEOJSON_DATA !== 'undefined') {
-        GEOJSON_DATA.forEach(fileData => {
-            if (!fileData || !fileData.filename || !fileData.content) return;
 
-            let baseName = fileData.filename.replace('.geojson', '').toUpperCase();
-            if (!geojsonLookup[baseName]) geojsonLookup[baseName] = {};
-
-            try {
-                const g = JSON.parse(fileData.content);
-                if (g.features) {
-                    g.features.forEach(f => {
-                        if (baseName === 'DISTRICTS') {
-                            const desc = f.properties.Discription_AR || f.properties.discription;
-                            if (desc) {
-                                const normDesc = normalizeArabic(desc);
-                                geojsonLookup[baseName][normDesc] = f;
-                            }
-                        } else if (f.properties && f.properties.Camp_label) {
-                            // We can use the Camp_label directly as the key
-                            const campLabel = f.properties.Camp_label;
-                            geojsonLookup[baseName][campLabel] = f;
-                        }
-                    });
-                }
-            } catch (e) { console.error("Error parsing geojson file", fileData.filename, e); }
-        });
-    }
-
-    // Always parse the bundled simulation CSV (`CSV_DATA`) into `simulationPlansData`
-    if (typeof CSV_DATA !== 'undefined') {
-        try {
-            const parsed = Papa.parse(CSV_DATA, { header: true, dynamicTyping: true, skipEmptyLines: true });
-            simulationPlansData = normalizePlanRows(parsed.data || []);
-        } catch (e) {
-            simulationPlansData = [];
-            console.warn('Failed to parse bundled CSV_DATA for simulationPlansData', e);
-        }
-    } else {
-        simulationPlansData = [];
-    }
-
+    loadAssignCampTotals();
 
     const loadId = ++plansCsvLoadSequence;
-    getCachedPlansCsv()
-        .then(cached => {
-            if (loadId !== plansCsvLoadSequence) return null;
-            if (cached?.csvText) {
-                parsePlansCsv(cached.csvText, { loadId, source: cached.source || localStorage.getItem(PLANS_CSV_SOURCE_STORAGE_KEY) || "cached uploaded CSV" });
-                return null;
-            }
+    parsePlansCsv(CSV_DATA, {
+        loadId,
+        source: typeof PLANS_CSV_SOURCE !== 'undefined' ? PLANS_CSV_SOURCE : 'data.js'
+    });
 
-            parsePlansCsv(CSV_DATA, { loadId, source: typeof PLANS_CSV_SOURCE !== "undefined" ? PLANS_CSV_SOURCE : "data.js" });
-            return null;
-        })
-        .catch(error => {
-            console.warn(error);
-            parsePlansCsv(CSV_DATA, { loadId, source: "data.js fallback" });
-        });
 }
 
 function applyPlansRows(rows, source = '') {
     rawData = normalizePlanRows(rows);
-    contextFilteredData = [...rawData];
-    filteredData = [...rawData];
+    buildDerivedDataSources(rawData);
+    planTypeBaseData = [...rawData];
+    contextFilteredData = rawData.filter(row => !selectedPlanTypes.size || selectedPlanTypes.has(row['plan_type_name']));
+    filteredData = [...contextFilteredData];
     activePlansCsvSource = source;
     console.info('Loaded plans CSV:', source || 'unknown', rawData.length, 'rows');
     resetSelections();
@@ -1164,10 +1312,7 @@ function normalizePlanRows(rows) {
         plan_id: row['plan_id'] ?? row['ID'],
         camp_label: row['camp_label'] ?? row['End point name'],
         number_of_buses: row['number_of_buses'] ?? row['Number of buses'],
-        number_of_haj: row['number_of_haj'] ?? row['Number of haj'] ?? row['num_of_haj'] ?? row['num_of_hajj'] ?? row['nom_of_hajj'] ?? row['nom_of_haj'],
-        num_of_haj: row['num_of_haj'] ?? row['num_of_hajj'] ?? row['number_of_haj'] ?? row['Number of haj'] ?? row['nom_of_hajj'] ?? row['nom_of_haj'],
-        nom_of_hajj: row['nom_of_hajj'] ?? row['nom_of_haj'] ?? row['num_of_haj'] ?? row['num_of_hajj'] ?? row['number_of_haj'] ?? row['Number of haj'],
-        allocated_hajj: row['allocated_hajj'] ?? row['allocated_haj'] ?? row['Allocated hajj'],
+        number_of_haj: row['number_of_haj'] ?? row['Number of haj'],
         period: row['period'] ?? row['Period'],
         timing_start_at: row['timing_start_at'] ?? row['Start time'],
         timing_end_at: row['timing_end_at'] ?? row['End time'],
@@ -1407,6 +1552,58 @@ function orientLatLngsForRoute(latlngs, row, item) {
     return latlngs;
 }
 
+function getLineLatLngsFromGeojson(geojson) {
+    if (!geojson || !geojson.coordinates) return [];
+    const coords = geojson.type === 'LineString'
+        ? geojson.coordinates
+        : (geojson.type === 'MultiLineString' ? geojson.coordinates[0] : []);
+    return coords.map(coord => [coord[1], coord[0]])
+        .filter(coord => Number.isFinite(coord[0]) && Number.isFinite(coord[1]));
+}
+
+function orientConnectedRouteSegments(row, lineItems) {
+    const segments = lineItems
+        .map(item => ({ ...item, latlngs: getLineLatLngsFromGeojson(item.geojson) }))
+        .filter(item => item.latlngs.length >= 2);
+
+    if (segments.length < 2) {
+        return segments.map(item => ({ ...item, latlngs: orientLatLngsForRoute(item.latlngs, row, item) }));
+    }
+
+    const startAnchor = getRowAnchorLatLng(row, 'start');
+    const endAnchor = getRowAnchorLatLng(row, 'end');
+    if (!startAnchor || !endAnchor) {
+        return segments.map(item => ({ ...item, latlngs: orientLatLngsForRoute(item.latlngs, row, item) }));
+    }
+
+    const permutations = segments.length === 2
+        ? [[segments[0], segments[1]], [segments[1], segments[0]]]
+        : [segments];
+    let best = null;
+
+    permutations.forEach(order => {
+        const orientationCount = 1 << order.length;
+        for (let mask = 0; mask < orientationCount; mask++) {
+            const oriented = order.map((item, index) => ({
+                ...item,
+                latlngs: (mask & (1 << index)) ? [...item.latlngs].reverse() : [...item.latlngs]
+            }));
+            let score = getLatLngDistance(startAnchor, oriented[0].latlngs[0]);
+            for (let index = 0; index < oriented.length - 1; index++) {
+                score += getLatLngDistance(
+                    oriented[index].latlngs[oriented[index].latlngs.length - 1],
+                    oriented[index + 1].latlngs[0]
+                );
+            }
+            score += getLatLngDistance(oriented[oriented.length - 1].latlngs.at(-1), endAnchor);
+
+            if (!best || score < best.score) best = { score, oriented };
+        }
+    });
+
+    return best?.oriented || segments;
+}
+
 function getRouteFlowSamples(latlngs) {
     if (!map || !Array.isArray(latlngs) || latlngs.length < 2) return [];
 
@@ -1479,6 +1676,31 @@ function addMapLabel(latlng, text, className = 'map-point-label', direction = 't
     }
 }
 
+function addRouteConnector(fromLatLng, toLatLng) {
+    if (!fromLatLng || !toLatLng) return;
+    const gapMeters = getLatLngDistance(fromLatLng, toLatLng);
+    if (!Number.isFinite(gapMeters) || gapMeters < 12 || gapMeters > 5000) return;
+
+    const latlngs = [fromLatLng, toLatLng];
+    L.polyline(latlngs, {
+        color: '#ffffff',
+        weight: 7,
+        opacity: 0.82,
+        dashArray: '8 10',
+        className: 'route-line-halo route-connector-line'
+    }).addTo(routeLayerGroup);
+
+    L.polyline(latlngs, {
+        color: '#EBC468',
+        weight: 3,
+        opacity: 0.92,
+        dashArray: '8 10',
+        className: 'route-line route-connector-line'
+    }).addTo(routeLayerGroup);
+
+    addDirectionalArrows(latlngs, '#EBC468');
+}
+
 function addDirectionalArrows(latlngs, color) {
     getRouteFlowSamples(latlngs).forEach((sample, index) => {
         const arrowIcon = L.divIcon({
@@ -1514,21 +1736,7 @@ function fitMapToGeometry(bounds) {
 }
 
 function getDistrictBoundsByName(districtName) {
-    if (!districtName || !geojsonLookup['DISTRICTS']) return null;
-    const normName = normalizeArabic(districtName);
-    const districtGeoJson = geojsonLookup['DISTRICTS'][normName];
-    if (!districtGeoJson) return null;
-
-    try {
-        const tempLayer = L.geoJSON(districtGeoJson);
-        const districtBounds = tempLayer.getBounds();
-        if (districtBounds && districtBounds.isValid()) {
-            return districtBounds;
-        }
-    } catch (e) {
-        // no-op
-    }
-
+    // GeoJSON data removed - district bounds not available
     return null;
 }
 
@@ -1545,8 +1753,11 @@ function updateMapLabelScale() {
     if (!container) return;
 
     const zoom = map.getZoom();
+    const labelsVisible = zoom >= MAP_LABEL_MIN_ZOOM || selectedServiceCenters.size > 0;
     const scale = Math.max(0.68, Math.min(1, 0.68 + ((zoom - 11) * 0.08)));
     container.style.setProperty('--map-label-scale', scale.toFixed(2));
+    container.classList.toggle('map-labels-visible', labelsVisible);
+    container.classList.toggle('map-labels-hidden', !labelsVisible);
 }
 
 // Map Initialization
@@ -1640,7 +1851,23 @@ function populateFilters() {
     populateSelect('transportFilter', transports);
     populateSelect('planTypeFilter', planTypes);
     populateSelect('districtFilter', districts);
+    selectedPlanTypes = new Set(Array.from(selectedPlanTypes).filter(type => planTypes.includes(type)));
+    if (!selectedPlanTypes.size && planTypes.includes('تروية')) {
+        selectedPlanTypes.add('تروية');
+    }
+    syncPlanTypeSelectValue();
+
     renderPlanTypeMenu();
+}
+
+function syncPlanTypeSelectValue() {
+    const select = document.getElementById('planTypeFilter');
+    if (!select) return;
+    select.value = selectedPlanTypes.size === 1 ? Array.from(selectedPlanTypes)[0] : 'all';
+}
+
+function getActivePlanTypeLabels() {
+    return selectedPlanTypes;
 }
 
 function renderPlanTypeMenu() {
@@ -1656,13 +1883,20 @@ function renderPlanTypeMenu() {
         button.textContent = option.textContent;
         button.dataset.value = option.value;
         button.setAttribute('role', 'tab');
-        button.setAttribute('aria-selected', option.value === select.value ? 'true' : 'false');
+        const isActive = option.value !== 'all' ? selectedPlanTypes.has(option.value) : selectedPlanTypes.size === 0;
+        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
 
-        if (option.value === select.value) button.classList.add('active');
+        if (isActive) button.classList.add('active');
 
         button.addEventListener('click', () => {
-            if (select.value === option.value) return;
-            select.value = option.value;
+            if (option.value === 'all') {
+                selectedPlanTypes.clear();
+            } else if (selectedPlanTypes.has(option.value)) {
+                selectedPlanTypes.delete(option.value);
+            } else {
+                selectedPlanTypes.add(option.value);
+            }
+            syncPlanTypeSelectValue();
             selectedPlanId = null;
             selectedEntranceName = null;
             selectedPathName = null;
@@ -1683,7 +1917,8 @@ function updatePlanTypeMenuState() {
     if (!select || !menu) return;
 
     menu.querySelectorAll('.plan-type-option').forEach(button => {
-        const isActive = button.dataset.value === select.value;
+        const value = button.dataset.value;
+        const isActive = value !== 'all' ? selectedPlanTypes.has(value) : selectedPlanTypes.size === 0;
         button.classList.toggle('active', isActive);
         button.setAttribute('aria-selected', isActive ? 'true' : 'false');
     });
@@ -1705,7 +1940,11 @@ function setupEventListeners() {
                 selectedDistrict = null;
             }
 
-            if (id === 'planTypeFilter') updatePlanTypeMenuState();
+            if (id === 'planTypeFilter') {
+                const value = document.getElementById(id).value;
+                selectedPlanTypes = value === 'all' ? new Set() : new Set([value]);
+                updatePlanTypeMenuState();
+            }
             applyFilters();
         });
     });
@@ -1717,76 +1956,121 @@ function setupEventListeners() {
     }, 180);
     searchInput.addEventListener('input', debouncedSearch);
 
-    const loadPlansCsvBtn = document.getElementById('loadPlansCsvBtn');
-    const plansCsvInput = document.getElementById('plansCsvInput');
-    const themeToggleBtn = document.getElementById('themeToggleBtn');
-    const clearCompanySelectionBtn = document.getElementById('clearCompanySelectionBtn');
-    const clearCenterSelectionBtn = document.getElementById('clearCenterSelectionBtn');
+    const companySearch = document.getElementById('serviceCompaniesSearch');
+    const centerSearch = document.getElementById('serviceCentersSearch');
+    companySearch?.addEventListener('input', debounce(event => {
+        entityTableState.company.search = event.target.value;
+        renderServiceSummaryTables();
+    }, 120));
+    centerSearch?.addEventListener('input', debounce(event => {
+        entityTableState.center.search = event.target.value;
+        renderServiceSummaryTables();
+    }, 120));
 
-    if (themeToggleBtn) {
-        themeToggleBtn.addEventListener('click', () => {
-            const nextTheme = document.body.classList.contains('dark-mode') ? 'light' : 'dark';
-            applyTheme(nextTheme);
-        });
-    }
-
-    if (clearCompanySelectionBtn) {
-        clearCompanySelectionBtn.addEventListener('click', () => {
-            selectedServiceCompany = 'all';
-            selectedServiceCenter = 'all';
-            applyFilters();
-        });
-    }
-
-    if (clearCenterSelectionBtn) {
-        clearCenterSelectionBtn.addEventListener('click', () => {
-            selectedServiceCenter = 'all';
-            applyFilters();
-        });
-    }
-
-    loadPlansCsvBtn.addEventListener('click', () => {
-        plansCsvInput.click();
+    document.getElementById('clearCompanySelectionBtn')?.addEventListener('click', () => {
+        selectedServiceCompanies.clear();
+        applyFilters();
+    });
+    document.getElementById('clearCenterSelectionBtn')?.addEventListener('click', () => {
+        selectedServiceCenters.clear();
+        applyFilters();
     });
 
-    plansCsvInput.addEventListener('change', (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
+    // Theme toggle
+    const themeBtn = document.getElementById('themeToggleBtn');
+    if (themeBtn) {
+        themeBtn.addEventListener('click', () => {
+            const currentTheme = getPersistentValue(THEME_STORAGE_KEY) || 'dark';
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            applyTheme(newTheme);
+            // Redraw charts with new theme
+            if (window.Plotly) {
+                const isDark = newTheme === 'dark';
+                const layout = {
+                    paper_bgcolor: isDark ? '#0f172a' : '#ffffff',
+                    plot_bgcolor: isDark ? '#1e293b' : '#f5f5f5',
+                    font: { color: isDark ? '#cbd5e1' : '#333333' }
+                };
+                Plotly.restyle('periodChart', {}, layout);
+                Plotly.restyle('entranceChart', {}, layout);
+                Plotly.restyle('pathChart', {}, layout);
+            }
+        });
+    }
 
-        searchInput.value = '';
-        const loadId = ++plansCsvLoadSequence;
-        const source = file.name || 'uploaded CSV';
-        file.text()
-            .then(csvText => cachePlansCsv(csvText, source).then(() => csvText))
-            .then(csvText => {
-                if (loadId !== plansCsvLoadSequence) return;
-                parsePlansCsv(csvText, { loadId, source });
-            })
-            .catch(error => {
-                if (loadId !== plansCsvLoadSequence) return;
-                console.error('Error reading or caching uploaded CSV:', error);
-                alert('Could not save selected CSV for refresh. Please try again.');
-            });
-
-        event.target.value = '';
+    // CSV File Loader
+    const csvFileInput = document.createElement('input');
+    csvFileInput.type = 'file';
+    csvFileInput.accept = '.csv';
+    csvFileInput.style.display = 'none';
+    csvFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                window.CSV_DATA = event.target.result;
+                console.log('CSV file loaded:', file.name, 'Size:', CSV_DATA.length);
+                loadData();
+            };
+            reader.readAsText(file);
+        }
     });
+    document.body.appendChild(csvFileInput);
 
-    
+    // Add CSV loader button
+    const topNavActions = document.querySelector('.top-nav-actions');
+    if (topNavActions) {
+        const csvBtn = document.createElement('button');
+        csvBtn.id = 'csvLoaderBtn';
+        csvBtn.className = 'theme-toggle-btn';
+        csvBtn.type = 'button';
+        csvBtn.title = 'تحميل ملف CSV';
+        csvBtn.setAttribute('aria-label', 'تحميل ملف CSV');
+        csvBtn.innerHTML = '<i class="fa-solid fa-upload"></i>';
+        csvBtn.style.marginRight = '15px';
+        csvBtn.addEventListener('click', () => {
+            console.log('CSV button clicked');
+            csvFileInput.click();
+        });
+        // Insert before theme button
+        const themeBtn = topNavActions.querySelector('.theme-toggle-btn');
+        if (themeBtn) {
+            themeBtn.parentNode.insertBefore(csvBtn, themeBtn);
+        } else {
+            topNavActions.appendChild(csvBtn);
+        }
+        console.log('CSV loader button added');
+    } else {
+        console.log('top-nav-actions not found');
+    }
+
+    document.querySelectorAll('.entity-table thead th[data-sort-key]').forEach(header => {
+        header.addEventListener('click', () => {
+            const tableType = header.closest('.entity-table')?.dataset.tableType;
+            const state = entityTableState[tableType];
+            if (!state) return;
+            const nextSortKey = header.dataset.sortKey;
+            if (state.sortKey === nextSortKey) {
+                state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                state.sortKey = nextSortKey;
+                state.sortDirection = ['label', 'sublabel', 'centerNumber'].includes(nextSortKey) ? 'asc' : 'desc';
+            }
+            renderServiceSummaryTables();
+        });
+    });
 }
-
-// UI helper: show whether a persisted assign_camps CSV is active
-
 
 // Apply Filters
 function applyFilters() {
     const period = document.getElementById('periodFilter').value;
     const transport = document.getElementById('transportFilter').value;
-    const planType = document.getElementById('planTypeFilter').value;
     const district = document.getElementById('districtFilter').value;
     const search = document.querySelector('.search-bar input').value.toLowerCase();
+    const activePlanTypes = getActivePlanTypeLabels();
     const residenceMixSets = selectedResidenceMixFilter === 'all' ? null : getResidenceMixNameSets();
 
-    contextFilteredData = rawData.filter(d => {
+    const matchesBaseFilters = d => {
         if (selectedPlanId && d['plan_id'] !== selectedPlanId) return false;
 
         const entrance = d['entrance_name'] || d['entrance_asm_code'] || 'No Entrance';
@@ -1798,44 +2082,37 @@ function applyFilters() {
         const districtName = d['start_point_district'] || 'No District';
         if (selectedDistrict && normalizeArabic(districtName) !== normalizeArabic(selectedDistrict)) return false;
 
-        let match = true;
-        if (period !== 'all' && d['period'] != period) match = false;
-        if (transport !== 'all' && d['transport_type_name'] !== transport) match = false;
-        if (planType !== 'all' && d['plan_type_name'] !== planType) match = false;
+        if (period !== 'all' && d['period'] != period) return false;
+        if (transport !== 'all' && d['transport_type_name'] !== transport) return false;
+
         if (selectedResidenceMixFilter !== 'all') {
-            const residenceName = String(
-                (d['start_point_type'] === 'residence' && d['start_point_name'])
-                || (d['end_point_type'] === 'residence' && d['end_point_name'])
-                || ''
-            ).trim();
+            const residenceName = getResidenceNameFromPlan(d);
             const residenceNameKey = normalizeTextKey(residenceName);
-            if (!residenceNameKey) {
-                match = false;
-            } else {
-                const selectedSet = selectedResidenceMixFilter === 'tarwiyah'
-                    ? residenceMixSets.tarwiyah
-                    : (selectedResidenceMixFilter === 'direct' ? residenceMixSets.direct : residenceMixSets.mixed);
-                if (!selectedSet.has(residenceNameKey)) match = false;
-            }
+            if (!residenceNameKey) return false;
+            const selectedSet = selectedResidenceMixFilter === 'tarwiyah'
+                ? residenceMixSets.tarwiyah
+                : (selectedResidenceMixFilter === 'direct' ? residenceMixSets.direct : residenceMixSets.mixed);
+            if (!selectedSet.has(residenceNameKey)) return false;
         }
 
         if (search) {
             const planStr = (d['owner_company_name'] || '') + ' ' + (d['plan_type_name'] || '') + ' ' + (d['start_point_name'] || '');
-            if (!planStr.toLowerCase().includes(search)) match = false;
+            if (!planStr.toLowerCase().includes(search)) return false;
         }
-        return match;
-    });
+
+        return true;
+    };
+
+    planTypeBaseData = rawData.filter(matchesBaseFilters);
+    contextFilteredData = planTypeBaseData.filter(d => !activePlanTypes.size || activePlanTypes.has(d['plan_type_name']));
 
     filteredData = contextFilteredData.filter(d => matchesCompanyOwnerFilters(
         d['owner_company_name'],
-        d['owner_office_number'],
-        selectedServiceCompany,
-        selectedServiceCenter
+        d['owner_office_number']
     ));
 
     scheduleDashboardUpdate();
 }
-
 function ensureCompanyMetricsEntry(map, company) {
     const key = companyKey(company);
     if (!map.has(key)) {
@@ -1876,16 +2153,13 @@ function ensureCenterMetricsEntry(map, company, centerNumber, centerName = '') {
 function collectPlannedMetrics(rows) {
     const companyMetrics = new Map();
     const centerMetrics = new Map();
-    const allocatedByCompanyCamp = new Map();
-    const allocatedByCenterCamp = new Map();
 
     rows.forEach(row => {
         const company = row['owner_company_name'];
         const centerNumber = row['owner_office_number'];
         const companyEntry = ensureCompanyMetricsEntry(companyMetrics, company);
         const centerEntry = ensureCenterMetricsEntry(centerMetrics, company, centerNumber);
-        const plannedPilgrims = getPlannedHajj(row);
-        const allocatedPilgrims = getAllocatedHajj(row);
+        const plannedPilgrims = toNumber(row['number_of_haj']);
         const planTypeCode = String(row['plan_type_code'] || row['plan_type_name'] || '').trim();
         const residenceName = String(
             (row['start_point_type'] === 'residence' && row['start_point_name'])
@@ -1895,12 +2169,6 @@ function collectPlannedMetrics(rows) {
 
         companyEntry.plannedPilgrims += plannedPilgrims;
         centerEntry.plannedPilgrims += plannedPilgrims;
-
-        const allocationCenterKey = centerKey(company, centerNumber);
-        const allocationCampKey = getAllocationCampKey(row);
-        const allocationCompanyCampKey = companyKey(company) + '|' + allocationCampKey;
-        allocatedByCompanyCamp.set(allocationCompanyCampKey, Math.max(allocatedByCompanyCamp.get(allocationCompanyCampKey) || 0, allocatedPilgrims));
-        allocatedByCenterCamp.set(allocationCampKey, Math.max(allocatedByCenterCamp.get(allocationCampKey) || 0, allocatedPilgrims));
         if (planTypeCode) {
             companyEntry.planTypeCodes.add(planTypeCode);
             centerEntry.planTypeCodes.add(planTypeCode);
@@ -1913,69 +2181,126 @@ function collectPlannedMetrics(rows) {
         }
     });
 
-    allocatedByCompanyCamp.forEach((allocatedPilgrims, key) => {
-        const companyKeyValue = key.split('|')[0];
-        const companyEntry = companyMetrics.get(companyKeyValue);
-        if (companyEntry) companyEntry.totalPilgrims += allocatedPilgrims;
-    });
-
-    allocatedByCenterCamp.forEach((allocatedPilgrims, key) => {
-        const centerKeyValue = key.split('|').slice(0, 2).join('|');
-        const centerEntry = centerMetrics.get(centerKeyValue);
-        if (centerEntry) centerEntry.totalPilgrims += allocatedPilgrims;
-    });
-
     return { companyMetrics, centerMetrics };
 }
 
-function collectAssignmentMetrics() {
+function collectAssignmentMetrics(rows = null) {
     const companyMetrics = new Map();
     const centerMetrics = new Map();
-    const seenCampKeys = new Set();
+    const allocatedByCompanyAssignment = new Map();
+    const allocatedByCenterAssignment = new Map();
+    const sourceRows = Array.isArray(rows) ? rows : null;
 
-    campAssignmentRecords.forEach(row => {
-        const campLabel = String(row.campLabel || '').trim();
-        const campKey = campLabel
-            ? `${row.company || ''}|${String(row.centerNumber || '').trim()}|${campLabel}`
-            : null;
+    const addAllocatedAssignment = (row) => {
+        const company = sourceRows ? row['owner_company_name'] : row.company;
+        const centerNumber = sourceRows ? row['owner_office_number'] : row.centerNumber;
+        const serviceCenterName = sourceRows ? getPlanServiceCenterName(row) : row.serviceCenterName;
+        const assignmentKey = sourceRows
+            ? getAssignmentRecordKey(row)
+            : (row.assignmentKey || centerKey(row.company, row.centerNumber) + '|' + String(row.campLabel || '').trim());
+        const pilgrims = sourceRows ? getAllocatedPilgrims(row) : toNumber(row.pilgrims);
+        const companyEntry = ensureCompanyMetricsEntry(companyMetrics, company);
+        const centerEntry = ensureCenterMetricsEntry(centerMetrics, company, centerNumber, serviceCenterName);
+        const companyAssignmentKey = companyEntry.companyKey + '|' + assignmentKey;
+        const centerAssignmentKey = centerEntry.centerKey + '|' + assignmentKey;
 
-        const companyEntry = ensureCompanyMetricsEntry(companyMetrics, row.company);
-        const centerEntry = ensureCenterMetricsEntry(centerMetrics, row.company, row.centerNumber, row.serviceCenterName);
-
-        if (campKey) {
-            if (!seenCampKeys.has(campKey)) {
-                seenCampKeys.add(campKey);
-                companyEntry.totalPilgrims += row.pilgrims;
-                centerEntry.totalPilgrims += row.pilgrims;
-            }
-        } else {
-            companyEntry.totalPilgrims += row.pilgrims;
-            centerEntry.totalPilgrims += row.pilgrims;
+        const previousCompany = allocatedByCompanyAssignment.get(companyAssignmentKey) || 0;
+        if (pilgrims > previousCompany) {
+            companyEntry.totalPilgrims += pilgrims - previousCompany;
+            allocatedByCompanyAssignment.set(companyAssignmentKey, pilgrims);
         }
-    });
 
-    residenceAssignmentRecords.forEach(row => {
-        const companyEntry = ensureCompanyMetricsEntry(companyMetrics, row.company);
-        const centerEntry = ensureCenterMetricsEntry(centerMetrics, row.company, row.centerNumber, row.serviceCenterName);
-
-        if (row.residenceKey) {
-            companyEntry.totalResidenceKeys.add(row.residenceKey);
-            centerEntry.totalResidenceKeys.add(row.residenceKey);
+        const previousCenter = allocatedByCenterAssignment.get(centerAssignmentKey) || 0;
+        if (pilgrims > previousCenter) {
+            centerEntry.totalPilgrims += pilgrims - previousCenter;
+            allocatedByCenterAssignment.set(centerAssignmentKey, pilgrims);
         }
-    });
+    };
+
+    (sourceRows || campAssignmentRecords).forEach(addAllocatedAssignment);
+
+    const addResidenceAssignment = (row) => {
+        const company = sourceRows ? row['owner_company_name'] : row.company;
+        const centerNumber = sourceRows ? row['owner_office_number'] : row.centerNumber;
+        const serviceCenterName = sourceRows ? getPlanServiceCenterName(row) : row.serviceCenterName;
+        const residenceKey = sourceRows ? getPlanResidenceKey(row) : row.residenceKey;
+        const companyEntry = ensureCompanyMetricsEntry(companyMetrics, company);
+        const centerEntry = ensureCenterMetricsEntry(centerMetrics, company, centerNumber, serviceCenterName);
+
+        if (residenceKey) {
+            companyEntry.totalResidenceKeys.add(residenceKey);
+            centerEntry.totalResidenceKeys.add(residenceKey);
+        }
+    };
+
+    (sourceRows || residenceAssignmentRecords).forEach(addResidenceAssignment);
 
     return { companyMetrics, centerMetrics };
 }
 
 function getPlanTypeTargetMultiplier(plannedEntry = null) {
-    const selectedPlanType = document.getElementById('planTypeFilter')?.value || 'all';
-    if (selectedPlanType !== 'all') return 1;
+    return 1;
+}
 
-    const optionCount = Array.from(document.getElementById('planTypeFilter')?.options || [])
-        .filter(option => option.value !== 'all')
-        .length;
+function isMainPlanType(row) {
+    const code = String(row['plan_type_code'] || '').trim();
+    const name = String(row['plan_type_name'] || '').trim();
+    return code === 'tarwia'
+        || code === 'direct_taseed'
+        || name === 'تروية'
+        || name === 'تصعيد مباشر';
+}
 
-    return Math.max(optionCount, plannedEntry?.planTypeCodes?.size || 0, 1);
+function isTarwiyaKpiTotalPlanType(row) {
+    const code = String(row['plan_type_code'] || '').trim();
+    const name = String(row['plan_type_name'] || '').trim();
+    return code === 'tarwia'
+        || code === 'taseed_tarwia'
+        || name === 'تروية'
+        || name === 'تصعيد تروية';
+}
+
+function calculateKpiTotalPilgrims(rows) {
+    if (assignCampRows.length) {
+        const { company, owner } = getSelectedCompanyAndOwner();
+        // Deduplicate by service company + office number
+        const deduped = new Map();
+        assignCampRows
+            .filter(row => matchesCompanyOwnerFilters(row.service_company_name, row.office_number, company, owner))
+            .forEach(row => {
+                const key = `${row.service_company_name || ''}|${row.office_number || ''}`;
+                // Keep the maximum value for each unique company/office combination
+                const currentValue = deduped.get(key) || 0;
+                deduped.set(key, Math.max(currentValue, toNumber(row.number_of_piligrim)));
+            });
+        return Array.from(deduped.values()).reduce((sum, val) => sum + val, 0);
+    }
+
+    return rows.reduce((sum, row) => sum + toNumber(row['number_of_haj']), 0);
+}
+
+function getServiceCompanyPilgrimTotals(rows) {
+    const totalsFromCamps = getAssignmentTotalsForDisplay(rows).companyMetrics;
+    if (assignCampRows.length) return totalsFromCamps;
+
+    const totals = new Map();
+
+    rows.forEach(row => {
+        if (!isTarwiyaKpiTotalPlanType(row)) return;
+        const company = row['owner_company_name'];
+        const key = companyKey(company);
+        if (!key) return;
+
+        const current = totals.get(key) || {
+            companyKey: key,
+            companyName: getCompanyDisplayName(company),
+            totalPilgrims: 0
+        };
+        current.totalPilgrims += toNumber(row['number_of_haj']);
+        totals.set(key, current);
+    });
+
+    return totals;
 }
 
 function calculateCompletionPercentage(plannedPilgrims, totalPilgrims) {
@@ -2001,9 +2326,10 @@ function sortRowsByCompletion(rows) {
     });
 }
 
-function buildServiceCompanyRows(rows) {
+function buildServiceCompanyRows(rows, totalRows = rows) {
     const planned = collectPlannedMetrics(rows).companyMetrics;
-    const totals = collectAssignmentMetrics().companyMetrics;
+    const totals = getServiceCompanyPilgrimTotals(totalRows);
+    const residences = getAssignmentTotalsForDisplay(totalRows).companyMetrics;
     const companyKeys = new Set();
 
     serviceCompaniesCatalog.forEach(item => companyKeys.add(item.key));
@@ -2013,38 +2339,40 @@ function buildServiceCompanyRows(rows) {
     return sortRowsByCompletion(Array.from(companyKeys).map(key => {
         const plannedEntry = planned.get(key);
         const totalEntry = totals.get(key);
+        const residenceEntry = residences.get(key);
         const label = serviceCompanyNameByKey.get(key)
             || plannedEntry?.companyName
             || totalEntry?.companyName
+            || residenceEntry?.companyName
             || 'غير معروف';
         const plannedPilgrims = plannedEntry?.plannedPilgrims || 0;
-        const totalPilgrims = plannedEntry?.totalPilgrims || 0;
-        const residences = totalEntry?.totalResidenceKeys.size || 0;
+        const totalPilgrims = totalEntry?.totalPilgrims || 0;
+        const completionTargetPilgrims = totalPilgrims * getPlanTypeTargetMultiplier(plannedEntry);
 
         return {
             type: 'company',
             companyKey: key,
             label,
             totalPilgrims,
-            residences,
-            completion: calculateCompletionPercentage(plannedPilgrims, totalPilgrims)
+            residences: residenceEntry?.totalResidenceKeys.size || 0,
+            completion: calculateCompletionPercentage(plannedPilgrims, completionTargetPilgrims)
         };
     }));
 }
 
-function buildServiceCenterRows(rows) {
+function buildServiceCenterRows(rows, totalRows = rows) {
     const planned = collectPlannedMetrics(rows).centerMetrics;
-    const totals = collectAssignmentMetrics().centerMetrics;
+    const totals = getAssignmentTotalsForDisplay(totalRows).centerMetrics;
     const rowsByCenter = [];
     const centerKeys = new Set();
 
     planned.forEach((entry, key) => {
-        if (selectedServiceCompany !== 'all' && entry.companyKey !== selectedServiceCompany) return;
+        if (selectedServiceCompanies.size && !selectedServiceCompanies.has(entry.companyKey)) return;
         centerKeys.add(key);
     });
 
     totals.forEach((entry, key) => {
-        if (selectedServiceCompany !== 'all' && entry.companyKey !== selectedServiceCompany) return;
+        if (selectedServiceCompanies.size && !selectedServiceCompanies.has(entry.companyKey)) return;
         centerKeys.add(key);
     });
 
@@ -2055,7 +2383,8 @@ function buildServiceCenterRows(rows) {
         const centerNumber = plannedEntry?.centerNumber || totalEntry?.centerNumber || '';
         const centerName = plannedEntry?.centerName || totalEntry?.centerName || centerNumber || 'بدون مركز';
         const plannedPilgrims = plannedEntry?.plannedPilgrims || 0;
-        const totalPilgrims = plannedEntry?.totalPilgrims || 0;
+        const totalPilgrims = totalEntry?.totalPilgrims || 0;
+        const completionTargetPilgrims = totalPilgrims * getPlanTypeTargetMultiplier(plannedEntry);
         const residences = totalEntry?.totalResidenceKeys.size || 0;
 
         rowsByCenter.push({
@@ -2067,7 +2396,7 @@ function buildServiceCenterRows(rows) {
             sublabel: companyName,
             totalPilgrims,
             residences,
-            completion: calculateCompletionPercentage(plannedPilgrims, totalPilgrims)
+            completion: calculateCompletionPercentage(plannedPilgrims, completionTargetPilgrims)
         });
     });
 
@@ -2098,34 +2427,105 @@ function createNameCell(label, sublabel = '') {
     return cell;
 }
 
+function getEntityRowKey(item, type = item.type) {
+    return type === 'company' ? item.companyKey : item.centerKey;
+}
+
+function isEntityRowSelected(item, type = item.type) {
+    return type === 'company'
+        ? selectedServiceCompanies.has(item.companyKey)
+        : selectedServiceCenters.has(item.centerKey);
+}
+
 function handleTableSelection(row) {
     if (row.type === 'company') {
-        if (selectedServiceCompany === row.companyKey && selectedServiceCenter === 'all') {
-            selectedServiceCompany = 'all';
+        if (selectedServiceCompanies.has(row.companyKey)) {
+            selectedServiceCompanies.delete(row.companyKey);
         } else {
-            selectedServiceCompany = row.companyKey;
-            selectedServiceCenter = 'all';
+            selectedServiceCompanies.add(row.companyKey);
         }
     } else if (row.type === 'center') {
-        if (selectedServiceCenter === row.centerKey) {
-            selectedServiceCenter = 'all';
+        if (selectedServiceCenters.has(row.centerKey)) {
+            selectedServiceCenters.delete(row.centerKey);
         } else {
-            selectedServiceCompany = row.companyKey;
-            selectedServiceCenter = row.centerKey;
+            selectedServiceCenters.add(row.centerKey);
         }
     }
 
     applyFilters();
 }
 
+function getEntitySearchText(item, type) {
+    return normalizeTextKey([
+        item.label,
+        item.sublabel,
+        item.centerNumber,
+        item.totalPilgrims,
+        item.residences,
+        formatCompletionPercentage(item.completion),
+        type === 'company' ? item.companyKey : item.centerKey
+    ].filter(value => value !== undefined && value !== null).join(' '));
+}
+
+function getEntitySortValue(item, sortKey) {
+    if (['totalPilgrims', 'residences', 'completion'].includes(sortKey)) return Number(item[sortKey]) || 0;
+    if (sortKey === 'centerNumber') {
+        const value = String(item.centerNumber || '').trim();
+        const numeric = Number(value.replace(/,/g, ''));
+        return Number.isFinite(numeric) && value ? numeric : value;
+    }
+    return normalizeTextKey(item[sortKey] || '');
+}
+
+function compareEntityRows(a, b, sortKey, sortDirection) {
+    const aValue = getEntitySortValue(a, sortKey);
+    const bValue = getEntitySortValue(b, sortKey);
+    const direction = sortDirection === 'asc' ? 1 : -1;
+
+    if (typeof aValue === 'number' && typeof bValue === 'number') {
+        if (aValue !== bValue) return (aValue - bValue) * direction;
+    } else {
+        const comparison = String(aValue).localeCompare(String(bValue), 'ar', { numeric: true, sensitivity: 'base' });
+        if (comparison) return comparison * direction;
+    }
+
+    return String(a.label || '').localeCompare(String(b.label || ''), 'ar');
+}
+
+function prepareEntityTableRows(rows, type) {
+    const state = entityTableState[type];
+    const search = normalizeTextKey(state.search || '');
+    const visibleRows = search
+        ? rows.filter(item => getEntitySearchText(item, type).includes(search))
+        : [...rows];
+
+    visibleRows.sort((a, b) => compareEntityRows(a, b, state.sortKey, state.sortDirection));
+    return visibleRows;
+}
+
+function updateEntityTableSortHeaders(type) {
+    const table = document.querySelector(`.entity-table[data-table-type="${type}"]`);
+    const state = entityTableState[type];
+    if (!table || !state) return;
+
+    table.querySelectorAll('thead th[data-sort-key]').forEach(header => {
+        const isActive = header.dataset.sortKey === state.sortKey;
+        header.classList.toggle('sorted', isActive);
+        header.dataset.sortDirection = isActive ? state.sortDirection : '';
+        header.setAttribute('aria-sort', isActive ? (state.sortDirection === 'asc' ? 'ascending' : 'descending') : 'none');
+    });
+}
+
 function renderSummaryTable(tableBodyId, rows, type) {
     const tbody = document.getElementById(tableBodyId);
     if (!tbody) return;
 
+    const preparedRows = prepareEntityTableRows(rows, type);
     const fragment = document.createDocumentFragment();
     const columnCount = type === 'center' ? 6 : 4;
+    updateEntityTableSortHeaders(type);
 
-    if (!rows.length) {
+    if (!preparedRows.length) {
         const row = document.createElement('tr');
         const cell = document.createElement('td');
         cell.colSpan = columnCount;
@@ -2137,14 +2537,14 @@ function renderSummaryTable(tableBodyId, rows, type) {
         return;
     }
 
-    rows.forEach(item => {
+    preparedRows.forEach(item => {
         const row = document.createElement('tr');
-        const isActive = type === 'company'
-            ? selectedServiceCompany === item.companyKey && selectedServiceCenter === 'all'
-            : selectedServiceCenter === item.centerKey;
+        const isActive = isEntityRowSelected(item, type);
 
         row.className = 'entity-table-row';
         row.tabIndex = 0;
+        row.dataset.rowKey = getEntityRowKey(item, type);
+        row.setAttribute('aria-selected', isActive ? 'true' : 'false');
         if (isActive) row.classList.add('active');
 
         if (type === 'center') {
@@ -2180,21 +2580,25 @@ function renderSummaryTable(tableBodyId, rows, type) {
 }
 
 function renderServiceSummaryTables() {
-    renderSummaryTable('serviceCompaniesTableBody', buildServiceCompanyRows(contextFilteredData), 'company');
-    renderSummaryTable('serviceCentersTableBody', buildServiceCenterRows(contextFilteredData), 'center');
+    renderSummaryTable('serviceCompaniesTableBody', buildServiceCompanyRows(contextFilteredData, planTypeBaseData), 'company');
+    renderSummaryTable('serviceCentersTableBody', buildServiceCenterRows(contextFilteredData, planTypeBaseData), 'center');
 }
 
 function getSelectedServiceCompanyName() {
-    if (selectedServiceCompany === 'all') return '';
-    return serviceCompanyNameByKey.get(selectedServiceCompany)
-        || selectedServiceCompany.split('|')[0]
+    if (!selectedServiceCompanies.size) return '';
+    if (selectedServiceCompanies.size > 1) return `${selectedServiceCompanies.size.toLocaleString()} شركات محددة`;
+    const key = Array.from(selectedServiceCompanies)[0];
+    return serviceCompanyNameByKey.get(key)
+        || key.split('|')[0]
         || 'غير معروف';
 }
 
 function getSelectedServiceCenterName() {
-    if (selectedServiceCenter === 'all') return '';
-    return serviceCenterNamesByKey.get(selectedServiceCenter)
-        || selectedServiceCenter.split('|')[1]
+    if (!selectedServiceCenters.size) return '';
+    if (selectedServiceCenters.size > 1) return `${selectedServiceCenters.size.toLocaleString()} مراكز محددة`;
+    const key = Array.from(selectedServiceCenters)[0];
+    return serviceCenterNamesByKey.get(key)
+        || key.split('|')[1]
         || 'بدون مركز';
 }
 
@@ -2204,14 +2608,13 @@ function updateMapSelectionTitle() {
 
     const companyName = getSelectedServiceCompanyName();
     const centerName = getSelectedServiceCenterName();
-    const text = centerName
-        ? `${centerName} - ${companyName || 'غير معروف'}`
-        : companyName;
+    const text = centerName && companyName
+        ? `${centerName} - ${companyName}`
+        : (centerName || companyName);
 
     titleEl.textContent = text;
     titleEl.hidden = !text;
 }
-
 
 // Main Update Function
 function updateDashboard() {
@@ -2224,10 +2627,52 @@ function updateDashboard() {
     updatePlanList();
 }
 
+function buildCompletionStats(rows) {
+    const stats = {
+        completionByPlanType: {},
+        completionByCenterPlan: {}
+    };
+    const countedTargets = new Set();
+
+    rows.forEach(d => {
+        const haj = Number(d['number_of_haj']) || 0;
+        const planTypeCode = d['plan_type_code'] || 'unknown';
+        const planTypeName = d['plan_type_name'] || planTypeCode || 'غير معروف';
+        const assignment = getAssignmentTotalForPlan(d);
+        const completionKey = planTypeCode;
+
+        if (!stats.completionByPlanType[completionKey]) {
+            stats.completionByPlanType[completionKey] = { label: planTypeName, planned: 0, target: 0 };
+        }
+        stats.completionByPlanType[completionKey].planned += haj;
+
+        const centerCompletionKey = completionKey + '|' + centerKey(d['owner_company_name'], d['owner_office_number']);
+        if (!stats.completionByCenterPlan[centerCompletionKey]) {
+            stats.completionByCenterPlan[centerCompletionKey] = {
+                planTypeCode,
+                planTypeName,
+                label: String(d['owner_office_number'] || 'بدون مركز') + ' - ' + String(d['owner_company_name'] || 'غير معروف'),
+                planned: 0,
+                target: 0
+            };
+        }
+        stats.completionByCenterPlan[centerCompletionKey].planned += haj;
+
+        const targetKey = completionKey + '|' + centerKey(d['owner_company_name'], d['owner_office_number']);
+        if (!countedTargets.has(targetKey)) {
+            const target = getPlanTypeTarget(planTypeCode, assignment);
+            stats.completionByPlanType[completionKey].target += target;
+            stats.completionByCenterPlan[centerCompletionKey].target += target;
+            countedTargets.add(targetKey);
+        }
+    });
+
+    return stats;
+}
+
 function getDashboardStats() {
     const stats = {
         totalPilgrims: 0,
-        totalAllocatedPilgrims: 0,
         totalBuses: 0,
         totalTrips: 0,
         uniqueCamps: new Set(),
@@ -2243,13 +2688,10 @@ function getDashboardStats() {
         completionByCenterPlan: {},
         campAssignmentStats: getCampAssignmentStats()
     };
-    const uniquePlannedPilgrimCounts = new Map();
-    const allocatedByCamp = new Map();
-    const allocatedByPlanTypeCamp = new Map();
+    const countedTargets = new Set();
 
     filteredData.forEach(d => {
-        const haj = getPlannedHajj(d);
-        const allocatedHaj = getAllocatedHajj(d);
+        const haj = Number(d['number_of_haj']) || 0;
         const buses = Number(d['number_of_buses']) || 0;
         const period = d['period'] || 'غير معروف';
         const transportType = d['transport_type_name'] || 'غير معروف';
@@ -2258,13 +2700,12 @@ function getDashboardStats() {
         const district = d['start_point_district'] || 'بدون حي';
         const planTypeCode = d['plan_type_code'] || 'unknown';
         const planTypeName = d['plan_type_name'] || planTypeCode || 'غير معروف';
+        const assignment = getAssignmentTotalForPlan(d);
         const completionKey = planTypeCode;
 
-        const uniquePilgrimKey = getUniquePlannedPilgrimKey(d);
-        uniquePlannedPilgrimCounts.set(uniquePilgrimKey, Math.max(uniquePlannedPilgrimCounts.get(uniquePilgrimKey) || 0, haj));
+        stats.totalPilgrims += haj;
         stats.totalBuses += buses;
-        const trips = getTripCount(d, buses);
-        stats.totalTrips += trips;
+        stats.totalTrips += getTripCount(d, buses);
 
         if (d['camp_label']) stats.uniqueCamps.add(d['camp_label']);
         if (d['start_point_type'] === 'residence' && d['start_point_name']) stats.uniqueResidences.add(d['start_point_name']);
@@ -2299,53 +2740,29 @@ function getDashboardStats() {
         }
         stats.completionByCenterPlan[centerCompletionKey].planned += haj;
 
-        const allocationCampKey = getAllocationCampKey(d);
-        allocatedByCamp.set(allocationCampKey, Math.max(allocatedByCamp.get(allocationCampKey) || 0, allocatedHaj));
-
-        const planTypeCampKey = `${completionKey}|${allocationCampKey}`;
-        allocatedByPlanTypeCamp.set(planTypeCampKey, Math.max(allocatedByPlanTypeCamp.get(planTypeCampKey) || 0, allocatedHaj));
-    });
-
-    allocatedByPlanTypeCamp.forEach((allocatedHaj, key) => {
-        const keyParts = key.split('|');
-        const completionKey = keyParts[0] || key;
-        const centerCompletionKey = keyParts.length >= 3 ? keyParts.slice(0, 3).join('|') : key;
-        if (stats.completionByPlanType[completionKey]) {
-            stats.completionByPlanType[completionKey].target += allocatedHaj;
-        }
-        if (stats.completionByCenterPlan[centerCompletionKey]) {
-            stats.completionByCenterPlan[centerCompletionKey].target += allocatedHaj;
+        const targetKey = `${completionKey}|${centerKey(d['owner_company_name'], d['owner_office_number'])}`;
+        if (!countedTargets.has(targetKey)) {
+            const target = getPlanTypeTarget(planTypeCode, assignment);
+            stats.completionByPlanType[completionKey].target += target;
+            stats.completionByCenterPlan[centerCompletionKey].target += target;
+            countedTargets.add(targetKey);
         }
     });
-
-    stats.totalPilgrims = filteredData.reduce((sum, row) => sum + getPlannedHajj(row), 0);
-    stats.totalAllocatedPilgrims = Array.from(allocatedByCamp.values()).reduce((sum, value) => sum + value, 0);
 
     return stats;
 }
 
-function getUniquePlannedPilgrimKey(row) {
-    const campLabel = String(row['camp_label'] || '').trim();
-    if (campLabel) {
-        return `${centerKey(row['owner_company_name'], row['owner_office_number'])}|${campLabel}`;
-    }
-    return String(row['plan_id'] || `${row['owner_company_name'] || ''}|${row['owner_office_number'] || ''}|${row['start_point_name'] || ''}|${row['end_point_name'] || ''}`);
-}
-
 function getTripCount(row, buses) {
     const transportType = row['transport_type_name'] || '';
-    const t = String(transportType || '').trim();
-    // Treat trains and any 'ترددي' types as the same (higher trip multiplier)
-    if (t.includes('ردين')) return buses * 2;
-    if (t.includes('ترددي') || t.includes('قطار') || t.toLowerCase().includes('train')) return buses * 3;
-    if (t.includes('رد') || t.includes('ىد')) return buses;
+    if (transportType.includes('ردين')) return buses * 2;
+    if (transportType.includes('ترددي')) return buses * 3;
+    if (transportType.includes('رد') || transportType.includes('ىد')) return buses;
     return buses;
 }
 
 // Update KPI Cards
 function updateKPIs(stats) {
     const totalPilgrims = stats.totalPilgrims;
-    const totalAllocatedPilgrims = stats.totalAllocatedPilgrims;
     const totalBuses = stats.totalBuses;
     const totalPlans = filteredData.length;
     const totalTrips = stats.totalTrips;
@@ -2357,31 +2774,24 @@ function updateKPIs(stats) {
 
     // Animate numbers
     const pilgrimsElement = document.getElementById('kpiPilgrims');
-    pilgrimsElement.textContent = `${totalPilgrims.toLocaleString()}/${totalAllocatedPilgrims.toLocaleString()}`;
+    pilgrimsElement.textContent = `${totalPilgrims.toLocaleString()}/${campStats.totalPilgrims.toLocaleString()}`;
     pilgrimsElement.previousElementSibling.textContent = 'الحجاج (مخطط/إجمالي)';
-    pilgrimsElement.title = 'الحجاج المخطط من num_of_haj / إجمالي الحجاج من allocated_hajj بدون تكرار حسب شركة الخدمة ورقم المركز والمخيم';
+    pilgrimsElement.title = 'الحجاج المخططون حسب نوع الخطة المحدد / إجمالي تروية وتصعيد تروية';
     document.getElementById('kpiBuses').textContent = totalBuses.toLocaleString();
     document.getElementById('kpiPlans').textContent = totalPlans.toLocaleString();
     document.getElementById('kpiTrips').textContent = totalTrips.toLocaleString();
-
-    const tripsDetailElement = document.getElementById('kpiTripsDetail');
-    if (tripsDetailElement) {
-        tripsDetailElement.textContent = '';
-        tripsDetailElement.title = '';
-    }
-
     const serviceCentersElement = document.getElementById('kpiServiceCenters');
     if (serviceCentersElement) {
         serviceCentersElement.textContent = `${plannedServiceCenters.toLocaleString()}/${campStats.serviceCenterCount.toLocaleString()}`;
         serviceCentersElement.previousElementSibling.textContent = 'مراكز الخدمة (مخطط/إجمالي)';
-        serviceCentersElement.title = 'مراكز الخدمة المخططة من الخطط / إجمالي مراكز الخدمة من assign_camps';
+        serviceCentersElement.title = 'مراكز الخدمة من البيانات المعروضة / إجمالي مراكز الخدمة من data.js';
     }
 
     const residencesElement = document.getElementById('kpiResidences');
     if (residencesElement) {
-        residencesElement.textContent = `${totalResidences.toLocaleString()}/${residenceStats.totalResidences.toLocaleString()}`;
-        residencesElement.previousElementSibling.textContent = 'عدد المساكن (مخطط/اجمالي)';
-        residencesElement.title = 'عدد المساكن المخطط من الخطط / إجمالي المساكن من assign_residences حسب الشركة ورقم المركز';
+        residencesElement.textContent = `${residenceStats.totalResidences.toLocaleString()}/${totalResidences.toLocaleString()}`;
+        residencesElement.previousElementSibling.textContent = 'عدد المساكن (إجمالي/مخطط)';
+        residencesElement.title = 'إجمالي المساكن حسب الفلتر / عدد المساكن من data.js';
     }
     
     // Display camps with numerator/denominator format
@@ -2419,9 +2829,10 @@ function updateMap() {
     districtsLayerGroup.clearLayers();
     const mapStatus = document.getElementById('mapStatus');
     const bounds = L.latLngBounds();
-    const isFocusedSelection = Boolean(selectedPlanId || selectedEntranceName || selectedPathName || selectedDistrict);
+    const serviceEntitySelectionActive = hasServiceEntitySelection();
+    const isFocusedSelection = Boolean(selectedPlanId || selectedEntranceName || selectedPathName || selectedDistrict || serviceEntitySelectionActive);
     const mapData = isFocusedSelection ? filteredData : filteredData.slice(0, MAP_RENDER_LIMIT);
-    const showDetailedMapLabels = Boolean(selectedPlanId) || filteredData.length <= MAP_DETAIL_LABEL_LIMIT;
+    const showDetailedMapLabels = Boolean(selectedPlanId || serviceEntitySelectionActive) || filteredData.length <= MAP_DETAIL_LABEL_LIMIT;
 
     if (mapStatus) {
         mapStatus.hidden = true;
@@ -2430,53 +2841,21 @@ function updateMap() {
 
     let selectedDistrictBounds = null;
 
-    // Draw Districts
-    if (geojsonLookup['DISTRICTS']) {
-        const { stats: districtStatsByName, maxPilgrims } = buildDistrictMapStats(filteredData);
-
-        districtStatsByName.forEach((districtStats, normName) => {
-            const districtGeoJson = geojsonLookup['DISTRICTS'][normName];
-            if (!districtGeoJson) return;
-
-            const districtName = districtStats.name || getDistrictNameFromFeature(districtGeoJson);
-            const layer = L.geoJSON(districtGeoJson, {
-                pane: 'districtPane',
-                style: getDistrictPolygonStyle(districtName, districtStats, maxPilgrims)
-            }).bindTooltip(`حي: ${districtName}<br>الحجاج: ${districtStats.pilgrims.toLocaleString()}<br>الخطط: ${districtStats.plans.toLocaleString()}`, {
-                sticky: true,
-                className: 'custom-tooltip district-tooltip'
-            });
-
-            layer.on('click', (e) => {
-                L.DomEvent.stopPropagation(e);
-                if (selectedDistrict && normalizeArabic(selectedDistrict) === normalizeArabic(districtName)) {
-                    selectedDistrict = null;
-                } else {
-                    selectedDistrict = districtName;
-                }
-                selectedPlanId = null;
-                applyFilters();
-            });
-
-            districtsLayerGroup.addLayer(layer);
-
-            try {
-                const lBounds = layer.getBounds();
-                if (lBounds.isValid()) {
-                    bounds.extend(lBounds);
-                    if (selectedDistrict && normalizeArabic(districtName) === normalizeArabic(selectedDistrict)) {
-                        selectedDistrictBounds = lBounds;
-                    }
-                }
-            } catch (e) { }
-        });
-    }
+    // Draw Districts - GeoJSON data removed
 
     mapData.forEach(row => {
         try {
             const geojsonsToRender = getRowGeojsons(row);
 
             if (geojsonsToRender.length === 0) return;
+
+            const connectedLineLatLngsByItem = new Map();
+            const lineItems = geojsonsToRender.filter(item => item.geojson?.type === 'LineString' || item.geojson?.type === 'MultiLineString');
+            const connectedLineSequence = orientConnectedRouteSegments(row, lineItems);
+            connectedLineSequence.forEach(orientedItem => {
+                const sourceItem = geojsonsToRender.find(item => item.type === orientedItem.type && item.geojson === orientedItem.geojson);
+                if (sourceItem) connectedLineLatLngsByItem.set(sourceItem, orientedItem.latlngs);
+            });
 
             geojsonsToRender.forEach(item => {
                 const geojson = item.geojson;
@@ -2563,8 +2942,10 @@ function updateMap() {
                     } else if (geojson.type === 'LineString' || geojson.type === 'MultiLineString') {
                         // Support MultiLineString if needed
                         let coords = geojson.type === 'LineString' ? geojson.coordinates : geojson.coordinates[0];
-                        latlngs = coords.map(coord => [coord[1], coord[0]]);
-                        latlngs = orientLatLngsForRoute(latlngs, row, item);
+                        latlngs = connectedLineLatLngsByItem.get(item) || coords.map(coord => [coord[1], coord[0]]);
+                        if (!connectedLineLatLngsByItem.has(item)) {
+                            latlngs = orientLatLngsForRoute(latlngs, row, item);
+                        }
 
                         const halo = L.polyline(latlngs, {
                             color: '#ffffff',
@@ -2593,6 +2974,14 @@ function updateMap() {
                     }
                 }
             });
+
+            if (connectedLineSequence.length > 1) {
+                for (let index = 0; index < connectedLineSequence.length - 1; index++) {
+                    const current = connectedLineSequence[index].latlngs;
+                    const next = connectedLineSequence[index + 1].latlngs;
+                    addRouteConnector(current[current.length - 1], next[0]);
+                }
+            }
         } catch (e) {
             // console.warn("Failed to render geometry for row", row['ID'], e);
         }
@@ -2600,20 +2989,21 @@ function updateMap() {
 
     if (selectedDistrictBounds && selectedDistrictBounds.isValid()) {
         fitMapToGeometry(selectedDistrictBounds);
+        updateMapLabelScale();
         return;
     }
 
     fitMapToGeometry(bounds);
+    updateMapLabelScale();
 }
 
 function bindPopupToLayer(layer, row) {
     const popupContent = `
         <div style="padding: 5px; direction: rtl;">
             <h4 style="margin:0 0 5px 0; color: #3b82f6;">${row['owner_company_name'] || 'شركة غير معروفة'}</h4>
-            <p style="margin:0; font-size: 12px;"><strong>الحافلات:</strong> ${row['number_of_buses']} حافلة</p>
-            <p style="margin:0; font-size: 12px;"><strong>الحجاج:</strong> ${getPlannedHajj(row)} حاج</p>
+            <p style="margin:0; font-size: 12px;"><strong>الحافلات:</strong> ${row['number_of_buses']}</p>
+            <p style="margin:0; font-size: 12px;"><strong>الحجاج:</strong> ${row['number_of_haj']}</p>
             <p style="margin:0; font-size: 12px;"><strong>من:</strong> ${row['start_point_name'] || 'غير متوفر'}</p>
-            <p style="margin:0; font-size: 12px;"><strong>إلى:</strong> ${row['end_point_name'] || 'غير متوفر'}</p>
             <p style="margin:0; font-size: 12px;"><strong>الوقت:</strong> ${row['timing_start_at']} - ${row['timing_end_at']}</p>
         </div>
     `;
@@ -2710,45 +3100,43 @@ function updateCharts(stats = getDashboardStats()) {
         });
     }
 
-    const transportRingContainer = document.getElementById("transportTypeRings");
+    const transEntries = Object.entries(stats.transportCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4);
+    const totalTransportBuses = Object.values(stats.transportCounts).reduce((sum, value) => sum + value, 0);
+    const transportColors = [
+        ["rgba(42, 157, 144, 0.92)", "rgba(148, 163, 184, 0.26)"],
+        ["rgba(78, 201, 185, 0.92)", "rgba(148, 163, 184, 0.26)"],
+        ["rgba(235, 196, 104, 0.92)", "rgba(148, 163, 184, 0.26)"],
+        ["rgba(194, 88, 88, 0.92)", "rgba(148, 163, 184, 0.26)"]
+    ];
+
     transportChartInstances.forEach(chart => chart.destroy());
     transportChartInstances = [];
-    if (transportRingContainer) {
-        transportRingContainer.replaceChildren();
-        const transportEntries = Object.entries(stats.transportCounts)
-            .filter(([, value]) => value > 0)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 3);
-        const transportTotal = Object.values(stats.transportCounts).reduce((total, value) => total + value, 0);
-        const transportColors = [
-            ["rgba(42, 157, 144, 0.96)", "rgba(148, 163, 184, 0.28)"],
-            ["rgba(235, 196, 104, 0.96)", "rgba(148, 163, 184, 0.28)"],
-            ["rgba(194, 88, 88, 0.96)", "rgba(148, 163, 184, 0.28)"]
-        ];
+    const transportContainer = document.getElementById("transportCharts");
+    if (transportContainer) {
+        transportContainer.replaceChildren();
 
-        transportEntries.forEach(([label, value], index) => {
-            const percent = transportTotal > 0 ? Math.round((value / transportTotal) * 1000) / 10 : 0;
-            const rest = Math.max(transportTotal - value, 0);
+        transEntries.forEach(([label, value], index) => {
+            const rest = Math.max(totalTransportBuses - value, 0);
+            const percentage = totalTransportBuses > 0 ? Math.round((value / totalTransportBuses) * 100) : 0;
             const item = document.createElement("div");
+            item.className = "transport-ring-item";
             const filterEl = document.getElementById("transportFilter");
-            const isActive = filterEl?.value === label;
-
-            item.className = "progress-ring-item transport-type-ring completion-plan-ring";
+            const isActive = filterEl && filterEl.value === label;
+            item.classList.toggle("active", isActive);
+            item.setAttribute("aria-pressed", isActive ? "true" : "false");
             item.tabIndex = 0;
             item.setAttribute("role", "button");
-            item.setAttribute("aria-pressed", isActive ? "true" : "false");
-            item.setAttribute("title", isActive ? "إلغاء تصفية نوع النقل" : "تصفية حسب " + label);
-            item.classList.toggle("active", isActive);
-            item.innerHTML = `<div class="progress-ring-wrap"><canvas></canvas><span>${percent}%</span></div><strong title="${label}">${label}</strong>`;
+            item.setAttribute("title", label + " - " + Number(value || 0).toLocaleString() + " (" + percentage + "%)");
+            item.innerHTML = "<div class=\"transport-ring-container\"><canvas></canvas><span>" + percentage + "%</span></div><strong>" + label + "</strong>";
+            transportContainer.appendChild(item);
 
             const toggleTransportFilter = () => {
-                const currentFilter = document.getElementById("transportFilter");
-                if (!currentFilter) return;
-                currentFilter.value = currentFilter.value === label ? "all" : label;
+                const filterEl = document.getElementById("transportFilter");
+                if (!filterEl) return;
+                filterEl.value = filterEl.value === label ? "all" : label;
                 selectedPlanId = null;
-                selectedEntranceName = null;
-                selectedPathName = null;
-                selectedDistrict = null;
                 applyFilters();
             };
 
@@ -2759,23 +3147,22 @@ function updateCharts(stats = getDashboardStats()) {
                     toggleTransportFilter();
                 }
             });
-            transportRingContainer.appendChild(item);
 
-            const ringCanvas = item.querySelector("canvas");
-            ringCanvas.width = TOP_RING_CANVAS_SIZE;
-            ringCanvas.height = TOP_RING_CANVAS_SIZE;
-            ringCanvas.style.width = TOP_RING_CANVAS_SIZE + "px";
-            ringCanvas.style.height = TOP_RING_CANVAS_SIZE + "px";
-            const ctx = ringCanvas.getContext("2d");
-            transportChartInstances.push(new Chart(ctx, {
+            const transportCanvas = item.querySelector("canvas");
+            transportCanvas.width = TRANSPORT_RING_CANVAS_SIZE;
+            transportCanvas.height = TRANSPORT_RING_CANVAS_SIZE;
+            transportCanvas.style.width = TRANSPORT_RING_CANVAS_SIZE + "px";
+            transportCanvas.style.height = TRANSPORT_RING_CANVAS_SIZE + "px";
+            const ctxTrans = transportCanvas.getContext("2d");
+
+            transportChartInstances.push(new Chart(ctxTrans, {
                 type: "doughnut",
                 data: {
-                    labels: [label, "باقي أنواع النقل"],
+                    labels: [label, "باقي الأنماط"],
                     datasets: [{
-                        data: transportTotal > 0 ? [value, rest] : [0, 1],
-                        backgroundColor: transportTotal > 0 ? transportColors[index] : ["rgba(0,0,0,0)", "rgba(148, 163, 184, 0.34)"],
-                        borderColor: chartTheme.border,
-                        borderWidth: 2
+                        data: [value, rest],
+                        backgroundColor: transportColors[index % transportColors.length],
+                        borderWidth: 0
                     }]
                 },
                 options: {
@@ -2788,9 +3175,7 @@ function updateCharts(stats = getDashboardStats()) {
                             rtl: true,
                             textDirection: "rtl",
                             callbacks: {
-                                title: () => label,
-                                label: context => context.label + ": " + Number(context.raw).toLocaleString(),
-                                afterBody: () => ["النسبة: " + percent + "%", "الحافلات: " + value.toLocaleString(), "الإجمالي: " + transportTotal.toLocaleString()]
+                                label: context => context.label + ": " + Number(context.raw || 0).toLocaleString()
                             }
                         }
                     }
@@ -2928,6 +3313,10 @@ function updateCharts(stats = getDashboardStats()) {
             responsive: true,
             maintainAspectRatio: false,
             cutout: '60%',
+            radius: '62%',
+            layout: {
+                padding: { left: 28, right: 12 }
+            },
             plugins: {
                 legend: {
                     position: 'right',
@@ -2938,20 +3327,21 @@ function updateCharts(stats = getDashboardStats()) {
                         handleDistrictSelection(label);
                     },
                     labels: {
-                        color: chartTheme.text,
-                        fontColor: chartTheme.text,
-                        boxWidth: 10,
-                        font: { size: 10, weight: 700 },
+                        color: '#fafafa',
+                        boxWidth: 8,
+                        padding: 8,
+                        font: { size: 9, family: 'Inter, IBM Plex Sans Arabic, sans-serif', weight: '600' },
                         generateLabels: (chart) => {
                             const data = chart.data;
                             if (data.labels.length && data.datasets.length) {
                                 return data.labels.map((label, i) => {
                                     const value = data.datasets[0].data[i];
+                                    const shortLabel = String(label || "").length > 9 ? String(label).slice(0, 9) + "..." : label;
                                     return {
-                                        text: `${label} - ${value.toLocaleString()}`,
+                                        text: `${shortLabel} - ${value.toLocaleString()}`,
                                         fillStyle: data.datasets[0].backgroundColor[i],
+                                        fontColor: '#fafafa',
                                         strokeStyle: data.datasets[0].backgroundColor[i],
-                                        fontColor: chartTheme.text,
                                         hidden: isNaN(data.datasets[0].data[i]) || chart.getDatasetMeta(0).data[i].hidden,
                                         index: i
                                     };
@@ -2962,6 +3352,13 @@ function updateCharts(stats = getDashboardStats()) {
                     }
                 },
                 tooltip: {
+                    backgroundColor: 'rgba(9, 9, 11, 0.96)',
+                    titleColor: '#fafafa',
+                    bodyColor: '#fafafa',
+                    borderColor: chartTheme.border || '#27272a',
+                    borderWidth: 1,
+                    rtl: true,
+                    textDirection: 'rtl',
                     callbacks: {
                         label: (context) => {
                             const label = context.label || '';
@@ -3008,8 +3405,9 @@ function renderCompletionSummaryChart(stats, chartTheme) {
     container.replaceChildren();
 
     const planTypeSelect = document.getElementById('planTypeFilter');
-    const selectedPlanType = planTypeSelect?.value || 'all';
-    const rowsByLabel = new Map(Object.values(stats.completionByPlanType).map(row => [row.label, row]));
+    const activePlanTypes = getActivePlanTypeLabels();
+    const summaryStats = buildCompletionStats(planTypeBaseData.length ? planTypeBaseData : rawData);
+    const rowsByLabel = new Map(Object.values(summaryStats.completionByPlanType).map(row => [row.label, row]));
     const currentPlanTypeLabels = planTypeSelect
         ? Array.from(planTypeSelect.options)
             .filter(option => option.value !== 'all')
@@ -3017,7 +3415,6 @@ function renderCompletionSummaryChart(stats, chartTheme) {
         : Array.from(rowsByLabel.keys());
     const rows = currentPlanTypeLabels
         .map(label => rowsByLabel.get(label) || { label, planned: 0, target: 0 })
-        .filter(row => selectedPlanType === 'all' || row.label === selectedPlanType)
         .sort((a, b) => b.target - a.target);
 
     rows.forEach(row => {
@@ -3033,13 +3430,13 @@ function renderCompletionSummaryChart(stats, chartTheme) {
             ? (over > 0 ? [complete, over] : [complete, remaining])
             : [0, 1];
         const item = document.createElement('div');
-        const isSelectedPlanType = selectedPlanType === row.label;
+        const isSelectedPlanType = activePlanTypes.has(row.label);
 
         item.className = 'progress-ring-item completion-plan-ring';
         item.tabIndex = 0;
         item.setAttribute('role', 'button');
         item.setAttribute('aria-pressed', isSelectedPlanType ? 'true' : 'false');
-        item.setAttribute('title', isSelectedPlanType ? 'إلغاء تصفية المرحلة' : `تصفية حسب ${row.label}`);
+        item.setAttribute('title', isSelectedPlanType ? 'إزالة من التصفية' : `إضافة ${row.label} للتصفية`);
         if (isSelectedPlanType) item.classList.add('active');
         item.innerHTML = `
             <div class="progress-ring-wrap">
@@ -3052,7 +3449,12 @@ function renderCompletionSummaryChart(stats, chartTheme) {
             const select = document.getElementById('planTypeFilter');
             if (!select) return;
 
-            select.value = select.value === row.label ? 'all' : row.label;
+            if (selectedPlanTypes.has(row.label)) {
+                selectedPlanTypes.delete(row.label);
+            } else {
+                selectedPlanTypes.add(row.label);
+            }
+            syncPlanTypeSelectValue();
             selectedPlanId = null;
             selectedEntranceName = null;
             selectedPathName = null;
@@ -3137,7 +3539,7 @@ function renderResidenceAssignmentChart(chartTheme) {
             afterBody: percent => [
                 `نسبة الربط: ${percent}%`,
                 `مراكز لها مساكن: ${coverage.assigned.toLocaleString()}`,
-                `إجمالي مراكز assign_camps: ${coverage.total.toLocaleString()}`
+                `إجمالي مراكز data.js: ${coverage.total.toLocaleString()}`
             ],
             colors: ['rgba(42, 157, 144, 0.96)', 'rgba(194, 88, 88, 0.86)']
         },
@@ -3231,10 +3633,10 @@ function renderResidenceAssignmentChart(chartTheme) {
         }
 
         const ringCanvas = item.querySelector('canvas');
-        ringCanvas.width = TOP_RING_CANVAS_SIZE;
-        ringCanvas.height = TOP_RING_CANVAS_SIZE;
-        ringCanvas.style.width = TOP_RING_CANVAS_SIZE + 'px';
-        ringCanvas.style.height = TOP_RING_CANVAS_SIZE + 'px';
+        ringCanvas.width = RESIDENCE_RING_CANVAS_SIZE;
+        ringCanvas.height = RESIDENCE_RING_CANVAS_SIZE;
+        ringCanvas.style.width = RESIDENCE_RING_CANVAS_SIZE + 'px';
+        ringCanvas.style.height = RESIDENCE_RING_CANVAS_SIZE + 'px';
         const ctx = ringCanvas.getContext('2d');
         residenceAssignmentChartInstances.push(new Chart(ctx, {
             type: 'doughnut',
@@ -3254,6 +3656,13 @@ function renderResidenceAssignmentChart(chartTheme) {
                 plugins: {
                     legend: { display: false },
                     tooltip: {
+                        backgroundColor: 'rgba(9, 9, 11, 0.96)',
+                        titleColor: chartTheme.title || '#fafafa',
+                        bodyColor: chartTheme.text || '#afafaf',
+                        borderColor: chartTheme.border || '#27272a',
+                        borderWidth: 1,
+                        rtl: true,
+                        textDirection: 'rtl',
                         callbacks: {
                             title: () => def.label,
                             label: context => `${context.label}: ${Number(context.raw).toLocaleString()}`,
@@ -3276,9 +3685,9 @@ function updatePlanList() {
     displayData.forEach(plan => {
         const div = document.createElement('div');
         div.className = 'plan-item' + (selectedPlanId === plan['plan_id'] ? ' active' : '');
-
         const buses = Number(plan['number_of_buses']) || 0;
         const trips = getTripCount(plan, buses);
+        const planType = plan['plan_type_name'] || plan['plan_type_code'] || 'غير معروف';
         const transportType = plan['transport_type_name'] || 'غير معروف';
 
         div.innerHTML = `
@@ -3287,11 +3696,12 @@ function updatePlanList() {
                 <span class="plan-time">${plan['timing_start_at'] || ''} - ${plan['timing_end_at'] || ''}</span>
             </div>
             <div class="plan-details">
-                <div class="plan-stat">🚌 ${plan['number_of_buses']} حافلة</div>
-                <div class="plan-stat">👥 ${getPlannedHajj(plan).toLocaleString()} حاج</div>
+                <div class="plan-stat">🚌 ${plan['number_of_buses']}</div>
+                <div class="plan-stat">🛣️ ${trips.toLocaleString()}</div>
+                <div class="plan-stat plan-type-stat" title="${planType}">📋 ${planType}</div>
+                <div class="plan-stat plan-type-stat transport-type-stat" title="${transportType}">🚐 ${transportType}</div>
+                <div class="plan-stat">👥 ${plan['number_of_haj']}</div>
                 <div class="plan-stat">⏱️ ${plan['period'] || ''}</div>
-                <div class="plan-stat">🛣️ ${trips.toLocaleString()} رحلة</div>
-                <div class="plan-stat plan-stat-transport">🚍 ${transportType}</div>
             </div>
         `;
 

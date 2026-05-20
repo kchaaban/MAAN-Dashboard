@@ -555,57 +555,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-async function loadSecureDataAndStart(token) {
-    const loadingHtml = `
-        <div id="loadingModal">
-            جاري تحميل البيانات الآمنة...
-        </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', loadingHtml);
+function loadSecureDataAndStart(token) {
+    // Wait for CSV_DATA to be defined (data.js is large, might take time)
+    const maxWaitTime = 30000; // 30 seconds
+    const startTime = Date.now();
 
-    try {
-        const filesToLoad = ['data.js', 'assign_camps.js', 'assign_residences.js', 'service_companies.js'];
-        const responses = await Promise.all(filesToLoad.map(async (file) => {
-            const res = await fetch(API_BASE + '/data/' + file, {
-                headers: { 'Authorization': 'Bearer ' + token }
-            });
-
-            if (res.status === 401 || res.status === 403) {
-                localStorage.removeItem('maan_token');
-                window.location.reload();
-                return null;
+    const checkDataAndLoad = () => {
+        console.log('Checking for CSV_DATA...', typeof window.CSV_DATA, Date.now() - startTime + 'ms');
+        if (typeof CSV_DATA !== 'undefined') {
+            console.log('✓ CSV_DATA found, size:', CSV_DATA.length);
+            // Data is loaded, show dashboard and app
+            const container = document.querySelector('.dashboard-container');
+            if (container) {
+                container.style.display = 'flex';
             }
 
-            return { file, code: await res.text() };
-        }));
-
-        for (const entry of responses) {
-            if (!entry) return;
+            // Load app.js
+            const appScript = document.createElement('script');
+            appScript.src = 'app.js';
+            appScript.onload = () => {
+                console.log('app.js loaded, calling initializeDashboardApp');
+                // DOMContentLoaded won't fire since page is already loaded
+                // So we call the init function directly
+                if (typeof initializeDashboardApp === 'function') {
+                    initializeDashboardApp();
+                }
+            };
+            appScript.onerror = () => {
+                alert('تعذر تحميل التطبيق. يرجى تحديث الصفحة.');
+            };
+            document.body.appendChild(appScript);
+        } else if (Date.now() - startTime < maxWaitTime) {
+            // Data not ready yet, wait a bit more
+            setTimeout(checkDataAndLoad, 100);
+        } else {
+            // Timeout waiting for data
+            alert('فشل تحميل بيانات التطبيق. يرجى تحديث الصفحة.');
         }
+    };
 
-        for (const { code } of responses) {
-            await new Promise((resolve, reject) => {
-                const blob = new Blob([code], { type: 'application/javascript' });
-                const script = document.createElement('script');
-                script.src = URL.createObjectURL(blob);
-                script.onload = resolve;
-                script.onerror = reject;
-                document.body.appendChild(script);
-            });
-        }
-
-        const appScript = document.createElement('script');
-        appScript.src = 'app.js';
-        appScript.onload = () => {
-            document.getElementById('loadingModal').remove();
-            const container = document.querySelector('.dashboard-container');
-            if (container) container.style.display = 'flex';
-        };
-        document.body.appendChild(appScript);
-    } catch (err) {
-        console.error('Failed to load secure data:', err);
-        alert('فشل في تحميل البيانات الآمنة. يرجى تسجيل الدخول مرة أخرى.');
-        localStorage.removeItem('maan_token');
-        window.location.reload();
-    }
+    checkDataAndLoad();
 }
