@@ -200,6 +200,64 @@ function calculateCampAssignmentStats(rows) {
     };
 }
 
+// Count unique camps from assign_camps.js for the selected company/service center
+// Includes all camp label formats (numeric like 1/204 and non-numeric like C/206)
+function getCampCountFromAssignCamps() {
+    const { company, owner } = getSelectedCompanyAndOwner();
+    const camps = new Set();
+
+    // Count unique camps from assign_camps data
+    assignCampRows.forEach(row => {
+        const campLabel = row['camp_label'];
+        if (campLabel && String(campLabel).trim()) {
+            const companyName = row['service_company_name'] ?? '';
+            const centerNumber = row['office_number'] ?? '';
+
+            // If no company/center filter selected, count all
+            // Otherwise, only count those matching the filter
+            if (company.size === 0 && owner.size === 0) {
+                // No filter: count all camps (including C/206 and other formats)
+                camps.add(String(campLabel).trim());
+            } else {
+                // Filter applied: only count matching camps
+                if (matchesCompanyOwnerFilters(companyName, centerNumber, company, owner)) {
+                    camps.add(String(campLabel).trim());
+                }
+            }
+        }
+    });
+
+    return camps.size;
+}
+
+// Count unique service centers from assign_camps.js for the selected company/service center
+function getServiceCenterCountFromAssignCamps() {
+    const { company, owner } = getSelectedCompanyAndOwner();
+    const serviceCenters = new Set();
+
+    // Count unique service centers from assign_camps data
+    assignCampRows.forEach(row => {
+        const centerNumber = row['office_number'] ?? row['service_center_number'];
+        if (centerNumber !== undefined && centerNumber !== null && String(centerNumber).trim()) {
+            const companyName = row['service_company_name'] ?? '';
+
+            // If no company/center filter selected, count all
+            // Otherwise, only count those matching the filter
+            if (company.size === 0 && owner.size === 0) {
+                // No filter: count all service centers
+                serviceCenters.add(centerKey(companyName, centerNumber));
+            } else {
+                // Filter applied: only count matching centers
+                if (matchesCompanyOwnerFilters(companyName, centerNumber, company, owner)) {
+                    serviceCenters.add(centerKey(companyName, centerNumber));
+                }
+            }
+        }
+    });
+
+    return serviceCenters.size;
+}
+
 // Calculate assignment statistics from the current filters. For the Tarwiya KPI,
 // the denominator is the Tarwiya movement total: Tarwiya + Taseed Tarwiya
 // (uses company filters if selected, otherwise all companies).
@@ -225,9 +283,12 @@ function getCampAssignmentStats() {
 
     const stats = calculateCampAssignmentStats(filteredRows);
 
+    // Get denominator from assign_camps.js instead of from CSV
+    const assignCampsServiceCenterCount = getServiceCenterCountFromAssignCamps();
+
     return {
         ...stats,
-        serviceCenterCount: stats.serviceCenterCount,
+        serviceCenterCount: assignCampsServiceCenterCount,  // Changed: now from assign_camps.js
         totalPilgrims: calculateKpiTotalPilgrims(totalRows)
     };
 }
@@ -358,7 +419,7 @@ async function handleLoginSubmit(event) {
 
 let dashboardInitialized = false;
 
-function initializeDashboardApp() {
+async function initializeDashboardApp() {
     if (dashboardInitialized) return;
     dashboardInitialized = true;
     initResizablePanels();
@@ -366,12 +427,27 @@ function initializeDashboardApp() {
     initChartViewer();
     initTheme();
     initMap();
+
+    // Restore cached CSV data if available (persistent across page refreshes)
+    try {
+        const cachedData = await getCachedPlansCsv();
+        if (cachedData && cachedData.csvText) {
+            window.CSV_DATA = cachedData.csvText;
+            console.log('Restored cached CSV data from:', cachedData.source || 'unknown');
+            // Store the source to indicate this is not the default data.js
+            window.PLANS_CSV_SOURCE = cachedData.source || 'cached upload';
+        }
+    } catch (error) {
+        console.warn('Could not restore cached CSV data:', error);
+        // Continue with default data.js CSV
+    }
+
     loadData();
     setupEventListeners();
 }
 
 // Initialize Application
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
     document.getElementById('loginForm')?.addEventListener('submit', handleLoginSubmit);
     document.getElementById('logoutBtn')?.addEventListener('click', logout);
@@ -380,7 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const role = getPersistentValue(AUTH_ROLE_STORAGE_KEY);
     if (token) {
         showDashboard(role);
-        initializeDashboardApp();
+        await initializeDashboardApp();
     } else {
         showLoginScreen();
     }
@@ -2082,9 +2158,16 @@ function setupEventListeners() {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
-            reader.onload = (event) => {
+            reader.onload = async (event) => {
                 window.CSV_DATA = event.target.result;
                 console.log('CSV file loaded:', file.name, 'Size:', CSV_DATA.length);
+                // Cache the uploaded CSV for persistence across page refreshes
+                try {
+                    await cachePlansCsv(CSV_DATA, file.name);
+                    console.log('CSV data cached for persistence');
+                } catch (cacheError) {
+                    console.warn('Failed to cache CSV data:', cacheError);
+                }
                 loadData();
             };
             reader.readAsText(file);
@@ -2115,6 +2198,31 @@ function setupEventListeners() {
             topNavActions.appendChild(csvBtn);
         }
         console.log('CSV loader button added');
+
+        // Add Clear Cache button to revert to default data.js
+        const clearCacheBtn = document.createElement('button');
+        clearCacheBtn.id = 'clearCacheBtn';
+        clearCacheBtn.className = 'theme-toggle-btn';
+        clearCacheBtn.type = 'button';
+        clearCacheBtn.title = 'مسح بيانات CSV المحفوظة والعودة للبيانات الافتراضية';
+        clearCacheBtn.setAttribute('aria-label', 'مسح البيانات المحفوظة');
+        clearCacheBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+        clearCacheBtn.style.marginRight = '15px';
+        clearCacheBtn.addEventListener('click', async () => {
+            if (confirm('هل تريد مسح بيانات CSV المحفوظة والعودة للبيانات الافتراضية؟')) {
+                try {
+                    await clearPlansCsvCache();
+                    // Reload page to restore default data.js
+                    window.location.reload();
+                } catch (error) {
+                    alert('فشل مسح البيانات المحفوظة');
+                    console.error('Failed to clear cache:', error);
+                }
+            }
+        });
+        // Insert before CSV button
+        csvBtn.parentNode.insertBefore(clearCacheBtn, csvBtn);
+        console.log('Clear cache button added');
     } else {
         console.log('top-nav-actions not found');
     }
@@ -2516,6 +2624,11 @@ function handleTableSelection(row) {
     if (row.type === 'company') {
         selectedServiceCompanies.clear();
         selectedServiceCompanies.add(row.companyKey);
+        selectedServiceCenters.clear();
+        selectedPlanId = null;
+        selectedEntranceName = null;
+        selectedPathName = null;
+        selectedDistrict = null;
     } else if (row.type === 'center') {
         selectedServiceCenters.clear();
         selectedServiceCenters.add(row.centerKey);
@@ -2866,7 +2979,9 @@ function updateKPIs(stats) {
     // Display camps with numerator/denominator format
     const campElement = document.getElementById('kpiCamps');
     if (campElement) {
-        campElement.textContent = `${totalCamps.toLocaleString()}/${campStats.uniqueCampCount.toLocaleString()}`;
+        // Get denominator from assign_camps.js instead of from CSV
+        const assignCampsCampCount = getCampCountFromAssignCamps();
+        campElement.textContent = `${totalCamps.toLocaleString()}/${assignCampsCampCount.toLocaleString()}`;
         campElement.previousElementSibling.textContent = 'مخيمات (مخطط/إجمالي)';
         campElement.title = `${campStats.totalAssignments} تخصيص`;
     }
