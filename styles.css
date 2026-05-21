@@ -1153,9 +1153,11 @@ body.dark-mode ::-webkit-scrollbar-thumb {
 }
 
 .completion-top-card .progress-ring-item {
-    flex: 1 1 0;
-    min-width: 0;
-    gap: 0.08rem;
+    flex: 0 0 auto;
+    min-width: auto;
+    gap: 0.12rem;
+    display: grid;
+    justify-items: center;
 }
 
 .completion-plan-ring {
@@ -1209,9 +1211,11 @@ body.dark-mode ::-webkit-scrollbar-thumb {
 }
 
 .residence-assignment-ring {
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 0 0 auto;
+    min-width: auto;
     gap: 0.12rem;
+    display: grid;
+    justify-items: center;
 }
 
 .residence-assignment-ring .progress-ring-wrap {
