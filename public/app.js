@@ -201,10 +201,14 @@ function calculateCampAssignmentStats(rows) {
 }
 
 // Calculate assignment statistics from the current filters. For the Tarwiya KPI,
-// the denominator is the Tarwiya movement total: Tarwiya + Taseed Tarwiya.
+// the denominator is the Tarwiya movement total: Tarwiya + Taseed Tarwiya
+// (uses company filters if selected, otherwise all companies).
 function getCampAssignmentStats() {
     const { company, owner } = getSelectedCompanyAndOwner();
-    const rows = planTypeBaseData.filter(row => (
+    const hasCompanySelection = company.size > 0 || owner.size > 0;
+
+    // Filtered rows for assignment stats (apply company/owner filters)
+    const filteredRows = planTypeBaseData.filter(row => (
         isTarwiyaKpiTotalPlanType(row)
         && matchesCompanyOwnerFilters(
             row['owner_company_name'],
@@ -213,12 +217,18 @@ function getCampAssignmentStats() {
             owner
         )
     ));
-    const stats = calculateCampAssignmentStats(rows);
+
+    // Total rows: apply filters if company is selected, otherwise use all
+    const totalRows = hasCompanySelection
+        ? filteredRows  // Use filtered rows if company/center selected
+        : planTypeBaseData.filter(row => isTarwiyaKpiTotalPlanType(row));  // Use all Tarwiya/Taseed if no selection
+
+    const stats = calculateCampAssignmentStats(filteredRows);
 
     return {
         ...stats,
         serviceCenterCount: stats.serviceCenterCount,
-        totalPilgrims: calculateKpiTotalPilgrims(rows)
+        totalPilgrims: calculateKpiTotalPilgrims(totalRows)
     };
 }
 
@@ -973,8 +983,37 @@ function loadAssignCampTotals() {
     assignmentTotalsFromCamps = buildAssignmentTotalsFromCampRows(assignCampRows);
 }
 
+function normalizeResidenceAssignmentRows(rows) {
+    return rows.map(row => ({
+        licenseNumber: String(row['License Number'] || row['license_number'] || '').trim(),
+        residenceName: String(row['Name'] || row['name'] || '').trim(),
+        pilgrimsCount: toNumber(row['Pilgrims_count'] || row['pilgrims_count']),
+        serviceCompany: String(row['Service_company'] || row['service_company'] || '').trim(),
+        serviceCenterName: String(row['Service_center_name'] || row['service_center_name'] || '').trim(),
+        serviceCenterNumber: String(row['Service_center_number'] || row['service_center_number'] || '').trim(),
+        tarwiyahCount: toNumber(row['Tarwiyah_count'] || row['tarwiyah_count']),
+        taseedCount: toNumber(row['Taseed_count'] || row['taseed_count'])
+    }));
+}
+
+let residenceAssignmentRows = [];
+
+function loadResidenceAssignments() {
+    if (typeof ASSIGN_RESIDENCES_DATA === 'undefined' || !window.Papa) {
+        residenceAssignmentRows = [];
+        return;
+    }
+
+    const parsed = Papa.parse(ASSIGN_RESIDENCES_DATA, {
+        header: true,
+        dynamicTyping: false,
+        skipEmptyLines: true
+    });
+    residenceAssignmentRows = normalizeResidenceAssignmentRows(parsed.data || []);
+    console.info('Loaded residence assignments:', residenceAssignmentRows.length, 'records');
+}
+
 function getAssignmentTotalsForDisplay(totalRows = []) {
-    if (assignCampRows.length) return assignmentTotalsFromCamps;
     return collectAssignmentMetrics(totalRows);
 }
 
@@ -1167,16 +1206,47 @@ function getResidenceAssignmentCoverage() {
 
 function getResidenceAssignmentStats() {
     const { company, owner } = getSelectedCompanyAndOwner();
-    const uniqueResidences = new Set();
+    const plannedResidences = new Set();
+    const totalAssignedResidences = new Set();
 
+    // Count residences from PLANS (residenceAssignmentRecords) for selected company
     residenceAssignmentRecords.forEach(row => {
         if (!matchesCompanyOwnerFilters(row.company, row.centerNumber, company, owner)) return;
-        if (row.residenceKey) uniqueResidences.add(row.residenceKey);
+        if (row.residenceName) {
+            plannedResidences.add(row.residenceName);
+        }
+    });
+
+    // Count residences from ASSIGNMENT DATA (residenceAssignmentRows) for selected company
+    residenceAssignmentRows.forEach(row => {
+        // Apply company/center filters
+        if (company.size && !company.has(companyKey(row.serviceCompany))) return;
+        if (owner.size && !owner.has(centerKey(row.serviceCompany, row.serviceCenterNumber))) return;
+
+        const residenceKey = row.licenseNumber ? `${row.licenseNumber}|${row.residenceName}` : row.residenceName;
+        if (residenceKey) {
+            totalAssignedResidences.add(residenceKey);
+        }
     });
 
     return {
-        totalResidences: uniqueResidences.size
+        totalResidences: plannedResidences.size,
+        totalAssigned: totalAssignedResidences.size
     };
+}
+
+function getTotalResidencesFromRawData() {
+    // Count all unique residences from assignment data
+    const uniqueResidences = new Set();
+
+    residenceAssignmentRows.forEach(row => {
+        const residenceKey = row.licenseNumber ? `${row.licenseNumber}|${row.residenceName}` : row.residenceName;
+        if (residenceKey) {
+            uniqueResidences.add(residenceKey);
+        }
+    });
+
+    return uniqueResidences.size;
 }
 
 function getResidenceMixStats() {
@@ -1266,6 +1336,7 @@ function loadData() {
 
 
     loadAssignCampTotals();
+    loadResidenceAssignments();
 
     const loadId = ++plansCsvLoadSequence;
     parsePlansCsv(CSV_DATA, {
@@ -1891,10 +1962,14 @@ function renderPlanTypeMenu() {
         button.addEventListener('click', () => {
             if (option.value === 'all') {
                 selectedPlanTypes.clear();
-            } else if (selectedPlanTypes.has(option.value)) {
-                selectedPlanTypes.delete(option.value);
             } else {
-                selectedPlanTypes.add(option.value);
+                const isCurrentlySelected = selectedPlanTypes.has(option.value);
+                if (isCurrentlySelected) {
+                    selectedPlanTypes.delete(option.value);
+                } else {
+                    selectedPlanTypes.clear();
+                    selectedPlanTypes.add(option.value);
+                }
             }
             syncPlanTypeSelectValue();
             selectedPlanId = null;
@@ -2223,17 +2298,35 @@ function collectAssignmentMetrics(rows = null) {
         const company = sourceRows ? row['owner_company_name'] : row.company;
         const centerNumber = sourceRows ? row['owner_office_number'] : row.centerNumber;
         const serviceCenterName = sourceRows ? getPlanServiceCenterName(row) : row.serviceCenterName;
-        const residenceKey = sourceRows ? getPlanResidenceKey(row) : row.residenceKey;
+        const residenceName = sourceRows ? getResidenceNameFromPlan(row) : row.residenceName;
         const companyEntry = ensureCompanyMetricsEntry(companyMetrics, company);
         const centerEntry = ensureCenterMetricsEntry(centerMetrics, company, centerNumber, serviceCenterName);
 
-        if (residenceKey) {
-            companyEntry.totalResidenceKeys.add(residenceKey);
-            centerEntry.totalResidenceKeys.add(residenceKey);
+        if (residenceName) {
+            companyEntry.totalResidenceKeys.add(residenceName);
+            centerEntry.totalResidenceKeys.add(residenceName);
         }
     };
 
     (sourceRows || residenceAssignmentRecords).forEach(addResidenceAssignment);
+
+    // Also process residence assignment data from CSV
+    if (!sourceRows && residenceAssignmentRows.length > 0) {
+        residenceAssignmentRows.forEach(row => {
+            const company = row.serviceCompany;
+            const centerNumber = row.serviceCenterNumber;
+            const serviceCenterName = row.serviceCenterName;
+            const residenceKey = row.licenseNumber ? `${row.licenseNumber}|${row.residenceName}` : row.residenceName;
+
+            const companyEntry = ensureCompanyMetricsEntry(companyMetrics, company);
+            const centerEntry = ensureCenterMetricsEntry(centerMetrics, company, centerNumber, serviceCenterName);
+
+            if (residenceKey) {
+                companyEntry.totalResidenceKeys.add(residenceKey);
+                centerEntry.totalResidenceKeys.add(residenceKey);
+            }
+        });
+    }
 
     return { companyMetrics, centerMetrics };
 }
@@ -2255,34 +2348,16 @@ function isTarwiyaKpiTotalPlanType(row) {
     const code = String(row['plan_type_code'] || '').trim();
     const name = String(row['plan_type_name'] || '').trim();
     return code === 'tarwia'
-        || code === 'taseed_tarwia'
+        || code === 'direct_taseed'
         || name === 'تروية'
-        || name === 'تصعيد تروية';
+        || name === 'تصعيد مباشر';
 }
 
 function calculateKpiTotalPilgrims(rows) {
-    if (assignCampRows.length) {
-        const { company, owner } = getSelectedCompanyAndOwner();
-        // Deduplicate by service company + office number
-        const deduped = new Map();
-        assignCampRows
-            .filter(row => matchesCompanyOwnerFilters(row.service_company_name, row.office_number, company, owner))
-            .forEach(row => {
-                const key = `${row.service_company_name || ''}|${row.office_number || ''}`;
-                // Keep the maximum value for each unique company/office combination
-                const currentValue = deduped.get(key) || 0;
-                deduped.set(key, Math.max(currentValue, toNumber(row.number_of_piligrim)));
-            });
-        return Array.from(deduped.values()).reduce((sum, val) => sum + val, 0);
-    }
-
     return rows.reduce((sum, row) => sum + toNumber(row['number_of_haj']), 0);
 }
 
 function getServiceCompanyPilgrimTotals(rows) {
-    const totalsFromCamps = getAssignmentTotalsForDisplay(rows).companyMetrics;
-    if (assignCampRows.length) return totalsFromCamps;
-
     const totals = new Map();
 
     rows.forEach(row => {
@@ -2439,17 +2514,11 @@ function isEntityRowSelected(item, type = item.type) {
 
 function handleTableSelection(row) {
     if (row.type === 'company') {
-        if (selectedServiceCompanies.has(row.companyKey)) {
-            selectedServiceCompanies.delete(row.companyKey);
-        } else {
-            selectedServiceCompanies.add(row.companyKey);
-        }
+        selectedServiceCompanies.clear();
+        selectedServiceCompanies.add(row.companyKey);
     } else if (row.type === 'center') {
-        if (selectedServiceCenters.has(row.centerKey)) {
-            selectedServiceCenters.delete(row.centerKey);
-        } else {
-            selectedServiceCenters.add(row.centerKey);
-        }
+        selectedServiceCenters.clear();
+        selectedServiceCenters.add(row.centerKey);
     }
 
     applyFilters();
@@ -2580,8 +2649,8 @@ function renderSummaryTable(tableBodyId, rows, type) {
 }
 
 function renderServiceSummaryTables() {
-    renderSummaryTable('serviceCompaniesTableBody', buildServiceCompanyRows(contextFilteredData, planTypeBaseData), 'company');
-    renderSummaryTable('serviceCentersTableBody', buildServiceCenterRows(contextFilteredData, planTypeBaseData), 'center');
+    renderSummaryTable('serviceCompaniesTableBody', buildServiceCompanyRows(filteredData, planTypeBaseData), 'company');
+    renderSummaryTable('serviceCentersTableBody', buildServiceCenterRows(filteredData, planTypeBaseData), 'center');
 }
 
 function getSelectedServiceCompanyName() {
@@ -2767,10 +2836,10 @@ function updateKPIs(stats) {
     const totalPlans = filteredData.length;
     const totalTrips = stats.totalTrips;
     const totalCamps = stats.uniqueCamps.size;
-    const totalResidences = stats.uniqueResidences.size;
     const campStats = stats.campAssignmentStats;
     const plannedServiceCenters = stats.uniqueServiceCenters.size;
     const residenceStats = getResidenceAssignmentStats();
+    const totalResidences = getTotalResidencesFromRawData();
 
     // Animate numbers
     const pilgrimsElement = document.getElementById('kpiPilgrims');
@@ -2789,9 +2858,9 @@ function updateKPIs(stats) {
 
     const residencesElement = document.getElementById('kpiResidences');
     if (residencesElement) {
-        residencesElement.textContent = `${residenceStats.totalResidences.toLocaleString()}/${totalResidences.toLocaleString()}`;
-        residencesElement.previousElementSibling.textContent = 'عدد المساكن (إجمالي/مخطط)';
-        residencesElement.title = 'إجمالي المساكن حسب الفلتر / عدد المساكن من data.js';
+        residencesElement.textContent = `${residenceStats.totalResidences.toLocaleString()}/${residenceStats.totalAssigned.toLocaleString()}`;
+        residencesElement.previousElementSibling.textContent = 'عدد المساكن (مخطط/إجمالي)';
+        residencesElement.title = 'المساكن من الخطط / إجمالي المساكن المخصصة للشركة';
     }
     
     // Display camps with numerator/denominator format
@@ -2882,7 +2951,7 @@ function updateMap() {
                                 fillOpacity: 1,
                                 className: 'residence-circle-marker'
                             }).addTo(routeLayerGroup);
-                            bindPopupToLayer(marker, row);
+                            bindPopupToLayer(marker, row, item);
                             if (showDetailedMapLabels) {
                                 addMapLabel([coord[1], coord[0]], getPointLabel(row, item), 'map-point-label');
                             }
@@ -2895,7 +2964,7 @@ function updateMap() {
                                 opacity: 1,
                                 fillOpacity: 0.9
                             }).addTo(routeLayerGroup);
-                            bindPopupToLayer(marker, row);
+                            bindPopupToLayer(marker, row, item);
                             if (showDetailedMapLabels) {
                                 addMapLabel([coord[1], coord[0]], getPointLabel(row, item), 'map-point-label');
                             }
@@ -2919,7 +2988,7 @@ function updateMap() {
                                 fillOpacity: 1,
                                 className: 'residence-circle-marker'
                             }).addTo(routeLayerGroup);
-                            bindPopupToLayer(marker, row);
+                            bindPopupToLayer(marker, row, item);
                             if (showDetailedMapLabels) {
                                 addMapLabel(center, getPointLabel(row, item), 'map-point-label');
                             }
@@ -2933,7 +3002,7 @@ function updateMap() {
                                 className: 'route-polygon'
                             }).addTo(routeLayerGroup);
 
-                            bindPopupToLayer(polygon, row);
+                            bindPopupToLayer(polygon, row, item);
                             if (showDetailedMapLabels) {
                                 const areaLabel = getAreaLabel(row, item);
                                 if (areaLabel) addMapLabel(centerOfPolygon(latlngs), areaLabel, 'map-line-label', 'center');
@@ -2961,8 +3030,8 @@ function updateMap() {
                             className: 'route-line'
                         }).addTo(routeLayerGroup);
 
-                        bindPopupToLayer(halo, row);
-                        bindPopupToLayer(polyline, row);
+                        bindPopupToLayer(halo, row, item);
+                        bindPopupToLayer(polyline, row, item);
                         if (showDetailedMapLabels) {
                             addDirectionalArrows(latlngs, color);
                             const areaLabel = getAreaLabel(row, item);
@@ -2997,18 +3066,7 @@ function updateMap() {
     updateMapLabelScale();
 }
 
-function bindPopupToLayer(layer, row) {
-    const popupContent = `
-        <div style="padding: 5px; direction: rtl;">
-            <h4 style="margin:0 0 5px 0; color: #3b82f6;">${row['owner_company_name'] || 'شركة غير معروفة'}</h4>
-            <p style="margin:0; font-size: 12px;"><strong>الحافلات:</strong> ${row['number_of_buses']}</p>
-            <p style="margin:0; font-size: 12px;"><strong>الحجاج:</strong> ${row['number_of_haj']}</p>
-            <p style="margin:0; font-size: 12px;"><strong>من:</strong> ${row['start_point_name'] || 'غير متوفر'}</p>
-            <p style="margin:0; font-size: 12px;"><strong>الوقت:</strong> ${row['timing_start_at']} - ${row['timing_end_at']}</p>
-        </div>
-    `;
-    layer.bindTooltip(popupContent, { direction: 'top', className: 'custom-tooltip' });
-
+function bindPopupToLayer(layer, row, item = null) {
     layer.on('click', function (e) {
         L.DomEvent.stopPropagation(e);
         if (selectedPlanId === row['plan_id']) {
@@ -3327,7 +3385,7 @@ function updateCharts(stats = getDashboardStats()) {
                         handleDistrictSelection(label);
                     },
                     labels: {
-                        color: '#fafafa',
+                        color: chartTheme.title,
                         boxWidth: 8,
                         padding: 8,
                         font: { size: 9, family: 'Inter, IBM Plex Sans Arabic, sans-serif', weight: '600' },
@@ -3340,7 +3398,7 @@ function updateCharts(stats = getDashboardStats()) {
                                     return {
                                         text: `${shortLabel} - ${value.toLocaleString()}`,
                                         fillStyle: data.datasets[0].backgroundColor[i],
-                                        fontColor: '#fafafa',
+                                        fontColor: chartTheme.title,
                                         strokeStyle: data.datasets[0].backgroundColor[i],
                                         hidden: isNaN(data.datasets[0].data[i]) || chart.getDatasetMeta(0).data[i].hidden,
                                         index: i
@@ -3449,11 +3507,8 @@ function renderCompletionSummaryChart(stats, chartTheme) {
             const select = document.getElementById('planTypeFilter');
             if (!select) return;
 
-            if (selectedPlanTypes.has(row.label)) {
-                selectedPlanTypes.delete(row.label);
-            } else {
-                selectedPlanTypes.add(row.label);
-            }
+            selectedPlanTypes.clear();
+            selectedPlanTypes.add(row.label);
             syncPlanTypeSelectValue();
             selectedPlanId = null;
             selectedEntranceName = null;
@@ -3702,6 +3757,10 @@ function updatePlanList() {
                 <div class="plan-stat plan-type-stat transport-type-stat" title="${transportType}">🚐 ${transportType}</div>
                 <div class="plan-stat">👥 ${plan['number_of_haj']}</div>
                 <div class="plan-stat">⏱️ ${plan['period'] || ''}</div>
+            </div>
+            <div class="plan-route" style="padding: 8px; font-size: 11px; border-top: 1px solid #243249; margin-top: 8px;">
+                <div style="margin: 4px 0;"><strong>من:</strong> ${plan['start_point_name'] || 'غير متوفر'}</div>
+                <div style="margin: 4px 0;"><strong>إلى:</strong> ${plan['end_point_name'] || 'غير متوفر'}</div>
             </div>
         `;
 

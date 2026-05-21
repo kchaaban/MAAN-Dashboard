@@ -1,4 +1,4 @@
-const ASSIGN_RESIDENCES_DATA = `﻿License Number,Name,Pilgrims_count,Service_company,Service_center_name,Service_center_number,Tarwiyah_count,Taseed_count,,,
+﻿License Number,Name,Pilgrims_count,Service_company,Service_center_name,Service_center_number,Tarwiyah_count,Taseed_count,,,
 10007996,شركة ابراج دانيه الفندقية,2461,عبداللطيف جميل,عبداللطيف جميل - 1,1,2461,0,,,
 10012445,مؤسسة الفنون ابعاد للتجارة,56,إثراء الجود,مركز - 10,10,,,,,
 10011989,وقف اللبان,200,ضيوف البيت,مركز - 24,24,,,,,
@@ -4294,4 +4294,4 @@ const ASSIGN_RESIDENCES_DATA = `﻿License Number,Name,Pilgrims_count,Service_co
 10010286,شركة فندق رويال ماجستك,5,هوليدي ان بكة,مركز - 2,2,,,,,
 10007881,شركة فندق كنوز أجياد,47,هوليدي ان بكة,مركز - 112,112,,,,,
 10012026,شركة مسارات المملكة الدولية المحدودة,89,هوليدي ان بكة,مركز - 1,1,,,,,
-10010871,شركة منازل العين كوما التجارية  قابضة,149,هوليدي ان بكة,مركز - 113,113,,,,,`;
+10010871,شركة منازل العين كوما التجارية  قابضة,149,هوليدي ان بكة,مركز - 113,113,,,,,

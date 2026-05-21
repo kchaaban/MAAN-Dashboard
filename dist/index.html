@@ -11,7 +11,7 @@
     <!-- FontAwesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Custom CSS -->
-  <link rel="stylesheet" crossorigin href="/maan-dashboard/assets/index-C1TMO0f-.css">
+  <link rel="stylesheet" crossorigin href="/maan-dashboard/assets/index-D9xxdg_o.css">
 </head>
 <body class="dark-mode auth-required">
 
@@ -116,6 +116,10 @@
                     <button id="themeToggleBtn" class="theme-toggle-btn" type="button" aria-label="تبديل الوضع الداكن">
                         <i class="fa-solid fa-moon"></i>
                     </button>
+                </div>
+                <div class="header-logos">
+                    <img src="/maan-dashboard/assets/rcmc-logo-BLPbVvlg.jpeg" alt="RCMC Logo" class="header-logo rcmc-logo" title="RCMC">
+                    <img src="/maan-dashboard/assets/gtc-logo-kl-GAAjG.jpeg" alt="GTC Logo" class="header-logo gtc-logo" title="GTC">
                 </div>
                 <div class="user-profile">
                     <div class="avatar">م</div>
@@ -257,8 +261,18 @@
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     
     <!-- Data files -->
-    <script src="data/data.js"></script>
+    <script>
+        // Load CSV data permanently
+        fetch('data/simulation_data_view_v2_202605202249.csv')
+            .then(response => response.text())
+            .then(csvText => {
+                window.CSV_DATA = csvText;
+                console.log('CSV data loaded:', csvText.length, 'characters');
+            })
+            .catch(error => console.error('Error loading CSV:', error));
+    </script>
     <script src="data/assign_camps.js"></script>
+    <script src="data/assign_residences.js"></script>
     <!-- Auth and App Logic -->
     <script src="auth.js"></script>
 </body>

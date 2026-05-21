@@ -1,4 +1,4 @@
-const ASSIGN_CAMPS_DATA = `﻿camp_label,service_company_name,office_number,nationality,service_center_name,piligrim_type,transport_mode,platform_name,number_of_piligrim
+﻿camp_label,service_company_name,office_number,nationality,service_center_name,piligrim_type,transport_mode,platform_name,number_of_piligrim
 6/62,مكارم اجياد مكة,3,باكستان,مركز - 3,حجاج داخل,,منى,521
 6/62,مكارم اجياد مكة,3,باكستان,مركز - 3,حجاج داخل,,عرفات,521
 6/622,ضيوف البيت,62,اندونيسيا,مركز - 62,حجاج داخل,ترددي,منى,3195
@@ -1103,4 +1103,4 @@ T5/527,إثراء الجود,6,متنوع,مركز - 6,حجاج خارج,ترد�
 13/206,الراجحي,108,مصر,مركز - 108,حجاج خارج,,عرفات,3843
 13/25,رواف منى,5,افغانستان,مركز - 5,حجاج خارج,,منى,1819
 13/25,رواف منى,5,افغانستان,مركز - 5,حجاج خارج,,عرفات,1819
-13/406,مشارق الماسية,806,متنوع,مركز - 806,حجاج خارج,ترددي,منى,3532`;
+13/406,مشارق الماسية,806,متنوع,مركز - 806,حجاج خارج,ترددي,منى,3532
