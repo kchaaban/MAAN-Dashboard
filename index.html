@@ -260,17 +260,8 @@
     <!-- Plotly -->
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     
-    <!-- Data files -->
-    <script>
-        // Load CSV data permanently
-        fetch('data/simulation_data_view_v2_202605211538.csv')
-            .then(response => response.text())
-            .then(csvText => {
-                window.CSV_DATA = csvText;
-                console.log('CSV data loaded:', csvText.length, 'characters');
-            })
-            .catch(error => console.error('Error loading CSV:', error));
-    </script>
+    <!-- Data files - loaded synchronously to ensure availability -->
+    <script src="data/data.js"></script>
     <script src="data/assign_camps.js"></script>
     <script src="data/assign_residences.js"></script>
     <!-- Auth and App Logic -->

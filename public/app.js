@@ -1422,6 +1422,22 @@ function loadData() {
 
 }
 
+function loadDataFromUpload(filename) {
+    if (typeof CSV_DATA === 'undefined') {
+        alert("CSV_DATA is not defined.");
+        return;
+    }
+
+    loadAssignCampTotals();
+    loadResidenceAssignments();
+
+    const loadId = ++plansCsvLoadSequence;
+    parsePlansCsv(CSV_DATA, {
+        loadId,
+        source: filename
+    });
+}
+
 function applyPlansRows(rows, source = '') {
     rawData = normalizePlanRows(rows);
     buildDerivedDataSources(rawData);
@@ -1434,6 +1450,10 @@ function applyPlansRows(rows, source = '') {
 
     populateFilters();
     scheduleDashboardUpdate();
+
+    if (source && source !== 'data.js') {
+        showNotification(`✓ تم تحميل البيانات من ${source} (${rawData.length} صف)`, 'success');
+    }
 }
 
 function parsePlansCsv(csvTextOrFile, { loadId = ++plansCsvLoadSequence, source = '' } = {}) {
@@ -1481,6 +1501,30 @@ function normalizePlanRows(rows) {
         set_type_parking: row['set_type_parking'] ?? row['Set parking type'],
         set_parking_name: row['set_parking_name'] ?? row['Set parking']
     }));
+}
+
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? '#10b981' : '#3b82f6'};
+        color: white;
+        padding: 12px 20px;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        font-size: 14px;
+        animation: slideIn 0.3s ease;
+    `;
+    document.body.appendChild(notification);
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
 }
 
 function resetSelections() {
@@ -1549,7 +1593,12 @@ function getRowGeojsons(row) {
 
     if (row['internal_path']) {
         const internalGeojson = parseGeom(row['internal_path']);
-        if (internalGeojson && internalGeojson.coordinates) geojsonsToRender.push({ geojson: internalGeojson, type: 'internal' });
+        if (internalGeojson && internalGeojson.coordinates) {
+            geojsonsToRender.push({ geojson: internalGeojson, type: 'internal' });
+            if (window.DEBUG_PATHS) console.log('Internal path added:', internalGeojson.type, internalGeojson.coordinates.length, 'coords');
+        } else if (window.DEBUG_PATHS) {
+            console.log('Failed to parse internal_path:', row['internal_path']?.substring(0, 50));
+        }
     } else if (targetBaseName && geojsonLookup[targetBaseName]) {
         const feature = geojsonLookup[targetBaseName][row['camp_label']];
         if (feature && feature.geometry) geojsonsToRender.push({ geojson: feature.geometry, type: 'internal' });
@@ -1576,6 +1625,34 @@ function getRowGeojsons(row) {
     if (endGeom) {
         const endGeojson = parseGeom(endGeom);
         if (endGeojson && endGeojson.coordinates) geojsonsToRender.push({ geojson: endGeojson, type: 'end' });
+    }
+
+    // Add parking locations
+    const getParkingGeom = row['get_parking_geom'];
+    const setParkingGeom = row['set_parking_geom'];
+    const isSameParking = getParkingGeom && setParkingGeom && getParkingGeom === setParkingGeom;
+
+    if (getParkingGeom) {
+        const getParkingGeojson = parseGeom(getParkingGeom);
+        if (getParkingGeojson && getParkingGeojson.coordinates) {
+            geojsonsToRender.push({
+                geojson: getParkingGeojson,
+                type: isSameParking ? 'parking_combined' : 'get_parking',
+                label: row['get_parking_name'],
+                isSameParking: isSameParking
+            });
+        }
+    }
+
+    if (setParkingGeom && !isSameParking) {
+        const setParkingGeojson = parseGeom(setParkingGeom);
+        if (setParkingGeojson && setParkingGeojson.coordinates) {
+            geojsonsToRender.push({
+                geojson: setParkingGeojson,
+                type: 'set_parking',
+                label: row['set_parking_name']
+            });
+        }
     }
 
     return geojsonsToRender;
@@ -1607,7 +1684,24 @@ function getPointLabel(row, item) {
     if (item.type === 'start') return String(row['start_point_name'] || '').trim();
     if (item.type === 'end') return String(row['end_point_name'] || '').trim();
     if (item.type === 'entrance') return String(row['entrance_name'] || row['entrance_asm_code'] || '').trim();
-    return '';
+    if (item.type === 'get_parking') {
+        const type = String(row['get_type_parking'] || '').trim();
+        const name = String(row['get_parking_name'] || '').trim();
+        return 'استلام: ' + (type && name ? type + '/' + name : name || type);
+    }
+    if (item.type === 'set_parking') {
+        const type = String(row['set_type_parking'] || '').trim();
+        const name = String(row['set_parking_name'] || '').trim();
+        return 'تسليم: ' + (type && name ? type + '/' + name : name || type);
+    }
+    if (item.type === 'parking_combined') {
+        const getType = String(row['get_type_parking'] || '').trim();
+        const getName = String(row['get_parking_name'] || '').trim();
+        const setType = String(row['set_type_parking'] || '').trim();
+        const getLabel = getType && getName ? getType + '/' + getName : getName || getType;
+        return 'استلام و تسليم: ' + getLabel;
+    }
+    return item.label || '';
 }
 
 function getAreaLabel(row, item) {
@@ -1615,7 +1709,24 @@ function getAreaLabel(row, item) {
     if (item.type === 'entrance') return String(row['entrance_name'] || row['entrance_asm_code'] || '').trim();
     if (item.type === 'end') return String(row['end_point_name'] || '').trim();
     if (item.type === 'start') return String(row['start_point_name'] || '').trim();
-    return '';
+    if (item.type === 'get_parking') {
+        const type = String(row['get_type_parking'] || '').trim();
+        const name = String(row['get_parking_name'] || '').trim();
+        return 'استلام: ' + (type && name ? type + '/' + name : name || type);
+    }
+    if (item.type === 'set_parking') {
+        const type = String(row['set_type_parking'] || '').trim();
+        const name = String(row['set_parking_name'] || '').trim();
+        return 'تسليم: ' + (type && name ? type + '/' + name : name || type);
+    }
+    if (item.type === 'parking_combined') {
+        const getType = String(row['get_type_parking'] || '').trim();
+        const getName = String(row['get_parking_name'] || '').trim();
+        const setType = String(row['set_type_parking'] || '').trim();
+        const getLabel = getType && getName ? getType + '/' + getName : getName || getType;
+        return 'استلام و تسليم: ' + getLabel;
+    }
+    return item.label || '';
 }
 
 function getMidpointLatLng(latlngs) {
@@ -1676,7 +1787,7 @@ function orientLatLngsForRoute(latlngs, row, item) {
     const last = latlngs[latlngs.length - 1];
     const startAnchor = getRowAnchorLatLng(row, 'start');
     const endAnchor = getRowAnchorLatLng(row, 'end');
-    const thresholdMeters = item?.type === 'internal' ? 1 : 6;
+    const thresholdMeters = item?.type === 'internal' ? 10 : 6;
 
     if (startAnchor && endAnchor) {
         const forwardScore = getLatLngDistance(first, startAnchor) + getLatLngDistance(last, endAnchor);
@@ -1999,9 +2110,6 @@ function populateFilters() {
     populateSelect('planTypeFilter', planTypes);
     populateSelect('districtFilter', districts);
     selectedPlanTypes = new Set(Array.from(selectedPlanTypes).filter(type => planTypes.includes(type)));
-    if (!selectedPlanTypes.size && planTypes.includes('تروية')) {
-        selectedPlanTypes.add('تروية');
-    }
     syncPlanTypeSelectValue();
 
     renderPlanTypeMenu();
@@ -2010,7 +2118,11 @@ function populateFilters() {
 function syncPlanTypeSelectValue() {
     const select = document.getElementById('planTypeFilter');
     if (!select) return;
-    select.value = selectedPlanTypes.size === 1 ? Array.from(selectedPlanTypes)[0] : 'all';
+    // Update value without triggering change event
+    const newValue = selectedPlanTypes.size === 1 ? Array.from(selectedPlanTypes)[0] : 'all';
+    if (select.value !== newValue) {
+        select.value = newValue;
+    }
 }
 
 function getActivePlanTypeLabels() {
@@ -2035,18 +2147,25 @@ function renderPlanTypeMenu() {
 
         if (isActive) button.classList.add('active');
 
-        button.addEventListener('click', () => {
+        button.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('Plan type clicked:', option.value, 'Before:', Array.from(selectedPlanTypes));
+
             if (option.value === 'all') {
                 selectedPlanTypes.clear();
             } else {
-                const isCurrentlySelected = selectedPlanTypes.has(option.value);
-                if (isCurrentlySelected) {
+                const wasSelected = selectedPlanTypes.has(option.value);
+                if (wasSelected) {
+                    // Clicking selected = deselect and show all
                     selectedPlanTypes.delete(option.value);
                 } else {
+                    // Clicking unselected = select only this one
                     selectedPlanTypes.clear();
                     selectedPlanTypes.add(option.value);
                 }
             }
+
+            console.log('After:', Array.from(selectedPlanTypes));
             syncPlanTypeSelectValue();
             selectedPlanId = null;
             selectedEntranceName = null;
@@ -2092,9 +2211,8 @@ function setupEventListeners() {
             }
 
             if (id === 'planTypeFilter') {
-                const value = document.getElementById(id).value;
-                selectedPlanTypes = value === 'all' ? new Set() : new Set([value]);
-                updatePlanTypeMenuState();
+                // Skip - plan type selection is now handled by buttons in renderPlanTypeMenu
+                return;
             }
             applyFilters();
         });
@@ -2168,7 +2286,7 @@ function setupEventListeners() {
                 } catch (cacheError) {
                     console.warn('Failed to cache CSV data:', cacheError);
                 }
-                loadData();
+                loadDataFromUpload(file.name);
             };
             reader.readAsText(file);
         }
@@ -2788,11 +2906,27 @@ function updateMapSelectionTitle() {
     const titleEl = document.getElementById('mapSelectionTitle');
     if (!titleEl) return;
 
-    const companyName = getSelectedServiceCompanyName();
-    const centerName = getSelectedServiceCenterName();
-    const text = centerName && companyName
-        ? `${centerName} - ${companyName}`
-        : (centerName || companyName);
+    let text = '';
+
+    // If a specific plan is selected, show plan details
+    if (selectedPlanId) {
+        const planRow = rawData.find(r => r['plan_id'] === selectedPlanId);
+        if (planRow) {
+            const company = String(planRow['owner_company_name'] || '').trim();
+            const center = String(planRow['owner_office_number'] || '').trim();
+            const camp = String(planRow['camp_label'] || '').trim();
+            text = [company, center, camp].filter(Boolean).join(' - ');
+        }
+    }
+
+    // If no plan selected but service center/company selected, show that
+    if (!text) {
+        const companyName = getSelectedServiceCompanyName();
+        const centerName = getSelectedServiceCenterName();
+        text = companyName && centerName
+            ? `${companyName} - ${centerName}`
+            : (companyName || centerName);
+    }
 
     titleEl.textContent = text;
     titleEl.hidden = !text;
@@ -3053,6 +3187,9 @@ function updateMap() {
                     else if (item.type === 'entrance') { color = '#EBC468'; fillColor = '#fcd34d'; }
                     else if (item.type === 'start') { color = '#22c55e'; fillColor = '#86efac'; }
                     else if (item.type === 'end') { color = '#ef4444'; fillColor = '#fca5a5'; }
+                    else if (item.type === 'get_parking') { color = '#f59e0b'; fillColor = '#fcd34d'; }
+                    else if (item.type === 'set_parking') { color = '#ec4899'; fillColor = '#fbcfe8'; }
+                    else if (item.type === 'parking_combined') { color = '#8b5cf6'; fillColor = '#ddd6fe'; }
 
                     if (geojson.type === 'Point') {
                         let coord = geojson.coordinates;
