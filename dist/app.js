@@ -1422,6 +1422,112 @@ function loadData() {
 
 }
 
+const REQUIRED_CSV_COLUMNS = [
+    'plan_id', 'camp_label', 'allocated_haj', 'number_of_buses', 'number_of_haj',
+    'number_of_late_haj', 'number_of_early_haj', 'license_number', 'residence_haj',
+    'tarwia', 'direct_taseed', 'get_type_parking', 'get_parking_name', 'get_parking_geom',
+    'set_type_parking', 'set_parking_name', 'set_parking_geom', 'entrance_asm_code',
+    'entrance_name', 'entrance_polygon', 'entrance_point_geom', 'start_point_name',
+    'start_geom', 'start_point_district', 'start_point_type', 'start_point_geom',
+    'end_point_name', 'end_geom', 'end_point_type', 'end_point_geom', 'path_geom',
+    'path_name', 'internal_path', 'owner_company_name', 'owner_office_number',
+    'period', 'timing_start_at', 'timing_start_at_hijri', 'timing_end_at',
+    'timing_end_at_hijri', 'plan_type_name', 'plan_type_code', 'transport_type_name'
+];
+
+const NUMERIC_COLUMNS = new Set([
+    'allocated_haj', 'number_of_buses', 'number_of_haj',
+    'number_of_late_haj', 'number_of_early_haj', 'license_number', 'residence_haj',
+    'owner_office_number'
+]);
+
+function validateCsvStructure(csvText) {
+    try {
+        const lines = csvText.split('\n').filter(line => line.trim());
+        if (!lines[0]) return { valid: false, error: 'الملف فارغ' };
+
+        // Parse CSV header line properly (handle quoted fields)
+        const headers = [];
+        let current = '';
+        let inQuotes = false;
+        for (let char of lines[0]) {
+            if (char === '"') inQuotes = !inQuotes;
+            else if (char === ',' && !inQuotes) {
+                headers.push(current.trim().replace(/^"(.*)"$/, '$1'));
+                current = '';
+                continue;
+            }
+            current += char;
+        }
+        headers.push(current.trim().replace(/^"(.*)"$/, '$1'));
+
+        // Check if file has minimum 2 lines
+        if (lines.length < 2) {
+            return { valid: false, error: 'الملف يحتوي على رأس الأعمدة فقط بدون بيانات' };
+        }
+
+        // Check column count
+        if (headers.length !== REQUIRED_CSV_COLUMNS.length) {
+            return {
+                valid: false,
+                error: `عدد الأعمدة غير صحيح: وجدت ${headers.length} أعمدة، المتوقع ${REQUIRED_CSV_COLUMNS.length}`
+            };
+        }
+
+        // Check column order
+        const wrongOrderIndex = headers.findIndex((h, i) => h !== REQUIRED_CSV_COLUMNS[i]);
+        if (wrongOrderIndex >= 0) {
+            const expected = REQUIRED_CSV_COLUMNS[wrongOrderIndex];
+            const actual = headers[wrongOrderIndex];
+            return {
+                valid: false,
+                error: `ترتيب الأعمدة غير صحيح. في الموضع ${wrongOrderIndex + 1}: متوقع "${expected}"، وجدت "${actual}"`
+            };
+        }
+
+        // Validate data types for first few rows
+        const dataLines = lines.slice(1, Math.min(6, lines.length));
+        for (let rowIdx = 0; rowIdx < dataLines.length; rowIdx++) {
+            const row = [];
+            let current = '';
+            let inQuotes = false;
+            for (let char of dataLines[rowIdx]) {
+                if (char === '"') inQuotes = !inQuotes;
+                else if (char === ',' && !inQuotes) {
+                    row.push(current.trim().replace(/^"(.*)"$/, '$1'));
+                    current = '';
+                    continue;
+                }
+                current += char;
+            }
+            row.push(current.trim().replace(/^"(.*)"$/, '$1'));
+
+            if (row.length !== headers.length) {
+                return {
+                    valid: false,
+                    error: `الصف ${rowIdx + 2}: عدد الأعمدة (${row.length}) لا يطابق عدد الأعمدة في رأس الجدول (${headers.length})`
+                };
+            }
+
+            // Check numeric columns
+            for (let colIdx = 0; colIdx < headers.length; colIdx++) {
+                const colName = headers[colIdx];
+                const value = row[colIdx];
+                if (NUMERIC_COLUMNS.has(colName) && value && isNaN(value)) {
+                    return {
+                        valid: false,
+                        error: `الصف ${rowIdx + 2}، العمود "${colName}": القيمة "${value}" ليست رقمية`
+                    };
+                }
+            }
+        }
+
+        return { valid: true };
+    } catch (e) {
+        return { valid: false, error: 'خطأ في قراءة الملف: ' + e.message };
+    }
+}
+
 function loadDataFromUpload(filename) {
     if (typeof CSV_DATA === 'undefined') {
         alert("CSV_DATA is not defined.");
@@ -1527,8 +1633,179 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
+let uploadProgressDialog = null;
+function showUploadProgress(filename) {
+    const backdrop = document.createElement('div');
+    backdrop.id = 'uploadProgressBackdrop';
+    backdrop.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.6);
+        z-index: 9998;
+    `;
+
+    const dialog = document.createElement('div');
+    dialog.id = 'uploadProgressDialog';
+    dialog.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #1e1e22;
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 12px;
+        padding: 28px 32px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+        z-index: 9999;
+        min-width: 380px;
+        backdrop-filter: blur(12px);
+    `;
+
+    dialog.innerHTML = `
+        <div style="text-align: center;">
+            <div style="margin-bottom: 20px;">
+                <i class="fa-solid fa-upload" style="font-size: 40px; color: #caab79;"></i>
+            </div>
+            <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #fff;">جاري تحميل الملف</h3>
+            <p style="margin: 0 0 20px 0; font-size: 13px; color: #999; word-break: break-all;">${filename}</p>
+
+            <div style="margin-bottom: 16px;">
+                <div style="
+                    background: rgba(255,255,255,0.05);
+                    border-radius: 8px;
+                    height: 8px;
+                    overflow: hidden;
+                    margin-bottom: 8px;
+                ">
+                    <div id="uploadProgressBar" style="
+                        height: 100%;
+                        width: 0%;
+                        background: linear-gradient(90deg, #caab79, #d4b896);
+                        transition: width 0.3s ease;
+                    "></div>
+                </div>
+                <p id="uploadProgressText" style="margin: 0; font-size: 12px; color: #aaa;">جاري القراءة...</p>
+            </div>
+
+            <div id="uploadSteps" style="text-align: right; margin: 16px 0;">
+                <div id="step1" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 8px; color: #aaa; font-size: 13px;">
+                    <span>جاري قراءة الملف</span>
+                    <i class="fa-solid fa-spinner fa-spin" style="color: #caab79;"></i>
+                </div>
+                <div id="step2" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 8px; color: #aaa; font-size: 13px;">
+                    <span>جاري تحليل البيانات</span>
+                    <i class="fa-solid fa-circle" style="color: #555; font-size: 8px;"></i>
+                </div>
+                <div id="step3" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 8px; color: #aaa; font-size: 13px;">
+                    <span>جاري تحديث لوحة المعلومات</span>
+                    <i class="fa-solid fa-circle" style="color: #555; font-size: 8px;"></i>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(backdrop);
+    document.body.appendChild(dialog);
+    uploadProgressDialog = { backdrop, dialog };
+    return dialog;
+}
+
+function updateUploadProgress(step, percent, message) {
+    if (!uploadProgressDialog) return;
+
+    const bar = document.getElementById('uploadProgressBar');
+    const text = document.getElementById('uploadProgressText');
+    if (bar) bar.style.width = percent + '%';
+    if (text) text.textContent = message;
+
+    if (step) {
+        const steps = ['step1', 'step2', 'step3'];
+        steps.forEach((s, i) => {
+            const el = document.getElementById(s);
+            if (!el) return;
+            const icon = el.querySelector('i');
+            if (i < step) {
+                el.style.color = '#10b981';
+                icon.className = 'fa-solid fa-check';
+                icon.style.color = '#10b981';
+            } else if (i === step) {
+                el.style.color = '#caab79';
+                icon.className = 'fa-solid fa-spinner fa-spin';
+                icon.style.color = '#caab79';
+            } else {
+                el.style.color = '#aaa';
+                icon.className = 'fa-solid fa-circle';
+                icon.style.color = '#555';
+            }
+        });
+    }
+}
+
+function showUploadError(errorMessage) {
+    if (!uploadProgressDialog) return;
+
+    const dialog = uploadProgressDialog.dialog;
+    const backdrop = uploadProgressDialog.backdrop;
+
+    // Clear previous content
+    dialog.innerHTML = `
+        <div style="text-align: center;">
+            <div style="margin-bottom: 20px;">
+                <i class="fa-solid fa-circle-exclamation" style="font-size: 40px; color: #ef4444;"></i>
+            </div>
+            <h3 style="margin: 0 0 12px 0; font-size: 18px; color: #fff;">خطأ في استيراد البيانات</h3>
+            <div style="
+                background: rgba(239, 68, 68, 0.1);
+                border: 1px solid rgba(239, 68, 68, 0.3);
+                border-radius: 8px;
+                padding: 12px 16px;
+                margin: 16px 0;
+                text-align: right;
+            ">
+                <p style="margin: 0; font-size: 13px; color: #fca5a5; line-height: 1.5;">
+                    ${errorMessage}
+                </p>
+            </div>
+            <p style="margin: 0; font-size: 12px; color: #999; margin-top: 16px;">
+                تأكد من أن الملف يحتوي على جميع الأعمدة المطلوبة ومطابق للبنية الصحيحة.
+            </p>
+            <button id="closeErrorBtn" style="
+                margin-top: 20px;
+                padding: 8px 20px;
+                background: #ef4444;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 13px;
+                font-weight: 600;
+            ">إغلاق</button>
+        </div>
+    `;
+
+    document.getElementById('closeErrorBtn')?.addEventListener('click', hideUploadProgress);
+}
+
+function hideUploadProgress() {
+    if (!uploadProgressDialog) return;
+    uploadProgressDialog.backdrop.style.opacity = '0';
+    uploadProgressDialog.dialog.style.opacity = '0';
+    uploadProgressDialog.dialog.style.transform = 'translate(-50%, -50%) scale(0.95)';
+    uploadProgressDialog.backdrop.style.transition = 'opacity 0.2s ease';
+    uploadProgressDialog.dialog.style.transition = 'all 0.2s ease';
+    setTimeout(() => {
+        uploadProgressDialog.backdrop?.remove();
+        uploadProgressDialog.dialog?.remove();
+        uploadProgressDialog = null;
+    }, 200);
+}
+
 function resetSelections() {
     selectedPlanId = null;
+    selectedTripServiceCenter = null;
     selectedEntranceName = null;
     selectedPathName = null;
     selectedDistrict = null;
@@ -2276,18 +2553,56 @@ function setupEventListeners() {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
+
+            reader.onloadstart = function () {
+                showUploadProgress(file.name);
+                updateUploadProgress(0, 5, 'جاري قراءة الملف...');
+            };
+
+            reader.onprogress = function (event) {
+                if (event.lengthComputable) {
+                    const percentComplete = Math.round((event.loaded / event.total) * 30) + 5;
+                    const sizeMsg = `${(event.loaded / 1024 / 1024).toFixed(1)} MB / ${(event.total / 1024 / 1024).toFixed(1)} MB`;
+                    updateUploadProgress(0, percentComplete, sizeMsg);
+                }
+            };
+
             reader.onload = async (event) => {
+                updateUploadProgress(0, 35, 'انتظر...');
                 window.CSV_DATA = event.target.result;
                 console.log('CSV file loaded:', file.name, 'Size:', CSV_DATA.length);
-                // Cache the uploaded CSV for persistence across page refreshes
+
+                updateUploadProgress(1, 50, 'جاري التحقق من بنية البيانات...');
+
+                // Validate CSV structure
+                const validation = validateCsvStructure(CSV_DATA);
+                if (!validation.valid) {
+                    console.warn('CSV validation error:', validation.error);
+                    showUploadError(validation.error);
+                    return;
+                }
+
                 try {
                     await cachePlansCsv(CSV_DATA, file.name);
                     console.log('CSV data cached for persistence');
                 } catch (cacheError) {
                     console.warn('Failed to cache CSV data:', cacheError);
                 }
-                loadDataFromUpload(file.name);
+
+                updateUploadProgress(2, 75, 'جاري تحديث لوحة المعلومات...');
+                setTimeout(() => {
+                    loadDataFromUpload(file.name);
+                    updateUploadProgress(3, 100, 'تم التحميل بنجاح!');
+                    setTimeout(() => hideUploadProgress(), 500);
+                }, 100);
             };
+
+            reader.onerror = function () {
+                hideUploadProgress();
+                showNotification('خطأ في قراءة الملف', 'error');
+                console.error('File read error:', reader.error);
+            };
+
             reader.readAsText(file);
         }
     });
@@ -2908,8 +3223,12 @@ function updateMapSelectionTitle() {
 
     let text = '';
 
-    // If a specific plan is selected, show plan details
-    if (selectedPlanId) {
+    // Priority 1: If a trip service center is selected, show it
+    if (selectedTripServiceCenter) {
+        text = `${selectedTripServiceCenter.company} / ${selectedTripServiceCenter.centerNumber}`;
+    }
+    // Priority 2: If a specific plan is selected, show plan details
+    else if (selectedPlanId) {
         const planRow = rawData.find(r => r['plan_id'] === selectedPlanId);
         if (planRow) {
             const company = String(planRow['owner_company_name'] || '').trim();
@@ -2918,8 +3237,7 @@ function updateMapSelectionTitle() {
             text = [company, center, camp].filter(Boolean).join(' - ');
         }
     }
-
-    // If no plan selected but service center/company selected, show that
+    // Priority 3: If no plan selected but service center/company selected, show that
     if (!text) {
         const companyName = getSelectedServiceCompanyName();
         const centerName = getSelectedServiceCenterName();
@@ -3982,6 +4300,8 @@ function renderResidenceAssignmentChart(chartTheme) {
     });
 }
 
+let selectedTripServiceCenter = null;
+
 function updatePlanList() {
     const listEl = document.getElementById('planList');
     const fragment = document.createDocumentFragment();
@@ -3996,10 +4316,12 @@ function updatePlanList() {
         const trips = getTripCount(plan, buses);
         const planType = plan['plan_type_name'] || plan['plan_type_code'] || 'غير معروف';
         const transportType = plan['transport_type_name'] || 'غير معروف';
+        const company = plan['owner_company_name'] || 'غير معروف';
+        const centerNum = plan['owner_office_number'] || '';
 
         div.innerHTML = `
             <div class="plan-header">
-                <span class="plan-company">${plan['owner_company_name'] || 'غير معروف'}</span>
+                <span class="plan-company">${company}</span>
                 <span class="plan-time">${plan['timing_start_at'] || ''} - ${plan['timing_end_at'] || ''}</span>
             </div>
             <div class="plan-details">
@@ -4014,12 +4336,58 @@ function updatePlanList() {
                 <div style="margin: 4px 0;"><strong>من:</strong> ${plan['start_point_name'] || 'غير متوفر'}</div>
                 <div style="margin: 4px 0;"><strong>إلى:</strong> ${plan['end_point_name'] || 'غير متوفر'}</div>
             </div>
+            ${centerNum ? `
+            <div style="padding: 8px; border-top: 1px solid #243249; margin-top: 8px;">
+                <button class="plan-service-center-btn" data-company="${company}" data-center="${centerNum}" style="
+                    width: 100%;
+                    padding: 6px 10px;
+                    background: linear-gradient(135deg, rgba(202,171,121,0.15), rgba(202,171,121,0.08));
+                    border: 1px solid rgba(202,171,121,0.2);
+                    border-radius: 6px;
+                    color: #caab79;
+                    font-size: 12px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                ">
+                    📍 مركز الخدمة: ${company} / ${centerNum}
+                </button>
+            </div>
+            ` : ''}
         `;
 
-        div.addEventListener('click', () => {
+        div.addEventListener('click', (e) => {
+            if (e.target.classList.contains('plan-service-center-btn')) {
+                e.stopPropagation();
+                return;
+            }
             selectedPlanId = (selectedPlanId === plan['plan_id']) ? null : plan['plan_id'];
+            selectedTripServiceCenter = null;
             applyFilters();
         });
+
+        const centerBtn = div.querySelector('.plan-service-center-btn');
+        if (centerBtn) {
+            centerBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectedTripServiceCenter = {
+                    company: centerBtn.dataset.company,
+                    centerNumber: centerBtn.dataset.center
+                };
+                selectedPlanId = null;
+                applyFilters();
+            });
+
+            centerBtn.addEventListener('mouseover', () => {
+                centerBtn.style.background = 'linear-gradient(135deg, rgba(202,171,121,0.25), rgba(202,171,121,0.15))';
+                centerBtn.style.borderColor = 'rgba(202,171,121,0.4)';
+            });
+
+            centerBtn.addEventListener('mouseout', () => {
+                centerBtn.style.background = 'linear-gradient(135deg, rgba(202,171,121,0.15), rgba(202,171,121,0.08))';
+                centerBtn.style.borderColor = 'rgba(202,171,121,0.2)';
+            });
+        }
 
         fragment.appendChild(div);
     });

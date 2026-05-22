@@ -2761,3 +2761,37 @@ body.light-mode .residence-assignment-ring .progress-ring-wrap span {
         opacity: 0;
     }
 }
+
+/* Upload Progress Dialog */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.fa-spin {
+    animation: spin 1s linear infinite !important;
+}
+
+#uploadProgressDialog {
+    animation: slideInScale 0.3s ease;
+}
+
+#uploadProgressBackdrop {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes slideInScale {
+    from {
+        transform: translate(-50%, -50%) scale(0.85);
+        opacity: 0;
+    }
+    to {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 0.6; }
+}
