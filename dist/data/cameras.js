@@ -1,1106 +1,1178 @@
 const CAMERAS_DATA = [
   {
-    "name": "مدخل موقف حجاج الدول العربية (جنوب عرفات)",
-    "latitude": 21.33455409953836,
-    "longitude": 39.9829338626319,
-    "altitude": 301.8804870537524
-  },
-  {
-    "name": "مدخل عرفات كوبري الجامعة",
-    "latitude": 21.32944166666667,
-    "longitude": 39.96859166666667,
-    "altitude": 303.1326152529399
-  },
-  {
-    "name": "مدخل عرفات نفق الجامعة",
-    "latitude": 21.33878333333333,
-    "longitude": 39.94774444444444,
-    "altitude": 285.2411937074924
-  },
-  {
-    "name": "مخرج عرفات كوبري الجامعة",
-    "latitude": 21.32951111111111,
-    "longitude": 39.96837222222222,
-    "altitude": 303.0864509935586
-  },
-  {
-    "name": "مسار الجوهرة عرفات مدخل + مخرج 1",
-    "latitude": 21.36062442626719,
-    "longitude": 39.96052150671229,
+    "name": "ARF_ENT_MSH_IN_ARF_BRG_UNIV_01",
+    "latitude": 21.328687,
+    "longitude": 39.9681232,
     "altitude": 0.0
   },
   {
-    "name": "دخول منى دقم الوبر من الدائري الثالث ",
-    "latitude": 21.39262222222222,
-    "longitude": 39.89973055555556,
-    "altitude": 313.3782332884034
-  },
-  {
-    "name": "مخرج عرفات نفق الجامعة",
-    "latitude": 21.33881156070067,
-    "longitude": 39.9476860168475,
-    "altitude": 285.3156205821461
-  },
-  {
-    "name": "مخرج اتجاه مزدلفه واتجاه منى - طريق 62 سوق العرب",
-    "latitude": 21.39731692307023,
-    "longitude": 39.90812851697176,
-    "altitude": 328.794603414535
-  },
-  {
-    "name": "مخرج موقف طريق 26 - الامن العام",
-    "latitude": 21.36463055555556,
-    "longitude": 39.9146,
-    "altitude": 281.7946828860913
-  },
-  {
-    "name": "مدخل موقف طريق 26 أ - الامن العام",
-    "latitude": 21.36249444444445,
-    "longitude": 39.91978611111111,
-    "altitude": 286.7978302567377
-  },
-  {
-    "name": "طريق القصر الملكي 44 (دخول وخروج مزدلفة) (كاميرتين في الاتجاهين)",
-    "latitude": 21.39311237180149,
-    "longitude": 39.90177420203357,
-    "altitude": 310.2875338263587
-  },
-  {
-    "name": "مدخل عرفات عودة الرد الثاني من مزدلفة لطريقي (الجوهرة 56وسوق العرب62)",
-    "latitude": 21.35941328423552,
-    "longitude": 39.96019015526941,
-    "altitude": 301.7329768851519
-  },
-  {
-    "name": "مخرج اتجاه مزدلفه واتجاه منى - طريق 56 الجوهرة",
-    "latitude": 21.39674166666667,
-    "longitude": 39.90626944444444,
-    "altitude": 323.6336106379935
-  },
-  {
-    "name": "مخرج2 اسناد القطار",
-    "latitude": 21.34977782712146,
-    "longitude": 39.95512630177299,
-    "altitude": 293.4482636449638
-  },
-  {
-    "name": "مخرج عرفات طريق الملك عبدالعزيز ",
-    "latitude": 21.35222222222222,
-    "longitude": 39.95303333333334,
-    "altitude": 294.474215437748
-  },
-  {
-    "name": "مدخل عرفات ترددية 3",
-    "latitude": 21.37552000628566,
-    "longitude": 39.96918642897113,
-    "altitude": 315.642629600029
-  },
-  {
-    "name": "مخرج مخزن ترددية 3",
-    "latitude": 21.37949984623072,
-    "longitude": 39.96604516065829,
-    "altitude": 321.742352988242
-  },
-  {
-    "name": "مدخل الدائري الأوسط عرفات",
-    "latitude": 21.33977131241449,
-    "longitude": 39.95935031358695,
-    "altitude": 292.2126854258774
-  },
-  {
-    "name": "مخرج الدائري الأوسط عرفات",
-    "latitude": 21.3397773509403,
-    "longitude": 39.95908183278497,
-    "altitude": 292.2126854258774
-  },
-  {
-    "name": "مدخل منى طريق الملك عبدالله من العزيزية",
-    "latitude": 21.40420409646498,
-    "longitude": 39.88839682338585,
-    "altitude": 307.3689604604722
-  },
-  {
-    "name": "مدخل مخزن ترددية 3",
-    "latitude": 21.38443434518957,
-    "longitude": 39.96313903478504,
-    "altitude": 327.8562873669915
-  },
-  {
-    "name": "مخرج 1 موقف طريق الملك عبدالله 26 - ب",
-    "latitude": 21.34951111111111,
-    "longitude": 39.94776944444444,
-    "altitude": 290.0680721261452
-  },
-  {
-    "name": "مدخل 1 موقف طريق الملك عبدالله 26 - ب",
-    "latitude": 21.34969166666666,
-    "longitude": 39.94641111111111,
-    "altitude": 290.0680721261452
-  },
-  {
-    "name": "مخرج عرفات طريق الملك عبدالله 26",
-    "latitude": 21.34962687300707,
-    "longitude": 39.94879848207981,
+    "name": "ARF_EXT_MSH_OUT_ARF_BRG_UNIV_02",
+    "latitude": 21.328687,
+    "longitude": 39.9681232,
     "altitude": 0.0
   },
   {
-    "name": "مخرج مواقف اسناد القطار",
-    "latitude": 21.34981245147485,
-    "longitude": 39.95506633094236,
-    "altitude": 293.28575309363
-  },
-  {
-    "name": "مدخل عرفات طريق الملك عبدالعزيز",
-    "latitude": 21.35211666666667,
-    "longitude": 39.95290277777778,
-    "altitude": 294.2601106250592
-  },
-  {
-    "name": "مدخل ومخرج عرفات طريق الملك فيصل 1",
-    "latitude": 21.35604631613456,
-    "longitude": 39.95640666463837,
-    "altitude": 294.4773011791772
-  },
-  {
-    "name": "مدخل وعاء الجامعة 2",
-    "latitude": 21.33996707006055,
-    "longitude": 39.95972254626778,
-    "altitude": 292.6057664060291
-  },
-  {
-    "name": "مدخل ومخرج عرفات طريق الملك فيصل 2",
-    "latitude": 21.35598033423675,
-    "longitude": 39.95626846157046,
-    "altitude": 294.4773011791772
-  },
-  {
-    "name": "مخرج  وعاء الجامعة 2",
-    "latitude": 21.33995555555556,
-    "longitude": 39.95943055555556,
-    "altitude": 292.6057664060291
-  },
-  {
-    "name": "مدخل موقف حجاج الدول العربية (جنوب عرفات)",
-    "latitude": 21.3343110952609,
-    "longitude": 39.98094919056024,
-    "altitude": 312.2869867790176
-  },
-  {
-    "name": "مخرج1 وعاء الجامعة 1",
-    "latitude": 21.34328888888889,
-    "longitude": 39.95266388888889,
-    "altitude": 291.5123983221141
-  },
-  {
-    "name": "مخرج3 وعاء الجامعة 1",
-    "latitude": 21.34253332547276,
-    "longitude": 39.9533946511548,
-    "altitude": 291.5123983221141
-  },
-  {
-    "name": "مخرج2 وعاء الجامعة 1",
-    "latitude": 21.34253696984197,
-    "longitude": 39.95343096220085,
-    "altitude": 291.5123983221141
-  },
-  {
-    "name": "مدخل وعاء الجامعة 1",
-    "latitude": 21.34457777777778,
-    "longitude": 39.95164444444445,
-    "altitude": 292.010717222729
-  },
-  {
-    "name": "مدخل موقف اسناد القطار",
-    "latitude": 21.35176925685512,
-    "longitude": 39.95365081972304,
-    "altitude": 293.5623935634165
-  },
-  {
-    "name": "مخرج مزدلفة ترددية 3",
-    "latitude": 21.39838055555555,
-    "longitude": 39.91460277777777,
-    "altitude": 334.3246886275035
-  },
-  {
-    "name": "مدخل منى نفق الجوهرة 56 - غرب الجمرات",
-    "latitude": 21.42553056677588,
-    "longitude": 39.86704573083379,
-    "altitude": 354.0315537353414
-  },
-  {
-    "name": "مدخل منى طريق الملك عبدالعزيز38 - محبس الجن",
-    "latitude": 21.42309166666667,
-    "longitude": 39.86162222222222,
+    "name": "ARF_EXT_MSH_OUT_ARF_BRG_UNIV_01",
+    "latitude": 21.328687,
+    "longitude": 39.9681232,
     "altitude": 0.0
   },
   {
-    "name": "مدخل منى طريق الملك فيصل 50 الساحات الغربية للجمرات ",
-    "latitude": 21.42421365625211,
-    "longitude": 39.86324505554406,
+    "name": "ARF_ENT_MSH_IN_ARF_MDRING_01",
+    "latitude": 21.3396519,
+    "longitude": 39.9595938,
     "altitude": 0.0
   },
   {
-    "name": "مخرج2 موقف حجاج البر",
-    "latitude": 21.32926892847195,
-    "longitude": 39.98774531909277,
-    "altitude": 319.3728533213375
+    "name": "ARF_ENT_MSH_IN_ARF_MDRING_02",
+    "latitude": 21.3396519,
+    "longitude": 39.9595938,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج1 موقف حجاج البر",
-    "latitude": 21.3299201,
-    "longitude": 39.9906346,
-    "altitude": 323.597008981635
+    "name": "ARF_EXT_MSH_OUT_ARF_MDRING_01",
+    "latitude": 21.3398505,
+    "longitude": 39.9592213,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف حجاج البر",
-    "latitude": 21.33008366547709,
-    "longitude": 39.99057891871184,
-    "altitude": 323.597008981635
+    "name": "ARF_EXT_MSH_OUT_ARF_MDRING_02",
+    "latitude": 21.3398505,
+    "longitude": 39.9592213,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج مواقف حجاج البر (عرفات الدائري - جنوب عرفات)",
-    "latitude": 21.33577892714571,
-    "longitude": 39.98940584625002,
-    "altitude": 320.2665796215183
+    "name": "TRN_SUP_PKG_EXT_01",
+    "latitude": 21.3498475,
+    "longitude": 39.9550438,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل مواقف طريق صاد",
-    "latitude": 21.33440010788666,
-    "longitude": 39.99421441171268,
-    "altitude": 334.9310049137791
+    "name": "TRN_SUP_PKG_ENT_01",
+    "latitude": 21.3518107,
+    "longitude": 39.9537171,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج مواقف13",
-    "latitude": 21.33338769595976,
-    "longitude": 39.99575599769663,
-    "altitude": 332.0001506512889
+    "name": "ARF_EXT_MSH_OUT_ARF_K_AZIZ_01",
+    "latitude": 21.3527303,
+    "longitude": 39.9528092,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف الاتصالات",
-    "latitude": 21.3321062,
-    "longitude": 39.9979908,
-    "altitude": 329.5042440424986
+    "name": "ARF_EXT_MSH_OUT_ARF_K_AZIZ_02",
+    "latitude": 21.3527303,
+    "longitude": 39.9528092,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج2 موقف الاتصالات",
-    "latitude": 21.32969337650658,
-    "longitude": 39.99704930813867,
-    "altitude": 321.510605771422
+    "name": "ARF_ENT_MSH_IN_ARF_K_AZIZ_01",
+    "latitude": 21.3527303,
+    "longitude": 39.9528092,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج1 موقف الاتصالات",
-    "latitude": 21.33023464294515,
-    "longitude": 40.00165692167762,
-    "altitude": 332.1431788982967
+    "name": "ARF_ENT_MSH_IN_ARF_K_AZIZ_02",
+    "latitude": 21.3527303,
+    "longitude": 39.9528092,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل2 طريق صاد",
-    "latitude": 21.32950516657965,
-    "longitude": 40.0034167595353,
-    "altitude": 334.8450290603834
+    "name": "ARF_EXT_MSH_OUT_ARF_RD26_01",
+    "latitude": 21.3496158,
+    "longitude": 39.9488915,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل1 طريق صاد",
-    "latitude": 21.32837963697057,
-    "longitude": 40.00548557152466,
-    "altitude": 334.8450290603834
+    "name": "ARF_ENT_MKZ_IN_MKZ_PRK_RD26_01",
+    "latitude": 21.3496726,
+    "longitude": 39.9463544,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف الخطوط السعودية من طريق صاد",
-    "latitude": 21.33315208517094,
-    "longitude": 39.99702099675587,
-    "altitude": 330.1422037330337
+    "name": "ARF_ENT_MSH_IN_ARF_RD26_01",
+    "latitude": 21.3496158,
+    "longitude": 39.9488915,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج19",
-    "latitude": 21.33321611899098,
-    "longitude": 39.99683981130021,
-    "altitude": 330.5239876819085
+    "name": "ARF_EXT_MSH_OUT_ARF_PRK_RD26_01",
+    "latitude": 21.3495046,
+    "longitude": 39.9476741,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل1 موقف الخطوط السعودية",
-    "latitude": 21.33904289700131,
-    "longitude": 39.99504323885284,
-    "altitude": 330.9827665973095
+    "name": "ARF_ENT_MKZ_IN_MKZ_PRK_RD26_02",
+    "latitude": 21.3485178,
+    "longitude": 39.9510631,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل2 موقف الخطوط السعودية",
-    "latitude": 21.33883454948679,
-    "longitude": 39.99497477296084,
-    "altitude": 330.9173214484119
+    "name": "ARF_EXT_MSH_OUT_ARF_PRK_RD26_02",
+    "latitude": 21.3471313,
+    "longitude": 39.9509564,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف الخطوط السعودية",
-    "latitude": 21.34019635320598,
-    "longitude": 39.99591909224414,
-    "altitude": 327.8265965806966
+    "name": "ARF_ENT_MKZ_IN_MKZ_BASIN_UNIV1_01",
+    "latitude": 21.3445376,
+    "longitude": 39.9516689,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف الخطوط السعودية",
-    "latitude": 21.3399550942438,
-    "longitude": 39.99573160754527,
-    "altitude": 327.3196879514301
+    "name": "ARF_EXT_MKZ_OUT_MKZ_BASIN_UNIV1_01",
+    "latitude": 21.3424637,
+    "longitude": 39.9535079,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف حجاج السودان",
-    "latitude": 21.34063663355001,
-    "longitude": 39.99611250752091,
-    "altitude": 327.3174168508422
+    "name": "ARF_EXT_MKZ_OUT_MKZ_BASIN_UNIV1_02",
+    "latitude": 21.3424637,
+    "longitude": 39.9535079,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف حجاج البر الدائري الشرقي",
-    "latitude": 21.34112259440949,
-    "longitude": 39.99641128309067,
-    "altitude": 327.4989379891644
+    "name": "UNIV_WAA_PKG_EXT_01",
+    "latitude": 21.3431876,
+    "longitude": 39.9527421,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف حجاج البر الدائري الشرقي",
-    "latitude": 21.34234786224428,
-    "longitude": 39.99700067286241,
-    "altitude": 332.0504984645254
+    "name": "ARF_ENT_MSH_IN_ARF_TNL_UNIV1_01",
+    "latitude": 21.3394961,
+    "longitude": 39.9483329,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف الكهرباء الدائري الشرقي (700/91)",
-    "latitude": 21.34690483537999,
-    "longitude": 39.99754697719622,
-    "altitude": 332.6192159823482
+    "name": "ARF_ENT_MSH_IN_ARF_TNL_UNIV1_02",
+    "latitude": 21.3394961,
+    "longitude": 39.9483329,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف الكهرباء الدائري الشرقي (700/91)",
-    "latitude": 21.34893925541476,
-    "longitude": 39.99728291009289,
-    "altitude": 334.8733265736171
+    "name": "ARF_EXT_UNIV_TNL_01",
+    "latitude": 21.3394961,
+    "longitude": 39.9483329,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف (700/91)",
-    "latitude": 21.35213196853604,
-    "longitude": 39.99653482929502,
-    "altitude": 334.8733265736171
+    "name": "ARF_EXT_UNIV_TNL_02",
+    "latitude": 21.3394961,
+    "longitude": 39.9483329,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف (700/91)",
-    "latitude": 21.35290546680951,
-    "longitude": 39.99635519859351,
-    "altitude": 334.8733265736171
+    "name": "PKG_ENT_GEN_SEC",
+    "latitude": 21.3632319,
+    "longitude": 39.9200178,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل مواقف المغمس 30",
-    "latitude": 21.37830397596207,
-    "longitude": 39.98990744592357,
-    "altitude": 330.3772932405993
+    "name": "MNA_ENT_DQM_WBR_3RD_RNG_01",
+    "latitude": 21.392672,
+    "longitude": 39.899682,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل عرفات طريق المغمس",
-    "latitude": 21.37937080976885,
-    "longitude": 39.98965156335689,
-    "altitude": 329.1468001152311
+    "name": "MNA_ENT_DQM_WBR_3RD_RNG_02",
+    "latitude": 21.392672,
+    "longitude": 39.899682,
+    "altitude": 0.0
   },
   {
-    "name": "مسار ترددي 2 مخرج عرفات ",
-    "latitude": 21.36796569932305,
-    "longitude": 39.96639113596203,
-    "altitude": 307.7513422199551
+    "name": "MNA_ENT_K_ABD_AZIZIYA_01",
+    "latitude": 21.404397,
+    "longitude": 39.888435,
+    "altitude": 0.0
   },
   {
-    "name": "مسار ترددي 2 دخول عرفات ",
-    "latitude": 21.36775433978843,
-    "longitude": 39.96641212301662,
-    "altitude": 308.0248517644426
+    "name": "MNA_ENT_K_ABD_AZIZIYA_02",
+    "latitude": 21.404397,
+    "longitude": 39.888435,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل 1 مخزن ترددية 2 ",
-    "latitude": 21.38977748880158,
-    "longitude": 39.93914569459326,
-    "altitude": 353.0191070122258
+    "name": "MNA_ENT_MSH_IN_MNA_K_AZIZ_01",
+    "latitude": 21.423251,
+    "longitude": 39.8614743,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج3 مخزن ترددي 2",
-    "latitude": 21.38426101801715,
-    "longitude": 39.94012608730542,
-    "altitude": 338.2982698819771
+    "name": "MNA_ENT_MSH_IN_MNA_K_AZIZ_02",
+    "latitude": 21.423251,
+    "longitude": 39.8614743,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج2 مخزن ترددي 2",
-    "latitude": 21.3813433621532,
-    "longitude": 39.9414122964448,
-    "altitude": 332.6166032441722
+    "name": "ENT_IN_JAM_RD62_02",
+    "latitude": 21.4255734,
+    "longitude": 39.8669671,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج1 مخزن ترددي 2",
-    "latitude": 21.37811330954369,
-    "longitude": 39.94284053840823,
-    "altitude": 327.3021026028981
+    "name": "ENT_IN_JAM_RD62_01",
+    "latitude": 21.4255734,
+    "longitude": 39.8669671,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل 2 مخزن ترددي 2",
-    "latitude": 21.38097013029056,
-    "longitude": 39.9436622124988,
-    "altitude": 333.2787766678229
+    "name": "MNA_ENT_RD62_W_JAM_LFT_TNL_01",
+    "latitude": 21.4255734,
+    "longitude": 39.8669671,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل عرفات مسار ترددي 1 - ب",
-    "latitude": 21.3646742435456,
-    "longitude": 39.96876130728084,
-    "altitude": 308.1428693686965
+    "name": "MNA_ENT_RD62_W_JAM_LFT_TNL_02",
+    "latitude": 21.4255734,
+    "longitude": 39.8669671,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل عرفات مسار ترددي 1 - أ",
-    "latitude": 21.36496106154707,
-    "longitude": 39.97120033059446,
-    "altitude": 308.7421724902682
+    "name": "ARF_ENT_MKZ_IN_MKZ_BASIN_UNIV2_01",
+    "latitude": 21.3399161,
+    "longitude": 39.9596807,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج عرفات مسار ترددي 1",
-    "latitude": 21.36615319358688,
-    "longitude": 39.96759432867184,
-    "altitude": 308.7421724902682
+    "name": "ARF_EXT_MKZ_OUT_MKZ_BASIN_UNIV2_01",
+    "latitude": 21.339920499999998,
+    "longitude": 39.959360499999995,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل2 مخزن ترددية 1",
-    "latitude": 21.36957256873641,
-    "longitude": 39.96062271315631,
-    "altitude": 305.6554337410043
+    "name": "ARF_ENT_EXT_SOQAR_RD_01",
+    "latitude": 21.3622324,
+    "longitude": 39.9605581,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل1 مخزن ترددية 1",
-    "latitude": 21.36976024162114,
-    "longitude": 39.95037284637978,
-    "altitude": 305.6554337410043
+    "name": "ARF_ENT_EXT_SOQAR_RD_02",
+    "latitude": 21.3622324,
+    "longitude": 39.9605581,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج 4مواقف ترددية 1",
-    "latitude": 21.36882255573497,
-    "longitude": 39.95430710889699,
-    "altitude": 305.3328404451862
+    "name": "ARF_ENT_EXT_JWHR1__01",
+    "latitude": 21.361417770385742,
+    "longitude": 39.958953857421875,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج3 مخزن ترددية 1",
-    "latitude": 21.36802768594013,
-    "longitude": 39.95719691001631,
-    "altitude": 302.1796696246427
+    "name": "ARF_ENT_EXT_JWHR1__02",
+    "latitude": 21.361417770385742,
+    "longitude": 39.958953857421875,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج2 مخزن ترددية 1",
-    "latitude": 21.3672579,
-    "longitude": 39.9599702,
-    "altitude": 302.5799886745447
+    "name": "ARF_ENT_MSH_IN_ARF_SOQAR_01",
+    "latitude": 21.3594088,
+    "longitude": 39.9602097,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج1 مخزن ترددية 1",
-    "latitude": 21.36664553462797,
-    "longitude": 39.96297324343458,
-    "altitude": 303.1601584445254
+    "name": "ARF_K_FSL_RD_ENT_EXT_01",
+    "latitude": 21.356321599999998,
+    "longitude": 39.9561475,
+    "altitude": 0.0
   },
   {
-    "name": "مسار الجوهرة عرفات مدخل + مخرج 2",
-    "latitude": 21.36066979662488,
-    "longitude": 39.96061547044661,
-    "altitude": 299.5444154505602
+    "name": "ARF_K_FSL_RD_ENT_EXT_02",
+    "latitude": 21.356321599999998,
+    "longitude": 39.9561475,
+    "altitude": 0.0
   },
   {
-    "name": "طريق عرفات سوق العرب مدخل + مخرج 2",
-    "latitude": 21.36264956408496,
-    "longitude": 39.95929895124097,
-    "altitude": 299.5444154505602
+    "name": "ARF_ENT_EXT_K_FASL_01",
+    "latitude": 21.356321599999998,
+    "longitude": 39.9561475,
+    "altitude": 0.0
   },
   {
-    "name": "طريق عرفات سوق العرب مدخل + مخرج 1",
-    "latitude": 21.36259732785879,
-    "longitude": 39.95942171350089,
-    "altitude": 299.5444154505602
+    "name": "ARF_EXT_TRD3_01",
+    "latitude": 21.3753806,
+    "longitude": 39.9692431,
+    "altitude": 0.0
   },
   {
-    "name": "دخول القصر الملكي 44",
-    "latitude": 21.35568517586863,
-    "longitude": 39.95619295164057,
-    "altitude": 294.9856260978343
+    "name": "ARF_ENT_MKZ_IN_MKZ_MKZ_SHUTL3_01",
+    "latitude": 21.3844829,
+    "longitude": 39.962992899999996,
+    "altitude": 0.0
   },
   {
-    "name": "دخول وخروج عرفات  القصر الملكي طريق 44 \n( كامرتين في الاتجاهين )",
-    "latitude": 21.35573695786173,
-    "longitude": 39.95604078513352,
-    "altitude": 294.634011553247
+    "name": "ARF_EXT_MSH_OUT_ARF_MKZ_SHUTL3_01",
+    "latitude": 21.3794191,
+    "longitude": 39.9662594,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل عرفات طريق الملك عبدالله 26",
-    "latitude": 21.34950149650389,
-    "longitude": 39.94881090734581,
-    "altitude": 293.205657705868
+    "name": "05_MZD_ROD_EXT",
+    "latitude": 21.3983481,
+    "longitude": 39.9146886,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل 2 موقف طريق الملك عبدالله 26 - ب",
-    "latitude": 21.34850464641683,
-    "longitude": 39.95106150231198,
-    "altitude": 292.6901651966585
+    "name": "RNG4_ENT_TRD2_3_01",
+    "latitude": 21.401622,
+    "longitude": 39.91458,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج 2 موقف طريق الملك عبدالله 26 - ب",
-    "latitude": 21.34710804438699,
-    "longitude": 39.95090135730275,
-    "altitude": 292.2053738170448
+    "name": "MZD_ENT_TRD3_01",
+    "latitude": 21.3753806,
+    "longitude": 39.9692431,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج 2 موقف حجاج الداخل عرفات",
-    "latitude": 21.33962374749614,
-    "longitude": 39.96009270705605,
-    "altitude": 292.3361658477038
+    "name": "MZD_EXT_MSH_OUT_MNA_JWHR",
+    "latitude": 21.393,
+    "longitude": 39.911789,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج 1 موقف حجاج الداخل عرفات",
-    "latitude": 21.33956511317511,
-    "longitude": 39.96014355222534,
-    "altitude": 292.9708075101281
+    "name": "MZD_EXT_K_FASL_RD56",
+    "latitude": 21.394035,
+    "longitude": 39.910227,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف حجاج الداخل عرفات",
-    "latitude": 21.33941574172803,
-    "longitude": 39.9600369026077,
-    "altitude": 292.7873626268151
+    "name": "MNA_ENT_JWHR_MNA_MZD_01",
+    "latitude": 21.397089,
+    "longitude": 39.905704,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف إسناد القطار2",
-    "latitude": 21.34985771269385,
-    "longitude": 39.96017036506041,
-    "altitude": 293.7818897312993
+    "name": "MNA_ENT_JWHR_MNA_MZD_02",
+    "latitude": 21.397089,
+    "longitude": 39.905704,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف إسناد القطار2",
-    "latitude": 21.3497118400132,
-    "longitude": 39.96008311512252,
-    "altitude": 294.0139100077971
+    "name": "MNA_ENT_MSH_OUT_MNA_JWHR_MNA_MZD_01",
+    "latitude": 21.397089,
+    "longitude": 39.905704,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 200-83",
-    "latitude": 21.3420573,
-    "longitude": 39.9796083,
-    "altitude": 305.9872431882085
+    "name": "MNA_ENT_MSH_OUT_MNA_JWHR_MNA_MZD_02",
+    "latitude": 21.397089,
+    "longitude": 39.905704,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 200-83",
-    "latitude": 21.3423963,
-    "longitude": 39.9804343,
-    "altitude": 306.4345069561839
+    "name": "MNA_ENT_MSH_OUT_MNA_JWHR_MNA_MZD_03",
+    "latitude": 21.397089,
+    "longitude": 39.905704,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 150-62",
-    "latitude": 21.34811875631945,
-    "longitude": 39.99129054165845,
-    "altitude": 328.5081576121096
+    "name": "MNA_ENT_MSH_OUT_MNA_JWHR_MNA_MZD_04",
+    "latitude": 21.397089,
+    "longitude": 39.905704,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 150-62",
-    "latitude": 21.34711394247677,
-    "longitude": 39.9927665325804,
-    "altitude": 325.7448559624819
+    "name": "MNA_EXT_MSH_OUT_MNA_SOQAR_MNA_MZD_02",
+    "latitude": 21.397389,
+    "longitude": 39.907715,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 100-62",
-    "latitude": 21.3466793,
-    "longitude": 39.9936841,
-    "altitude": 325.2474175059411
+    "name": "MNA_EXT_MSH_OUT_MNA_SOQAR_MNA_MZD_03",
+    "latitude": 21.397389,
+    "longitude": 39.907715,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 100-62",
-    "latitude": 21.3457003,
-    "longitude": 39.9952064,
-    "altitude": 331.1436420768048
+    "name": "MNA_EXT_MSH_OUT_MNA_SOQAR_MNA_MZD_04",
+    "latitude": 21.397389,
+    "longitude": 39.907715,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 100/56",
-    "latitude": 21.34256107344532,
-    "longitude": 39.99168030121552,
-    "altitude": 326.1782319672747
+    "name": "MNA_EXT_MSH_OUT_MNA_SOQAR_MNA_MZD_01",
+    "latitude": 21.397389,
+    "longitude": 39.907715,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 100/56",
-    "latitude": 21.3435162,
-    "longitude": 39.9901977,
-    "altitude": 320.276701901887
+    "name": "MZD_EXT_MSH_OUT_MZD_SOQAR_MZD_MNA_01",
+    "latitude": 21.397389,
+    "longitude": 39.907715,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 300-83",
-    "latitude": 21.3474769,
-    "longitude": 39.9879345,
-    "altitude": 315.0444598919248
+    "name": "MZD_EXT_MSH_OUT_MZD_SOQAR_MZD_MNA_02",
+    "latitude": 21.397389,
+    "longitude": 39.907715,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 300-83",
-    "latitude": 21.3486295,
-    "longitude": 39.9882549,
-    "altitude": 315.3288281445417
+    "name": "MNA_ENT_K_ABD_IN_MUSM_01",
+    "latitude": 21.4302109,
+    "longitude": 39.9038149,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 200-62",
-    "latitude": 21.35672496800636,
-    "longitude": 39.97561795711613,
-    "altitude": 303.0782543891759
+    "name": "MNA_ENT_K_ABD_IN_MUSM_02",
+    "latitude": 21.4302109,
+    "longitude": 39.9038149,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 200-62",
-    "latitude": 21.3558407,
-    "longitude": 39.9771601,
-    "altitude": 302.7873206175357
+    "name": "MNA_EXT_K_ABD_IN_MUSM_01",
+    "latitude": 21.4302109,
+    "longitude": 39.9038149,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 100-420",
-    "latitude": 21.35771345384173,
-    "longitude": 39.97180186582279,
-    "altitude": 299.8437759262184
+    "name": "MNA_EXT_K_ABD_IN_MUSM_02",
+    "latitude": 21.4302109,
+    "longitude": 39.9038149,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 100-420",
-    "latitude": 21.35765480286955,
-    "longitude": 39.97197272875637,
-    "altitude": 304.5586489736762
+    "name": "MNA_EXT_K_ABD_IN_MUSM_03",
+    "latitude": 21.4302109,
+    "longitude": 39.9038149,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 100-420",
-    "latitude": 21.35734502776358,
-    "longitude": 39.97237110970013,
-    "altitude": 304.5586489736762
+    "name": "MNA_EXT_K_ABD_IN_MUSM_04",
+    "latitude": 21.4302109,
+    "longitude": 39.9038149,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 350/56",
-    "latitude": 21.3558031,
-    "longitude": 39.9694909,
-    "altitude": 302.02632448833
+    "name": "MNA_ENT_K_KHALID_TNL_IN_MUSM_TO_AZIZIYA_01",
+    "latitude": 21.4323425,
+    "longitude": 39.898170199999996,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 350/56",
-    "latitude": 21.3551622,
-    "longitude": 39.9705266,
-    "altitude": 301.4927695107086
+    "name": "MNA_ENT_K_KHALID_TNL_IN_MUSM_TO_AZIZIYA_02",
+    "latitude": 21.4323425,
+    "longitude": 39.898170199999996,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 300/56",
-    "latitude": 21.3517216,
-    "longitude": 39.9757279,
-    "altitude": 300.725225197581
+    "name": "MNA_EXT_K_KHALID_TNL_AZIZIYA_TO_MUSM_01",
+    "latitude": 21.4323425,
+    "longitude": 39.898170199999996,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 300/56",
-    "latitude": 21.35032439928451,
-    "longitude": 39.97755595445997,
-    "altitude": 300.8594976042304
+    "name": "MNA_EXT_K_KHALID_TNL_AZIZIYA_TO_MUSM_02",
+    "latitude": 21.4323425,
+    "longitude": 39.898170199999996,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 250/56",
-    "latitude": 21.3506395,
-    "longitude": 39.9780613,
-    "altitude": 301.7857517583034
+    "name": "ENT_204_IN_JAM_RD62_01",
+    "latitude": 21.417631,
+    "longitude": 39.882222,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 250/56",
-    "latitude": 21.3497117,
-    "longitude": 39.9798454,
-    "altitude": 304.5343842325834
+    "name": "ENT_204_IN_JAM_RD62_02",
+    "latitude": 21.417631,
+    "longitude": 39.882222,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 200/56",
-    "latitude": 21.3482911,
-    "longitude": 39.9811532,
-    "altitude": 306.2812094624001
+    "name": "ARF_ENT_RD23_01",
+    "latitude": 21.413358,
+    "longitude": 39.893567,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 200/56",
-    "latitude": 21.3478529,
-    "longitude": 39.981966,
-    "altitude": 306.3625823102027
+    "name": "WST_YARD_ENT_RD50_TNL_01",
+    "latitude": 21.4242629,
+    "longitude": 39.8629183,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 150/56",
-    "latitude": 21.3470569,
-    "longitude": 39.9833887,
-    "altitude": 307.8170181574218
+    "name": "WST_YARD_ENT_RD50_TNL_02",
+    "latitude": 21.4242629,
+    "longitude": 39.8629183,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 150/56",
-    "latitude": 21.345966,
-    "longitude": 39.9850009,
-    "altitude": 310.5381428912051
+    "name": "MZD_ENT_4TH_RNG_RD62_01",
+    "latitude": 21.398147,
+    "longitude": 39.905589,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 250-83",
-    "latitude": 21.3451511,
-    "longitude": 39.9856492,
-    "altitude": 311.6114575707145
+    "name": "MZD_IN_4TH_RNG_RD62",
+    "latitude": 21.3961026,
+    "longitude": 39.9113493,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 250-83",
-    "latitude": 21.3443394,
-    "longitude": 39.9848276,
-    "altitude": 310.5008002420155
+    "name": "ARF_ENT_BIN_DBS_RD62",
+    "latitude": 21.3946002,
+    "longitude": 39.9138759,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 100/52",
-    "latitude": 21.34346640525111,
-    "longitude": 39.97906372702739,
-    "altitude": 334.6719666494749
+    "name": "MNA_MZD_ARF_RD50_ENT_EXT_01",
+    "latitude": 21.3879929,
+    "longitude": 39.909255099999996,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 100/52",
-    "latitude": 21.3444916,
-    "longitude": 39.9771881,
-    "altitude": 302.5794591490147
+    "name": "MNA_MZD_ARF_RD50_ENT_EXT_02",
+    "latitude": 21.3879929,
+    "longitude": 39.909255099999996,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 150/52",
-    "latitude": 21.34489367480843,
-    "longitude": 39.9766461584348,
-    "altitude": 302.5696135187015
+    "name": "MZD_K_FSL_RAMP_ROYAL_PALACE_01",
+    "latitude": 21.388881,
+    "longitude": 39.904344,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 150/52",
-    "latitude": 21.3458503,
-    "longitude": 39.9748431,
-    "altitude": 300.1753040833204
+    "name": "MZD_ENT_EXT_ROYAL_PALACE_RD44_01",
+    "latitude": 21.3891667,
+    "longitude": 39.9042947,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 200/52",
-    "latitude": 21.3476371,
-    "longitude": 39.9721117,
-    "altitude": 297.8643344822902
+    "name": "MZD_ENT_EXT_ROYAL_PALACE_RD44_02",
+    "latitude": 21.3891667,
+    "longitude": 39.9042947,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 200/52",
-    "latitude": 21.3479472,
-    "longitude": 39.971526,
-    "altitude": 297.3054135489206
+    "name": "MZD_EXT_RD38_01",
+    "latitude": 21.386523699999998,
+    "longitude": 39.9037308,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 250/52",
-    "latitude": 21.3482099,
-    "longitude": 39.9710397,
-    "altitude": 297.1296103218141
+    "name": "MZD_EXT_RD38_02",
+    "latitude": 21.386523699999998,
+    "longitude": 39.9037308,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 250/52",
-    "latitude": 21.3486635,
-    "longitude": 39.9702787,
-    "altitude": 297.3679906311675
+    "name": "MZD_ENT_RD38_01",
+    "latitude": 21.386523699999998,
+    "longitude": 39.9037308,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 150/50",
-    "latitude": 21.3443526,
-    "longitude": 39.9717326,
-    "altitude": 298.2688178821954
+    "name": "MZD_ENT_RD38_02",
+    "latitude": 21.386523699999998,
+    "longitude": 39.9037308,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف 100/50",
-    "latitude": 21.33694377519832,
-    "longitude": 39.98224502369337,
-    "altitude": 309.9144482067263
+    "name": "MZD_MBIT_PKG_EXT_RD62_01",
+    "latitude": 21.3844723,
+    "longitude": 39.9242229,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف 100/50",
-    "latitude": 21.3381616,
-    "longitude": 39.9805685,
-    "altitude": 306.6382241570504
+    "name": "MZD_MBIT_PKG_ENT_RD64_01",
+    "latitude": 21.381286,
+    "longitude": 39.9256216,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف طريق 62 مبيت مزدلفة",
-    "latitude": 21.381301,
-    "longitude": 39.9255612,
-    "altitude": 324.9945785619466
+    "name": "TRD1_PKG_EXT_01",
+    "latitude": 21.3688958,
+    "longitude": 39.9542277,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف طريق 26 مبيت مزدلفة",
-    "latitude": 21.37221024732215,
-    "longitude": 39.92457510453663,
-    "altitude": 324.9945785619466
+    "name": "TRD2_PKG_EXT_01",
+    "latitude": 21.36805534362793,
+    "longitude": 39.95726013183594,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف طريق 26 مبيت مزدلفة",
-    "latitude": 21.37742107721666,
-    "longitude": 39.92111749930966,
-    "altitude": 324.9945785619466
+    "name": "MNA_ENT_K_FHD_TNLS_01",
+    "latitude": 21.4299403,
+    "longitude": 39.8636391,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج موقف طريق 62 مبيت مزدلفة",
-    "latitude": 21.3843624,
-    "longitude": 39.924264,
-    "altitude": 330.338045474509
+    "name": "MNA_ENT_K_FHD_TNLS_02",
+    "latitude": 21.4299403,
+    "longitude": 39.8636391,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج  مزدلفة للرد الثاني طريق سوق العرب 62 على جسر بندبيس",
-    "latitude": 21.39450397966573,
-    "longitude": 39.91399895834721,
-    "altitude": 327.2770569886211
+    "name": "MNA_EXT_MSH_01",
+    "latitude": 21.4301167,
+    "longitude": 39.8636505,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج مزدلفة طريق 62 على جسر الملك فيصل",
-    "latitude": 21.3960245,
-    "longitude": 39.9114468,
-    "altitude": 328.8358022552085
+    "name": "MNA_EXT_MSH_02",
+    "latitude": 21.4301167,
+    "longitude": 39.8636505,
+    "altitude": 0.0
   },
   {
-    "name": "دخول منى طريق 62  من الدائري الرابع",
-    "latitude": 21.39814888875976,
-    "longitude": 39.90558927482823,
-    "altitude": 321.1051140002359
+    "name": "TRD_MKZ_EXT_01",
+    "latitude": 21.378058799999998,
+    "longitude": 39.9428917,
+    "altitude": 0.0
   },
   {
-    "name": "عودة الرد الثاني  من مزدلفة مسار طريق 56 التفاف الجبل",
-    "latitude": 21.38522692118735,
-    "longitude": 39.91720774601323,
-    "altitude": 320.3229039012582
+    "name": "TRD2_EXT_02",
+    "latitude": 21.381483,
+    "longitude": 39.9413742,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج مزدلفة طريق 56 على جسر الملك فيصل للدائري الرابع",
-    "latitude": 21.39388940653246,
-    "longitude": 39.91037492974915,
-    "altitude": 324.052169193896
+    "name": "TRD_MKZ_EXT_03",
+    "latitude": 21.3842344,
+    "longitude": 39.9401264,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج  مزدلفة للرد الثاني طريق الجوهرة 56 على جسر بندبيس",
-    "latitude": 21.39290606528373,
-    "longitude": 39.91185125323915,
-    "altitude": 324.052169193896
+    "name": "TRD_MKZ_ENT_01",
+    "latitude": 21.389689,
+    "longitude": 39.9391762,
+    "altitude": 0.0
   },
   {
-    "name": "مسار 56 مزدلفة صعود الدائري الرابع يسار",
-    "latitude": 21.39662369888595,
-    "longitude": 39.90645167579849,
-    "altitude": 323.6681622438935
+    "name": "TRD_MKZ_ENT_02",
+    "latitude": 21.3810216,
+    "longitude": 39.9437638,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف حجاج الداخل",
-    "latitude": 21.32998029263813,
-    "longitude": 39.96881426033111,
-    "altitude": 302.3241663700547
+    "name": "TRD1_MKZ_EXT_01",
+    "latitude": 21.3666727,
+    "longitude": 39.963145399999995,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف حجاج الداخل",
-    "latitude": 21.33270100934698,
-    "longitude": 39.9694614700336,
-    "altitude": 301.9546209009661
+    "name": "TRD1_MKZ_EXT_02",
+    "latitude": 21.3672485,
+    "longitude": 39.9601638,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل مواقف حجاج البر (عرفات الدائري - جنوب عرفات)",
-    "latitude": 21.33522876165879,
-    "longitude": 39.9861716148113,
-    "altitude": 318.7882235665799
+    "name": "TRD_A1_MKZ_ENT_01",
+    "latitude": 21.3697235,
+    "longitude": 39.9501146,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل موقف حجاج السودان",
-    "latitude": 21.34030757071438,
-    "longitude": 39.99597583933352,
-    "altitude": 327.2923066762563
+    "name": "TRD1_MKZ_ENT_02",
+    "latitude": 21.369572,
+    "longitude": 39.960622,
+    "altitude": 0.0
   },
   {
-    "name": " مدخل ترددية 2 مزدلفة",
-    "latitude": 21.39926805980674,
-    "longitude": 39.9137970224343,
-    "altitude": 335.7765699083033
+    "name": "ARF_TRD2_EXT_01",
+    "latitude": 21.3678292,
+    "longitude": 39.966364399999996,
+    "altitude": 0.0
   },
   {
-    "name": " مخرج ترددية 2 مزدلفة",
-    "latitude": 21.39926805980674,
-    "longitude": 39.9137970224343,
-    "altitude": 335.7765699083033
+    "name": "ARF_TRD2_ENT_01",
+    "latitude": 21.3678292,
+    "longitude": 39.966364399999996,
+    "altitude": 0.0
   },
   {
-    "name": " مدخل منى الدائري الرابع ترددري 2,3",
-    "latitude": 21.40157611890474,
-    "longitude": 39.91445696748256,
-    "altitude": 336.2497577938177
+    "name": "ARF_ENT_TRD1_GATE_1B",
+    "latitude": 21.364672,
+    "longitude": 39.968761,
+    "altitude": 0.0
   },
   {
-    "name": "ترددية ١ رود أ خروج",
-    "latitude": 21.40129071024673,
-    "longitude": 39.91057097392471,
-    "altitude": 335.7974686604606
+    "name": "ARF_ENT_TRD1_GATE_1A",
+    "latitude": 21.365014499999997,
+    "longitude": 39.9713791,
+    "altitude": 0.0
   },
   {
-    "name": "ترددية ١ رود أ دخول",
-    "latitude": 21.40129071024673,
-    "longitude": 39.91057097392471,
-    "altitude": 335.7974686604606
+    "name": "PKG_ENT_100_420",
+    "latitude": 21.357653,
+    "longitude": 39.971972,
+    "altitude": 0.0
   },
   {
-    "name": "دخول منى منطقة الظل مسار ترددية 1",
-    "latitude": 21.4041733,
-    "longitude": 39.9023893,
-    "altitude": 347.3585815166786
+    "name": "PKG_ENT_200_RD62",
+    "latitude": 21.3557395,
+    "longitude": 39.9771449,
+    "altitude": 0.0
   },
   {
-    "name": " الربوة مسار ١ دخول",
-    "latitude": 21.4081541,
-    "longitude": 39.8978504,
-    "altitude": 345.4983831656922
+    "name": "PKG_ENT_350_RD56",
+    "latitude": 21.3551522,
+    "longitude": 39.970573099999996,
+    "altitude": 0.0
   },
   {
-    "name": "المسطبة مسار ١ دخول",
-    "latitude": 21.4034097582314,
-    "longitude": 39.90216789696723,
-    "altitude": 328.9007371885269
+    "name": "PKG_ENT_300_RD56",
+    "latitude": 21.3503999,
+    "longitude": 39.977377499999996,
+    "altitude": 0.0
   },
   {
-    "name": "المسطبة مسار ١ خروج",
-    "latitude": 21.4034097582314,
-    "longitude": 39.90216789696723,
-    "altitude": 328.9007371885269
+    "name": "PKG_ENT_250_RD56",
+    "latitude": 21.3498725,
+    "longitude": 39.9799515,
+    "altitude": 0.0
   },
   {
-    "name": "مسار ترددين ١ دخول من المعيصم",
-    "latitude": 21.4093411389595,
-    "longitude": 39.91136051409351,
-    "altitude": 355.0052445486389
+    "name": "PKG_ENT_200_RD56",
+    "latitude": 21.347831799999998,
+    "longitude": 39.9819172,
+    "altitude": 0.0
   },
   {
-    "name": "دخول منى نفق الملك عبدالله من المعيصم",
-    "latitude": 21.43012696685406,
-    "longitude": 39.90367079021334,
-    "altitude": 394.2041278893208
+    "name": "PKG_ENT_150_RD56",
+    "latitude": 21.345454999999998,
+    "longitude": 39.9847469,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج منى نفق الملك عبدالله إتجاه المعيصم",
-    "latitude": 21.42978784083749,
-    "longitude": 39.90386804666947,
-    "altitude": 392.3201229749795
+    "name": "PKG_ENT_300_RD83",
+    "latitude": 21.3474143,
+    "longitude": 39.988154,
+    "altitude": 0.0
   },
   {
-    "name": "دخول منى نفق الملك خالد - المعيصم",
-    "latitude": 21.43240227379569,
-    "longitude": 39.89819242170582,
-    "altitude": 405.3721621137034
+    "name": "PKG_ENT_150_RD62",
+    "latitude": 21.3471007,
+    "longitude": 39.9927479,
+    "altitude": 0.0
   },
   {
-    "name": "خروج منى نفق الملك خالد - المعيصم",
-    "latitude": 21.43231855328724,
-    "longitude": 39.89835601031144,
-    "altitude": 398.3302257516624
+    "name": "PKG_ENT_100_RD62",
+    "latitude": 21.3456582,
+    "longitude": 39.9951827,
+    "altitude": 0.0
   },
   {
-    "name": " خروج  مشعر منى انفاق الملك فهد",
-    "latitude": 21.43011458947249,
-    "longitude": 39.86367081686505,
-    "altitude": 348.7999562802144
+    "name": "ARF_HAJJ_BR_E_RNG_PKG_ENT_01",
+    "latitude": 21.3410472,
+    "longitude": 39.9964444,
+    "altitude": 0.0
   },
   {
-    "name": "دخول مشعر منى انفاق الملك فهد",
-    "latitude": 21.4299599169469,
-    "longitude": 39.8636105521737,
-    "altitude": 360.5478482894346
+    "name": "ARF_HAJJ_BR_E_RNG_PKG_ENT_02",
+    "latitude": 21.3470177,
+    "longitude": 39.9975749,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل منى نفق سوق العرب 62 - غرب الجمرات",
-    "latitude": 21.42555869965129,
-    "longitude": 39.86704473405163,
-    "altitude": 354.0315537353414
+    "name": "ARF_ENT_MUGHAMAS_RD_01",
+    "latitude": 21.3793816,
+    "longitude": 39.9895886,
+    "altitude": 0.0
   },
   {
-    "name": "مسار داخلي لمنى - الملك فهد - دخول  طريق 23",
-    "latitude": 21.41335900277636,
-    "longitude": 39.89356742870436,
-    "altitude": 348.9631482917308
+    "name": "TRD_ZIL_01",
+    "latitude": 21.4042581,
+    "longitude": 39.902386,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل ومخرج المنحنى مع الملك فهد",
-    "latitude": 21.41213151965074,
-    "longitude": 39.90024913906808,
-    "altitude": 344.4547482721717
+    "name": "RBWAH_RD1_ENT_01",
+    "latitude": 21.4082699,
+    "longitude": 39.8978574,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج اتجاه مزدلفه واتجاه منى - طريق 62 سوق العرب",
-    "latitude": 21.39712347654428,
-    "longitude": 39.9081642093394,
-    "altitude": 328.794603414535
+    "name": "K_FHD_CURVE_ENT_01",
+    "latitude": 21.411954299999998,
+    "longitude": 39.9005173,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج اتجاه مزدلفه واتجاه منى - طريق 56 الجوهرة",
-    "latitude": 21.39665863448074,
-    "longitude": 39.90608437982848,
-    "altitude": 323.6336106379935
+    "name": "K_FHD_CURVE_EXT_01",
+    "latitude": 21.411954299999998,
+    "longitude": 39.9005173,
+    "altitude": 0.0
   },
   {
-    "name": "مسار داخلى منى - دخول 204  من طريق 62 أنفاق الجمرات",
-    "latitude": 21.41763078621067,
-    "longitude": 39.88222342749195,
-    "altitude": 362.3297087410968
+    "name": "MNA_RTN2_BIN_DBS_BRG_RD56_TO_RD62_01",
+    "latitude": 21.3906913,
+    "longitude": 39.9110501,
+    "altitude": 0.0
   },
   {
-    "name": "عودة من مزدلفة الرد الثاني من جسر بن دبيس (الجوهرة وسوق العرب)",
-    "latitude": 21.39070271177494,
-    "longitude": 39.9110279869552,
-    "altitude": 319.3796566992057
+    "name": "MNA_RTN2_RD50_JBL_LOOP_01",
+    "latitude": 21.3853942,
+    "longitude": 39.917010399999995,
+    "altitude": 0.0
   },
   {
-    "name": "مسار 50 دخول وخروج من منى الى مزدلفة ومن مزدلفة الى عرفه",
-    "latitude": 21.38813798108081,
-    "longitude": 39.90910219742199,
-    "altitude": 313.687295961759
+    "name": "MZD_RD56_UP_4TH_RNG_LFT_01",
+    "latitude": 21.396656699999998,
+    "longitude": 39.9064445,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج مزدلفة طريق الملك فيصل 50 صعود الجسر للدائري الرابع ",
-    "latitude": 21.38970296100896,
-    "longitude": 39.9070531817986,
-    "altitude": 312.5846084919389
+    "name": "MSTBA_RD1_EXT_01",
+    "latitude": 21.403481799999998,
+    "longitude": 39.902174099999996,
+    "altitude": 0.0
   },
   {
-    "name": "خروج مزدلفة طريق القصر الملكي صعود جسر الملك فيصل ",
-    "latitude": 21.38897977380875,
-    "longitude": 39.90453316964152,
-    "altitude": 310.6157691601404
+    "name": "MSTBA_RD1_ENT_01",
+    "latitude": 21.403481799999998,
+    "longitude": 39.902174099999996,
+    "altitude": 0.0
   },
   {
-    "name": "مدخل ومخرج مزدلفة (من/إلى منى) طريق 44 القصر الملكي",
-    "latitude": 21.3888817218459,
-    "longitude": 39.90434593735597,
-    "altitude": 310.2875338263587
+    "name": "TRD1_ROAD_A_ENT_01",
+    "latitude": 21.4013788,
+    "longitude": 39.9104615,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج مزدلفة طريق الملك عبدالعزيز على جسر الملك فيصل",
-    "latitude": 21.38664753333521,
-    "longitude": 39.90387073187822,
-    "altitude": 307.8054407909303
+    "name": "TRD1_ROAD_A_EXT_01",
+    "latitude": 21.4013788,
+    "longitude": 39.9104615,
+    "altitude": 0.0
   },
   {
-    "name": "خروج من مزدلفة إتجاه منى طريق الملك عبدالعزيز",
-    "latitude": 21.38652307453254,
-    "longitude": 39.90379894772014,
-    "altitude": 308.1313681498989
+    "name": "MZD_TRD2_ENT_01",
+    "latitude": 21.3994322,
+    "longitude": 39.913677799999995,
+    "altitude": 0.0
   },
   {
-    "name": "خروج من مزدلفة إتجاه منى طريق الملك عبدالعزيز",
-    "latitude": 21.39081711172976,
-    "longitude": 39.90178757983855,
-    "altitude": 308.1313681498989
+    "name": "MZD_TRD2_EXT_01",
+    "latitude": 21.3994322,
+    "longitude": 39.913677799999995,
+    "altitude": 0.0
   },
   {
-    "name": "خروج من مزدلفة الملك عبدالعزيز الدائري الرابع",
-    "latitude": 21.39073088958605,
-    "longitude": 39.90203473444963,
-    "altitude": 308.1313681498989
+    "name": "TRD1_ENT_FROM_MUSM_01",
+    "latitude": 21.409347699999998,
+    "longitude": 39.9113389,
+    "altitude": 0.0
   },
   {
-    "name": "خروج منى إتجاه مزدلفة طريق الملك عبدالعزيز",
-    "latitude": 21.38639468687744,
-    "longitude": 39.90368498280224,
-    "altitude": 308.1313681498989
+    "name": "MZD_MBIT_PKG_EXT_RD26_01",
+    "latitude": 21.3773888,
+    "longitude": 39.9213066,
+    "altitude": 0.0
   },
   {
-    "name": "خروج من طريق الملك عبدالله في اتجاه العزيزية",
-    "latitude": 21.40421536774189,
-    "longitude": 39.88834510128447,
-    "altitude": 307.8643986352999
+    "name": "MZD_MBIT_PKG_ENT_RD26_01",
+    "latitude": 21.372098299999998,
+    "longitude": 39.9245618,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج منى الملك خالد - العزيزية",
-    "latitude": 21.4073464745735,
-    "longitude": 39.87678203500048,
-    "altitude": 324.1949454297794
+    "name": "PKG_ENT_100_RD52",
+    "latitude": 21.344559399999998,
+    "longitude": 39.9770815,
+    "altitude": 0.0
   },
   {
-    "name": "مخرج منى الملك خالد - العزيزية",
-    "latitude": 21.40723272571866,
-    "longitude": 39.87686355025271,
-    "altitude": 324.0868796520793
+    "name": "PKG_ENT_150_RD52",
+    "latitude": 21.3459319,
+    "longitude": 39.974820099999995,
+    "altitude": 0.0
   },
   {
-    "name": "(170)كاميرات الدائري الرابع نقطة استبقاية فرز",
-    "latitude": 21.36398141973149,
-    "longitude": 39.88562914380781,
-    "altitude": 266.618785765762
+    "name": "PKG_ENT_200_RD52",
+    "latitude": 21.3478721,
+    "longitude": 39.9715488,
+    "altitude": 0.0
+  },
+  {
+    "name": "PKG_ENT_250_RD52",
+    "latitude": 21.3486318,
+    "longitude": 39.9703428,
+    "altitude": 0.0
+  },
+  {
+    "name": "PKG_ENT_200_RD83",
+    "latitude": 21.3437837,
+    "longitude": 39.9855362,
+    "altitude": 0.0
+  },
+  {
+    "name": "ARF_TELECOM_PKG_ENT_01",
+    "latitude": 21.3318635,
+    "longitude": 39.9981911,
+    "altitude": 0.0
+  },
+  {
+    "name": "ARF_SAD_RD_MSH_PKG_ENT_02",
+    "latitude": 21.329667,
+    "longitude": 40.0030852,
+    "altitude": 0.0
+  },
+  {
+    "name": "ARF_SAD_RD_MSH_PKG_ENT_01",
+    "latitude": 21.3285424,
+    "longitude": 40.0053808,
+    "altitude": 0.0
+  },
+  {
+    "name": "ARF_ENT_RD17_01",
+    "latitude": 21.3296596,
+    "longitude": 40.003272599999995,
+    "altitude": 0.0
+  },
+  {
+    "name": "KAZIZ_EXT_MHBS_JIN_01",
+    "latitude": 21.423251,
+    "longitude": 39.8614743,
+    "altitude": 0.0
+  },
+  {
+    "name": "KAZIZ_EXT_MHBS_JIN_02",
+    "latitude": 21.423251,
+    "longitude": 39.8614743,
+    "altitude": 0.0
+  },
+  {
+    "name": "MNA_ENT_K_KHALID_01",
+    "latitude": 21.4072654,
+    "longitude": 39.8769633,
+    "altitude": 0.0
+  },
+  {
+    "name": "MNA_ENT_K_KHALID_02",
+    "latitude": 21.4072654,
+    "longitude": 39.8769633,
+    "altitude": 0.0
+  },
+  {
+    "name": "MNA_EXT_K_KHALID_01",
+    "latitude": 21.4074536,
+    "longitude": 39.8767256,
+    "altitude": 0.0
+  },
+  {
+    "name": "MNA_EXT_K_KHALID_02",
+    "latitude": 21.4074536,
+    "longitude": 39.8767256,
+    "altitude": 0.0
+  },
+  {
+    "name": "MNA_EXT_DQM_WBR_3RD_RNG_01",
+    "latitude": 21.3926719,
+    "longitude": 39.899682299999995,
+    "altitude": 0.0
+  },
+  {
+    "name": "MNA_EXT_DQM_WBR_3RD_RNG_02",
+    "latitude": 21.3926719,
+    "longitude": 39.899682299999995,
+    "altitude": 0.0
+  },
+  {
+    "name": "MZD_EXT_HARAM_RD_TO_4TH_RNG_01",
+    "latitude": 21.3906873,
+    "longitude": 39.9020279,
+    "altitude": 0.0
+  },
+  {
+    "name": "MZD_EXT_TO_MNA_HARAM_RD_01",
+    "latitude": 21.391194,
+    "longitude": 39.9016846,
+    "altitude": 0.0
+  },
+  {
+    "name": "MZD_EXT_TO_MNA_HARAM_RD_02",
+    "latitude": 21.391194,
+    "longitude": 39.9016846,
+    "altitude": 0.0
+  },
+  {
+    "name": "MNA_EXT_K_ABD_TO_AZIZIYA_01",
+    "latitude": 21.4009377,
+    "longitude": 39.8864406,
+    "altitude": 0.0
+  },
+  {
+    "name": "MNA_EXT_K_ABD_TO_AZIZIYA_02",
+    "latitude": 21.4009377,
+    "longitude": 39.8864406,
+    "altitude": 0.0
+  },
+  {
+    "name": "ARF_PKG_ENT_MDRING_RGT_01",
+    "latitude": 21.3395173,
+    "longitude": 39.9598543,
+    "altitude": 0.0
+  },
+  {
+    "name": "ROYAL_PALACE_RD44_ENT_01",
+    "latitude": 21.3568505,
+    "longitude": 39.9555172,
+    "altitude": 0.0
+  },
+  {
+    "name": "ROYAL_PALACE_RD44_ENT_02",
+    "latitude": 21.3568505,
+    "longitude": 39.9555172,
+    "altitude": 0.0
+  },
+  {
+    "name": "ROYAL_PALACE_RD44_EXT_01",
+    "latitude": 21.3568505,
+    "longitude": 39.9555172,
+    "altitude": 0.0
+  },
+  {
+    "name": "ROYAL_PALACE_RD44_EXT_02",
+    "latitude": 21.356857437167264,
+    "longitude": 39.95552485375137,
+    "altitude": 0.0
+  },
+  {
+    "name": "PKG_ENT_SAD_RD_01",
+    "latitude": 21.334604,
+    "longitude": 39.9938547,
+    "altitude": 0.0
+  },
+  {
+    "name": "PKG_ENT_SAD_RD_02",
+    "latitude": 21.334604,
+    "longitude": 39.9938547,
+    "altitude": 0.0
+  },
+  {
+    "name": "PKG_ENT_HAJJ_BR_W_RNG_01",
+    "latitude": 21.335013099999998,
+    "longitude": 39.9862332,
+    "altitude": 0.0
+  },
+  {
+    "name": "PKG_ENT_HAJJ_BR_W_RNG_02",
+    "latitude": 21.335013099999998,
+    "longitude": 39.9862332,
+    "altitude": 0.0
+  },
+  {
+    "name": "PKG_EXT_HAJJ_BR_02",
+    "latitude": 21.3294128,
+    "longitude": 39.9875937,
+    "altitude": 0.0
+  },
+  {
+    "name": "PKG_EXT_HAJJ_BR1",
+    "latitude": 21.3298035,
+    "longitude": 39.9906572,
+    "altitude": 0.0
+  },
+  {
+    "name": "PKG_ENT_HAJJ_BR1",
+    "latitude": 21.3298035,
+    "longitude": 39.9906572,
+    "altitude": 0.0
+  },
+  {
+    "name": "PKG_ENT_SAUDIA_SAD_RD_01",
+    "latitude": 21.3333332,
+    "longitude": 39.9971414,
+    "altitude": 0.0
+  },
+  {
+    "name": "PKG_ENT_SAUDIA_SAD_RD_02",
+    "latitude": 21.3333332,
+    "longitude": 39.9971414,
+    "altitude": 0.0
+  },
+  {
+    "name": "ARF_ENT_24_01",
+    "latitude": 21.3403189,
+    "longitude": 39.995963599999996,
+    "altitude": 0.0
+  },
+  {
+    "name": "ARF_TRAIN_ST1_PKG_ENT_01",
+    "latitude": 21.334305699999998,
+    "longitude": 39.980930099999995,
+    "altitude": 0.0
+  },
+  {
+    "name": "ARF_TRAIN_ST1_PKG_EXT_01",
+    "latitude": 21.3344906,
+    "longitude": 39.9830393,
+    "altitude": 0.0
+  },
+  {
+    "name": "TRN_SUP_PKG_EXT_02",
+    "latitude": 21.349856,
+    "longitude": 39.960169,
+    "altitude": 0.0
+  },
+  {
+    "name": "TRN_SUP_PKG_ENT_02",
+    "latitude": 21.349856,
+    "longitude": 39.960169,
+    "altitude": 0.0
+  },
+  {
+    "name": "ARF_BRG_UNIV_PKG_ENT_01",
+    "latitude": 21.3300003,
+    "longitude": 39.9687998,
+    "altitude": 0.0
+  },
+  {
+    "name": "ARF_BRG_UNIV_PKG_EXT_01",
+    "latitude": 21.3326246,
+    "longitude": 39.969503599999996,
+    "altitude": 0.0
+  },
+  {
+    "name": "PKG_ENT_MUGHAMAS_RD",
+    "latitude": 21.378588,
+    "longitude": 39.9899866,
+    "altitude": 0.0
+  },
+  {
+    "name": "PKG_ENT_20",
+    "latitude": 21.3389658,
+    "longitude": 39.9951535,
+    "altitude": 0.0
+  },
+  {
+    "name": "PKG_EXT_MDRING_RGT",
+    "latitude": 21.3396047,
+    "longitude": 39.9601557,
+    "altitude": 0.0
+  },
+  {
+    "name": "MZD_EXT_HARAM_RD_TO_4TH_RNG_N_01",
+    "latitude": 21.3866986,
+    "longitude": 39.9038066,
+    "altitude": 0.0
+  },
+  {
+    "name": "MNA_EXT_HARAM_RD_TO_MZD_01",
+    "latitude": 21.3883831,
+    "longitude": 39.9023877,
+    "altitude": 0.0
+  },
+  {
+    "name": "MNA_EXT_HARAM_RD_TO_MZD_02",
+    "latitude": 21.3883831,
+    "longitude": 39.9023877,
+    "altitude": 0.0
+  },
+  {
+    "name": "4TH_RNG_PRE_SORT_01",
+    "latitude": 21.3640977,
+    "longitude": 39.885678899999995,
+    "altitude": 0.0
+  },
+  {
+    "name": "4TH_RNG_PRE_SORT_02",
+    "latitude": 21.3640977,
+    "longitude": 39.885678899999995,
+    "altitude": 0.0
   }
 ];

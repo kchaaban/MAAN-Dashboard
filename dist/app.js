@@ -7,6 +7,8 @@ let map;
 let routeLayerGroup;
 let camerasLayerGroup;
 let showCameras = false;
+let campsGatesLayerGroup;
+let showCampsGates = false;
 
 // Performance Caches
 let cachedFilteredGeometries = null;
@@ -2490,7 +2492,9 @@ function initMap() {
     districtsLayerGroup = L.layerGroup().addTo(map);
     routeLayerGroup = L.layerGroup().addTo(map);
     camerasLayerGroup = L.layerGroup().addTo(map);
+    campsGatesLayerGroup = L.layerGroup().addTo(map);
     renderCameras();
+    renderCampsGates();
     updateMapLabelScale();
 
     // Clear selection on map background click
@@ -2826,6 +2830,19 @@ function setupEventListeners() {
         camerasBtn.addEventListener('click', toggleCameras);
         // Insert before CSV button
         csvBtn.parentNode.insertBefore(camerasBtn, csvBtn);
+
+        // Add Camp Gates toggle button
+        const campsGatesBtn = document.createElement('button');
+        campsGatesBtn.id = 'campsGatesToggleBtn';
+        campsGatesBtn.className = 'theme-toggle-btn';
+        campsGatesBtn.type = 'button';
+        campsGatesBtn.title = 'تبديل عرض بوابات المخيمات';
+        campsGatesBtn.setAttribute('aria-label', 'تبديل بوابات المخيمات');
+        campsGatesBtn.innerHTML = '<i class="fa-solid fa-door-open"></i>';
+        campsGatesBtn.style.marginRight = '15px';
+        campsGatesBtn.style.opacity = '0.4';
+        campsGatesBtn.addEventListener('click', toggleCampsGates);
+        csvBtn.parentNode.insertBefore(campsGatesBtn, csvBtn);
         console.log('Cameras toggle button added');
     } else {
         console.log('top-nav-actions not found');
@@ -3517,6 +3534,66 @@ function renderCameras() {
 
 const debouncedRenderCameras = debounce(renderCameras, 300);
 
+function renderCampsGates() {
+    if (!campsGatesLayerGroup) return;
+    campsGatesLayerGroup.clearLayers();
+    if (!showCampsGates || typeof CAMPS_GATES_DATA === 'undefined') return;
+
+    const planGeometries = filteredData.length > 0 ? getFilteredPlanGeometries() : null;
+
+    CAMPS_GATES_DATA.forEach(gate => {
+        if (planGeometries && planGeometries.length > 0) {
+            const point = turf.point([gate.longitude, gate.latitude]);
+            let near = false;
+            for (const geom of planGeometries) {
+                try {
+                    if (turf.booleanPointInPolygon(point, geom)) { near = true; break; }
+                } catch (_e) {
+                    try {
+                        if (turf.distance(point, geom, { units: 'kilometers' }) <= 0.020) { near = true; break; }
+                    } catch (_e2) {}
+                }
+            }
+            if (!near) return;
+        }
+
+        const isARF = gate.source === 'ARF';
+        const color = isARF ? '#f97316' : '#a855f7';
+        const marker = L.marker([gate.latitude, gate.longitude], {
+            icon: L.divIcon({
+                className: 'camp-gate-marker',
+                html: `<i class="fa-solid fa-door-open" style="color:${color};font-size:16px;text-shadow:0 0 3px #000;"></i>`,
+                iconSize: [20, 20],
+                iconAnchor: [10, 10],
+                popupAnchor: [0, -10]
+            })
+        });
+
+        let popupHtml = `<strong style="color:#333;">🚪 مخيم ${gate.camp_label}</strong><br><small>بوابة: ${gate.gate_number}`;
+        if (isARF) {
+            if (gate.type) popupHtml += `<br>النوع: ${gate.type}`;
+            if (gate.transport_mode) popupHtml += `<br>النقل: ${gate.transport_mode}`;
+            if (gate.capacity) popupHtml += `<br>الطاقة: ${gate.capacity}`;
+        } else {
+            if (gate.nationality) popupHtml += `<br>الجنسية: ${gate.nationality}`;
+            if (gate.capacity) popupHtml += `<br>الطاقة: ${gate.capacity}`;
+            if (gate.piligrim_type) popupHtml += `<br>النوع: ${gate.piligrim_type}`;
+        }
+        popupHtml += `<br><em style="color:#888;">${isARF ? 'عرفات' : 'منى'}</em></small>`;
+        marker.bindPopup(popupHtml);
+        marker.addTo(campsGatesLayerGroup);
+    });
+}
+
+const debouncedRenderCampsGates = debounce(renderCampsGates, 300);
+
+function toggleCampsGates() {
+    showCampsGates = !showCampsGates;
+    const btn = document.getElementById('campsGatesToggleBtn');
+    if (btn) btn.style.opacity = showCampsGates ? '1' : '0.4';
+    debouncedRenderCampsGates();
+}
+
 function toggleCameras() {
     showCameras = !showCameras;
     const btn = document.getElementById('camerasToggleBtn');
@@ -3566,6 +3643,7 @@ function updateDashboard() {
     updateMap();
     updateMapSelectionTitle();
     debouncedRenderCameras();
+    debouncedRenderCampsGates();
     updateCharts(stats);
     renderServiceSummaryTables();
     updatePlanList();
@@ -3845,7 +3923,49 @@ function updateMap() {
 
     let selectedDistrictBounds = null;
 
-    // Draw Districts - GeoJSON data removed
+    // Draw Districts - only for residence start-point trips
+    if (typeof DISTRICTS_DATA !== 'undefined' && DISTRICTS_DATA.features) {
+        const residenceRows = mapData.filter(row => row['start_point_type'] === 'residence');
+        if (residenceRows.length > 0) {
+            const { stats: districtStats, maxPilgrims } = buildDistrictMapStats(residenceRows);
+            const activeDistrictKeys = new Set(
+                residenceRows
+                    .map(row => normalizeArabic(row['start_point_district'] || ''))
+                    .filter(Boolean)
+            );
+
+            DISTRICTS_DATA.features.forEach(feature => {
+                const districtName = getDistrictNameFromFeature(feature);
+                if (!districtName) return;
+                const normalizedName = normalizeArabic(districtName);
+                if (!activeDistrictKeys.has(normalizedName)) return;
+
+                const stats = districtStats.get(normalizedName) || { pilgrims: 0, plans: 0 };
+                const style = getDistrictPolygonStyle(districtName, stats, maxPilgrims);
+
+                const geoLayer = L.geoJSON(feature, {
+                    pane: 'districtPane',
+                    style: () => style,
+                    onEachFeature: (_feat, lyr) => {
+                        lyr.bindTooltip(districtName, { sticky: true, className: 'district-tooltip' });
+                        lyr.on('click', function (e) {
+                            L.DomEvent.stopPropagation(e);
+                            if (selectedDistrict && normalizeArabic(selectedDistrict) === normalizedName) {
+                                selectedDistrict = null;
+                            } else {
+                                selectedDistrict = districtName;
+                            }
+                            applyFilters();
+                        });
+                    }
+                }).addTo(districtsLayerGroup);
+
+                if (selectedDistrict && normalizeArabic(selectedDistrict) === normalizedName) {
+                    try { selectedDistrictBounds = geoLayer.getBounds(); } catch (_e) {}
+                }
+            });
+        }
+    }
 
     mapData.forEach(row => {
         try {

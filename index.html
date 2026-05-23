@@ -130,7 +130,10 @@
                 </div>
             </header>
 
-            <section class="plan-type-menu-section rings-summary-section glass" aria-label="اكتمال المراحل والمساكن">
+            <div class="main-body">
+                <div class="main-left-col">
+
+                <section class="plan-type-menu-section rings-summary-section glass" aria-label="اكتمال المراحل والمساكن">
                 <select id="planTypeFilter" class="visually-hidden" aria-label="المرحلة">
                     <option value="all">الكل</option>
                 </select>
@@ -204,9 +207,7 @@
             </div>
 
 
-            <!-- Content Grid -->
-            <div class="content-grid">
-                <!-- Center Map with Floating District Chart - Now DOM 1 (Right visual in RTL) -->
+                <!-- Map -->
                 <div class="card glass map-container-card">
                     <div id="mapStatus" class="map-status" hidden></div>
                     <div id="mapSelectionTitle" class="map-selection-title" hidden></div>
@@ -225,6 +226,8 @@
                         </div>
                     </div>
                 </div>
+
+                </div><!-- /.main-left-col -->
 
                 <div id="rightPanelResizeHandle" class="panel-resize-handle" role="separator" aria-label="تغيير عرض لوحة الرسوم" aria-orientation="vertical" tabindex="0">
                     <button id="chartsPanelToggleBtn" class="panel-collapse-toggle" type="button" aria-label="إخفاء لوحة الرسوم" title="إخفاء لوحة الرسوم">
@@ -270,7 +273,7 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </div><!-- /.main-body -->
         </main>
     </div>
 
@@ -291,6 +294,8 @@
     <script src="data/assign_camps.js"></script>
     <script src="data/assign_residences.js"></script>
     <script src="data/cameras.js"></script>
+    <script src="data/districts.js"></script>
+    <script src="data/camps_gates.js"></script>
     <!-- Auth and App Logic -->
     <script src="auth.js"></script>
 </body>

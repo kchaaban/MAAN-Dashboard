@@ -412,8 +412,7 @@ body.sidebar-panel-collapsed .sidebar {
     display: none;
 }
 
-body.charts-panel-collapsed .content-grid {
-    grid-template-columns: minmax(0, 1fr) 14px 0;
+body.charts-panel-collapsed .main-body {
     gap: 0.35rem;
 }
 
@@ -1161,7 +1160,7 @@ body.dark-mode ::-webkit-scrollbar-thumb {
     align-items: center;
     gap: 0.32rem;
     min-width: 0;
-    min-height: 96px;
+    min-height: 72px;
     height: auto;
     transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
@@ -1500,26 +1499,27 @@ body.dark-mode ::-webkit-scrollbar-thumb {
     opacity: 0.9;
 }
 
-.content-grid {
-    display: grid;
-    grid-template-columns: minmax(420px, 1fr) 10px minmax(320px, var(--right-panel-width));
+.main-body {
+    display: flex;
     gap: 0.7rem;
     flex: 1;
     min-height: 0;
     overflow: hidden;
 }
 
-.map-container-card {
-    grid-column: 1;
-}
-
-#rightPanelResizeHandle {
-    grid-column: 2;
+.main-left-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 0;
 }
 
 .right-charts-panel {
-    grid-column: 3;
+    width: var(--right-panel-width);
     min-width: 320px;
+    flex-shrink: 0;
 }
 
 .right-charts-panel .chart-card {
@@ -1541,6 +1541,7 @@ body.dark-mode ::-webkit-scrollbar-thumb {
 
 .map-container-card {
     position: relative;
+    flex: 1;
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -1890,6 +1891,42 @@ body.dark-mode .leaflet-control-layers {
     filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
 }
 
+/* Basemap switcher buttons */
+.basemap-btn-control {
+    display: flex;
+    flex-direction: row;
+    gap: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    margin-top: 4px;
+}
+.basemap-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-right: 1px solid rgba(0,0,0,0.12);
+    background: rgba(255,255,255,0.92);
+    color: #555;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    padding: 0;
+}
+.basemap-btn:last-child { border-right: none; }
+.basemap-btn:hover { background: #e8f0fe; color: #1a56db; }
+.basemap-btn.active { background: #3b82f6 !important; color: #fff !important; }
+body.dark-mode .basemap-btn {
+    background: rgba(30,41,59,0.92);
+    color: #94a3b8;
+    border-color: rgba(255,255,255,0.08);
+}
+body.dark-mode .basemap-btn:hover { background: #334155; color: #e2e8f0; }
+body.dark-mode .basemap-btn.active { background: #3b82f6 !important; color: #fff !important; }
+
 .leaflet-popup-content-wrapper,
 .leaflet-tooltip.custom-tooltip {
     background: var(--card-bg) !important;
@@ -2120,8 +2157,8 @@ body.dark-mode .leaflet-control-layers {
 }
 
 @media (max-width: 1400px) {
-    .content-grid {
-        grid-template-columns: minmax(380px, 1fr) 10px minmax(300px, var(--right-panel-width));
+    .right-charts-panel {
+        min-width: 300px;
     }
 }
 
@@ -2192,11 +2229,15 @@ body.dark-mode .leaflet-control-layers {
         grid-template-columns: 1fr;
     }
 
-    .content-grid {
-        grid-template-columns: 1fr;
+    .main-body {
         overflow: visible;
         display: flex;
         flex-direction: column;
+    }
+
+    .right-charts-panel {
+        width: 100%;
+        min-width: 0;
     }
 
     .side-panel {
@@ -2262,7 +2303,7 @@ body.dark-mode .leaflet-control-layers {
         display: none;
     }
 
-    .content-grid {
+    .main-body {
         min-height: 0;
     }
 
@@ -2302,17 +2343,17 @@ body.dark-mode .leaflet-control-layers {
 
 /* Icon styling */
 .kpi-icon {
-    width: 36px !important;
-    height: 36px !important;
-    border-radius: 10px;
+    width: 26px !important;
+    height: 26px !important;
+    border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.35) !important;
 }
 
 /* Card styling with color-coded top border */
 .kpi-card {
     border-top: 2px solid transparent;
-    padding: 0.75rem 0.85rem;
-    gap: 0.65rem;
+    padding: 0.42rem 0.5rem;
+    gap: 0.4rem;
     border-radius: 10px;
 }
 .kpi-card:has(.pilgrims-icon)    { border-top-color: #2563eb; }
@@ -2323,8 +2364,8 @@ body.dark-mode .leaflet-control-layers {
 .kpi-card:has(.camp-icon)        { border-top-color: #0891b2; }
 .kpi-card:has(.service-center-icon) { border-top-color: #4f46e5; }
 
-.kpi-info h4 { font-size: 0.6rem; letter-spacing: 0.02em; color: var(--text-muted); }
-.kpi-info h2 { font-size: 1rem; font-weight: 700; letter-spacing: -0.01em; }
+.kpi-info h4 { font-size: 0.62rem; letter-spacing: 0.02em; color: var(--text-muted); }
+.kpi-info h2 { font-size: 0.82rem; font-weight: 700; letter-spacing: -0.01em; }
 
 /* 3. Rings Row — Subtle gradient cards */
 .completion-top-card,
