@@ -404,6 +404,52 @@ body.authenticated .dashboard-container {
     outline: none;
 }
 
+body.sidebar-panel-collapsed .dashboard-container {
+    grid-template-columns: 0 14px minmax(0, 1fr);
+}
+
+body.sidebar-panel-collapsed .sidebar {
+    display: none;
+}
+
+body.charts-panel-collapsed .content-grid {
+    grid-template-columns: minmax(0, 1fr) 14px 0;
+    gap: 0.35rem;
+}
+
+body.charts-panel-collapsed .right-charts-panel {
+    display: none;
+}
+
+.panel-collapse-toggle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 22px;
+    height: 46px;
+    transform: translate(-50%, -50%);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text-secondary);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    z-index: 2;
+    box-shadow: var(--shadow-sm);
+    transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.panel-collapse-toggle:hover,
+.panel-collapse-toggle:focus-visible,
+.panel-collapse-toggle.is-collapsed {
+    color: var(--brand-light, var(--accent-primary));
+    border-color: var(--brand-light, var(--accent-primary));
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+    outline: none;
+}
+
 .sidebar-header {
     display: flex;
     align-items: center;
@@ -924,8 +970,8 @@ body.dark-mode ::-webkit-scrollbar-thumb {
 .top-nav {
     direction: rtl;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-    grid-template-areas: "profile actions logos title";
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "profile actions logos";
     align-items: center;
     gap: 0.75rem;
 }
@@ -1510,7 +1556,7 @@ body.dark-mode ::-webkit-scrollbar-thumb {
 }
 
 .sidebar-chart-section h3 {
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     font-weight: 700;
     color: var(--text-primary);
     display: flex;
@@ -1539,7 +1585,7 @@ body.dark-mode ::-webkit-scrollbar-thumb {
     align-items: stretch;
     padding: 0;
     gap: 0.7rem;
-    min-height: 132px;
+    min-height: 0;
     height: auto;
     background: transparent;
     border: 0;
@@ -1554,7 +1600,7 @@ body.dark-mode ::-webkit-scrollbar-thumb {
 .rings-summary-section .residence-top-card,
 .rings-summary-section .transport-top-card {
     min-height: 0;
-    height: 132px;
+    height: auto;
     padding: 0.35rem 0.45rem 0.42rem;
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-sm);
@@ -1584,7 +1630,7 @@ body.dark-mode ::-webkit-scrollbar-thumb {
     width: 100%;
     margin: 0 0 0.22rem;
     color: var(--text-primary);
-    font-size: 0.68rem;
+    font-size: 0.9rem;
     font-weight: 900;
     line-height: 1;
     text-align: center;
@@ -1751,7 +1797,7 @@ body.dark-mode ::-webkit-scrollbar-thumb {
 }
 
 .map-overlay-card h3 {
-    font-size: clamp(0.48rem, 0.6vw, 0.66rem);
+    font-size: 0.9rem;
     font-weight: 800;
     color: var(--text-primary);
     display: flex;
@@ -1978,11 +2024,42 @@ body.dark-mode .leaflet-control-layers {
     min-height: 0;
 }
 
+.chart-metric-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.32rem;
+    margin-bottom: 0.32rem;
+    padding: 0.22rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--surface-soft);
+}
+
+.chart-metric-tab {
+    min-height: 30px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.chart-metric-tab:hover,
+.chart-metric-tab:focus-visible,
+.chart-metric-tab.active {
+    color: var(--text-primary);
+    border-color: var(--brand-light, var(--accent-primary));
+    background: var(--accent-soft);
+    outline: none;
+}
+
 .chart-card h3 {
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    font-size: 0.72rem;
+    font-size: 0.9rem;
     font-weight: 800;
     margin-bottom: 0.32rem;
     color: var(--text-primary);
@@ -2258,11 +2335,11 @@ body.dark-mode .leaflet-control-layers {
     border-radius: 10px;
 }
 .ring-group-title {
-    font-size: 0.6rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-primary);
 }
 
 /* 4. Sidebar — Header styling */
@@ -2290,11 +2367,11 @@ body.dark-mode .leaflet-control-layers {
 
 /* Section headers */
 .entity-section-header h3 {
-    font-size: 0.62rem;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-primary);
 }
 
 /* Table rows — RTL accent border (right side) */
@@ -2622,7 +2699,8 @@ body.light-mode .kpi-card {
 
 .kpi-info h4 {
     color: var(--text-secondary);
-    font-size: 0.56rem;
+    font-size: 0.9rem;
+    line-height: 1.12;
 }
 
 .kpi-info h2 {
@@ -2650,7 +2728,9 @@ body.light-mode .kpi-card {
 body.light-mode .rings-summary-section .completion-top-card,
 body.light-mode .rings-summary-section .residence-top-card,
 body.light-mode .rings-summary-section .transport-top-card {
-    background: #ffffff;
+    background: linear-gradient(180deg, #ffffff, #f8fafc) !important;
+    border-color: #e2e8f0;
+    box-shadow: var(--shadow-sm);
 }
 
 #map {

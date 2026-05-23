@@ -11,7 +11,7 @@
     <!-- FontAwesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Custom CSS -->
-  <link rel="stylesheet" crossorigin href="/maan-dashboard/assets/index-8O6TeVac.css">
+  <link rel="stylesheet" crossorigin href="/maan-dashboard/assets/index-Cpxr3Au2.css">
 </head>
 <body class="dark-mode auth-required">
 
@@ -99,7 +99,11 @@
             </div>
         </aside>
 
-        <div id="leftPanelResizeHandle" class="panel-resize-handle" role="separator" aria-label="تغيير عرض اللوحة الجانبية" aria-orientation="vertical" tabindex="0"></div>
+        <div id="leftPanelResizeHandle" class="panel-resize-handle" role="separator" aria-label="تغيير عرض اللوحة الجانبية" aria-orientation="vertical" tabindex="0">
+            <button id="sidebarPanelToggleBtn" class="panel-collapse-toggle" type="button" aria-label="إخفاء لوحة الفلاتر" title="إخفاء لوحة الفلاتر">
+                <i class="fa-solid fa-chevron-right"></i>
+            </button>
+        </div>
 
         <!-- Main Content -->
         <main class="main-content">
@@ -214,33 +218,57 @@
 
                     <!-- Floating District Chart Overlay - Top Right -->
                     <div class="map-overlay-card glass">
-                        <h3><i class="fa-solid fa-chart-pie"></i> الحجاج حسب الحي</h3>
+                        <h3><i class="fa-solid fa-chart-pie"></i> <span id="districtChartTitle">الحجاج حسب الحي</span></h3>
+                        <div class="chart-metric-tabs" role="tablist" aria-label="مقياس رسم الحي">
+                            <button class="chart-metric-tab active" type="button" role="tab" aria-selected="true" data-chart-target="district" data-chart-metric="pilgrims">الحجاج</button>
+                            <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="district" data-chart-metric="buses">الحافلات</button>
+                            <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="district" data-chart-metric="trips">الرحلات</button>
+                        </div>
                         <div class="district-chart-container">
                             <canvas id="districtChart"></canvas>
                         </div>
                     </div>
                 </div>
 
-                <div id="rightPanelResizeHandle" class="panel-resize-handle" role="separator" aria-label="تغيير عرض لوحة الرسوم" aria-orientation="vertical" tabindex="0"></div>
+                <div id="rightPanelResizeHandle" class="panel-resize-handle" role="separator" aria-label="تغيير عرض لوحة الرسوم" aria-orientation="vertical" tabindex="0">
+                    <button id="chartsPanelToggleBtn" class="panel-collapse-toggle" type="button" aria-label="إخفاء لوحة الرسوم" title="إخفاء لوحة الرسوم">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                </div>
 
 
                 <!-- Operational Side Panel (Period, Entrance, Path) - Now DOM 2 (Left visual in RTL) -->
                 <div class="side-panel right-charts-panel">
                     <div class="chart-card glass">
-                        <h3><i class="fa-solid fa-chart-column"></i> الحجاج حسب الفترة</h3>
+                        <h3><i class="fa-solid fa-chart-column"></i> <span id="periodChartTitle">الحجاج حسب الفترة</span></h3>
+                        <div class="chart-metric-tabs" role="tablist" aria-label="مقياس رسم الفترة">
+                            <button class="chart-metric-tab active" type="button" role="tab" aria-selected="true" data-chart-target="period" data-chart-metric="pilgrims">الحجاج</button>
+                            <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="period" data-chart-metric="buses">الحافلات</button>
+                            <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="period" data-chart-metric="trips">الرحلات</button>
+                        </div>
                         <div class="chart-container">
                             <div id="periodChart" class="plotly-chart"></div>
                         </div>
                     </div>
                     <div class="chart-card glass">
-                        <h3><i class="fa-solid fa-chart-bar"></i> عدد الحافلات لكل مدخل</h3>
+                        <h3><i class="fa-solid fa-chart-bar"></i> <span id="entranceChartTitle">الحجاج لكل مدخل</span></h3>
+                        <div class="chart-metric-tabs" role="tablist" aria-label="مقياس رسم المدخل">
+                            <button class="chart-metric-tab active" type="button" role="tab" aria-selected="true" data-chart-target="entrance" data-chart-metric="pilgrims">الحجاج</button>
+                            <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="entrance" data-chart-metric="buses">الحافلات</button>
+                            <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="entrance" data-chart-metric="trips">الرحلات</button>
+                        </div>
                         <div class="chart-container entrance-chart-container">
                             <div id="entranceFloatingLegend" class="chart-floating-legend" aria-hidden="true"></div>
                             <div id="entranceChart" class="plotly-chart"></div>
                         </div>
                     </div>
                     <div class="chart-card glass">
-                        <h3><i class="fa-solid fa-chart-line"></i> الحافلات حسب المسار</h3>
+                        <h3><i class="fa-solid fa-chart-line"></i> <span id="pathChartTitle">الحجاج حسب المسار</span></h3>
+                        <div class="chart-metric-tabs" role="tablist" aria-label="مقياس رسم المسار">
+                            <button class="chart-metric-tab active" type="button" role="tab" aria-selected="true" data-chart-target="path" data-chart-metric="pilgrims">الحجاج</button>
+                            <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="path" data-chart-metric="buses">الحافلات</button>
+                            <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="path" data-chart-metric="trips">الرحلات</button>
+                        </div>
                         <div class="chart-container">
                             <div id="pathChart" class="plotly-chart"></div>
                         </div>
@@ -259,11 +287,14 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Plotly -->
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <!-- Turf.js for geometric operations -->
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
     
     <!-- Data files - loaded synchronously to ensure availability -->
     <script src="data/data.js"></script>
     <script src="data/assign_camps.js"></script>
     <script src="data/assign_residences.js"></script>
+    <script src="data/cameras.js"></script>
     <!-- Auth and App Logic -->
     <script src="auth.js"></script>
 </body>

@@ -5,6 +5,14 @@ let contextFilteredData = [];
 let planTypeBaseData = [];
 let map;
 let routeLayerGroup;
+let camerasLayerGroup;
+let showCameras = false;
+
+// Performance Caches
+let cachedFilteredGeometries = null;
+let cachedFilteredGeometriesKey = null;
+let cachedDashboardStats = null;
+let cachedDashboardStatsKey = null;
 let periodChartInstance = null;
 let transportChartInstances = [];
 let entranceChartInstance = null;
@@ -32,11 +40,17 @@ let assignmentTotalsFromCamps = { companyMetrics: new Map(), centerMetrics: new 
 let selectedServiceCompanies = new Set();
 let selectedServiceCenters = new Set();
 let selectedResidenceMixFilter = 'all';
+const selectedChartMetrics = {
+    period: 'pilgrims',
+    entrance: 'pilgrims',
+    path: 'pilgrims',
+    district: 'pilgrims'
+};
 const entityTableState = {
     company: { search: '', sortKey: 'completion', sortDirection: 'desc' },
     center: { search: '', sortKey: 'completion', sortDirection: 'desc' }
 };
-let selectedPlanTypes = new Set(['تروية']);
+let selectedPlanTypes = new Set();
 let serviceCompaniesCatalog = [];
 let serviceCompanyNameByKey = new Map();
 let serviceCenterNamesByKey = new Map();
@@ -46,6 +60,11 @@ let dashboardResizeFrameId = null;
 const TOP_RING_CANVAS_SIZE = 52;
 const RESIDENCE_RING_CANVAS_SIZE = TOP_RING_CANVAS_SIZE;
 const TRANSPORT_RING_CANVAS_SIZE = TOP_RING_CANVAS_SIZE;
+const CHART_METRIC_DEFS = {
+    pilgrims: { label: 'الحجاج', periodTitle: 'الحجاج حسب الفترة', entranceTitle: 'الحجاج لكل مدخل', pathTitle: 'الحجاج حسب المسار', districtTitle: 'الحجاج حسب الحي' },
+    buses: { label: 'الحافلات', periodTitle: 'الحافلات حسب الفترة', entranceTitle: 'الحافلات لكل مدخل', pathTitle: 'الحافلات حسب المسار', districtTitle: 'الحافلات حسب الحي' },
+    trips: { label: 'الرحلات', periodTitle: 'الرحلات حسب الفترة', entranceTitle: 'الرحلات لكل مدخل', pathTitle: 'الرحلات حسب المسار', districtTitle: 'الرحلات حسب الحي' }
+};
 
 const MAP_RENDER_LIMIT = 300;
 const PLAN_LIST_LIMIT = 50;
@@ -55,10 +74,13 @@ const ASSIGNMENT_RENDER_LIMIT = 350;
 const MAP_DETAIL_LABEL_LIMIT = 18;
 const SIDEBAR_WIDTH_STORAGE_KEY = 'dashboard-sidebar-width';
 const RIGHT_PANEL_WIDTH_STORAGE_KEY = 'dashboard-right-panel-width';
-const CHART_POPOUT_WINDOW_FEATURES = 'noopener,noreferrer,width=1200,height=760';
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'dashboard-sidebar-collapsed';
+const CHARTS_PANEL_COLLAPSED_STORAGE_KEY = 'dashboard-charts-panel-collapsed';
+const CHART_POPOUT_WINDOW_FEATURES = 'width=1200,height=760';
 const AUTH_TOKEN_STORAGE_KEY = 'maan-dashboard-auth-token';
 const AUTH_ROLE_STORAGE_KEY = 'maan-dashboard-auth-role';
 const THEME_STORAGE_KEY = 'dashboard-theme';
+const PLAN_TYPE_RING_ORDER = ['tarwia', 'direct_taseed', 'taseed_tarwia', 'efada', 'nafra'];
 const DISTRICT_COLOR_PALETTE = [
     "#2A9D90",
     "#4EC9B9",
@@ -208,6 +230,8 @@ function getCampCountFromAssignCamps() {
 
     // Count unique camps from assign_camps data
     assignCampRows.forEach(row => {
+        if (isDomesticHajjCampRow(row)) return;
+
         const campLabel = row['camp_label'];
         if (campLabel && String(campLabel).trim()) {
             const companyName = row['service_company_name'] ?? '';
@@ -237,6 +261,8 @@ function getServiceCenterCountFromAssignCamps() {
 
     // Count unique service centers from assign_camps data
     assignCampRows.forEach(row => {
+        if (isDomesticHajjCampRow(row)) return;
+
         const centerNumber = row['office_number'] ?? row['service_center_number'];
         if (centerNumber !== undefined && centerNumber !== null && String(centerNumber).trim()) {
             const companyName = row['service_company_name'] ?? '';
@@ -423,6 +449,7 @@ async function initializeDashboardApp() {
     if (dashboardInitialized) return;
     dashboardInitialized = true;
     initResizablePanels();
+    initPanelVisibilityControls();
     initEntityTableColumnAutosize();
     initChartViewer();
     initTheme();
@@ -612,6 +639,22 @@ async function openChartElementInNewPage(element) {
     }
 
     const title = getChartTitleFromElement(element);
+    const isLightMode = document.body.classList.contains('light-mode');
+    const popupTheme = isLightMode
+        ? {
+            bodyBg: '#f8fafc',
+            panelBg: '#ffffff',
+            text: '#0f172a',
+            border: '#e2e8f0',
+            shadow: '0 18px 48px rgba(15, 23, 42, 0.10)'
+        }
+        : {
+            bodyBg: '#0b1220',
+            panelBg: '#0f172a',
+            text: '#e2e8f0',
+            border: '#243249',
+            shadow: 'none'
+        };
     const html = `<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
@@ -619,10 +662,10 @@ async function openChartElementInNewPage(element) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${title}</title>
   <style>
-    body { margin: 0; font-family: Inter, IBM Plex Sans Arabic, sans-serif; background: #0b1220; color: #e2e8f0; }
+    body { margin: 0; font-family: Inter, IBM Plex Sans Arabic, sans-serif; background: ${popupTheme.bodyBg}; color: ${popupTheme.text}; }
     .wrap { min-height: 100vh; display: flex; flex-direction: column; gap: 10px; padding: 18px; box-sizing: border-box; }
     h1 { margin: 0; font-size: 20px; font-weight: 800; }
-    .panel { flex: 1; border-radius: 12px; background: #0f172a; border: 1px solid #243249; padding: 14px; display: grid; place-items: center; }
+    .panel { flex: 1; border-radius: 12px; background: ${popupTheme.panelBg}; border: 1px solid ${popupTheme.border}; box-shadow: ${popupTheme.shadow}; padding: 14px; display: grid; place-items: center; }
     img { max-width: 100%; max-height: calc(100vh - 120px); object-fit: contain; }
   </style>
 </head>
@@ -633,18 +676,16 @@ async function openChartElementInNewPage(element) {
   </div>
 </body>
 </html>`;
-    const popup = window.open('', '_blank', CHART_POPOUT_WINDOW_FEATURES);
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const popup = window.open(url, '_blank', CHART_POPOUT_WINDOW_FEATURES);
 
     if (!popup) {
-        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
         window.location.href = url;
-        setTimeout(() => URL.revokeObjectURL(url), 30000);
         return;
     }
 
-    popup.document.write(html);
-    popup.document.close();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 function ensureChartPopoutButtons() {
@@ -739,6 +780,7 @@ function initResizablePanels() {
 
     const startDrag = ({ handle, panel, minWidth, maxWidth, cssVarName, storageKey }) => (event) => {
         if (window.innerWidth <= 1100) return;
+        if (event.target.closest('.panel-collapse-toggle')) return;
         event.preventDefault();
 
         const startX = event.clientX;
@@ -815,6 +857,61 @@ function initResizablePanels() {
     }
 
     window.addEventListener('resize', scheduleDashboardResize);
+}
+
+function updatePanelToggleButton(button, collapsed, hiddenLabel, shownLabel, collapsedIcon, expandedIcon) {
+    if (!button) return;
+    button.classList.toggle('is-collapsed', collapsed);
+    button.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
+    button.setAttribute('aria-label', collapsed ? shownLabel : hiddenLabel);
+    button.setAttribute('title', collapsed ? shownLabel : hiddenLabel);
+    button.innerHTML = `<i class="fa-solid ${collapsed ? collapsedIcon : expandedIcon}"></i>`;
+}
+
+function applyPanelVisibilityState() {
+    const sidebarCollapsed = getPersistentValue(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true';
+    const chartsCollapsed = getPersistentValue(CHARTS_PANEL_COLLAPSED_STORAGE_KEY) === 'true';
+
+    document.body.classList.toggle('sidebar-panel-collapsed', sidebarCollapsed);
+    document.body.classList.toggle('charts-panel-collapsed', chartsCollapsed);
+
+    updatePanelToggleButton(
+        document.getElementById('sidebarPanelToggleBtn'),
+        sidebarCollapsed,
+        'إخفاء لوحة الفلاتر',
+        'إظهار لوحة الفلاتر',
+        'fa-chevron-left',
+        'fa-chevron-right'
+    );
+    updatePanelToggleButton(
+        document.getElementById('chartsPanelToggleBtn'),
+        chartsCollapsed,
+        'إخفاء لوحة الرسوم',
+        'إظهار لوحة الرسوم',
+        'fa-chevron-right',
+        'fa-chevron-left'
+    );
+
+    requestDashboardResize();
+}
+
+function initPanelVisibilityControls() {
+    const sidebarToggleBtn = document.getElementById('sidebarPanelToggleBtn');
+    const chartsToggleBtn = document.getElementById('chartsPanelToggleBtn');
+
+    sidebarToggleBtn?.addEventListener('click', () => {
+        const nextCollapsed = !document.body.classList.contains('sidebar-panel-collapsed');
+        setPersistentValue(SIDEBAR_COLLAPSED_STORAGE_KEY, String(nextCollapsed));
+        applyPanelVisibilityState();
+    });
+
+    chartsToggleBtn?.addEventListener('click', () => {
+        const nextCollapsed = !document.body.classList.contains('charts-panel-collapsed');
+        setPersistentValue(CHARTS_PANEL_COLLAPSED_STORAGE_KEY, String(nextCollapsed));
+        applyPanelVisibilityState();
+    });
+
+    applyPanelVisibilityState();
 }
 
 function initTheme() {
@@ -1018,11 +1115,18 @@ function normalizeAssignCampRows(rows) {
     });
 }
 
+function isDomesticHajjCampRow(row) {
+    return normalizeTextKey(row.service_company_name).includes('حجاج الداخل')
+        || normalizeTextKey(row.nationality) === 'حجاج الداخل';
+}
+
 function buildAssignmentTotalsFromCampRows(rows) {
     const companyMetrics = new Map();
     const centerMetrics = new Map();
 
     rows.forEach(row => {
+        if (isDomesticHajjCampRow(row)) return;
+
         const company = row.service_company_name;
         const centerNumber = row.office_number;
         const serviceCenterName = row.service_center_name;
@@ -1116,6 +1220,27 @@ function matchesCompanyOwnerFilters(rowCompany, rowOwner, companyFilter = select
 
 function hasServiceEntitySelection() {
     return selectedServiceCompanies.size > 0 || selectedServiceCenters.size > 0;
+}
+
+function hasActiveMapFilter() {
+    const period = document.getElementById('periodFilter')?.value || 'all';
+    const transport = document.getElementById('transportFilter')?.value || 'all';
+    const district = document.getElementById('districtFilter')?.value || 'all';
+    const search = document.querySelector('.search-bar input')?.value?.trim() || '';
+
+    return Boolean(
+        selectedPlanId
+        || selectedEntranceName
+        || selectedPathName
+        || selectedDistrict
+        || hasServiceEntitySelection()
+        || selectedPlanTypes.size
+        || selectedResidenceMixFilter !== 'all'
+        || period !== 'all'
+        || transport !== 'all'
+        || district !== 'all'
+        || search
+    );
 }
 
 function getCompanyDisplayName(company) {
@@ -1399,6 +1524,23 @@ function getAssignmentTotalForPlan(row) {
 function getPlanTypeTarget(planTypeCode, assignment) {
     if (!assignment) return 0;
     return assignment.byPlanType?.get(planTypeCode) || assignment.total;
+}
+
+function normalizePlanTypeCode(value) {
+    const normalized = normalizeTextKey(value);
+    if (!normalized) return '';
+    if (normalized.includes('direct_taseed') || normalized.includes('تصعيد مباشر')) return 'direct_taseed';
+    if (normalized.includes('taseed_tarwia') || normalized.includes('تصعيد تروية')) return 'taseed_tarwia';
+    if (normalized.includes('tarwia') || normalized.includes('tarwiya') || normalized.includes('تروية')) return 'tarwia';
+    if (normalized.includes('efada') || normalized.includes('إفاضة') || normalized.includes('افاضة')) return 'efada';
+    if (normalized.includes('nafra') || normalized.includes('نفرة')) return 'nafra';
+    return normalized;
+}
+
+function getPlanTypeRingOrderIndex(row) {
+    const code = normalizePlanTypeCode(row.planTypeCode || row.code || row.label);
+    const orderIndex = PLAN_TYPE_RING_ORDER.indexOf(code);
+    return orderIndex === -1 ? PLAN_TYPE_RING_ORDER.length : orderIndex;
 }
 
 // Load CSV Data
@@ -2347,6 +2489,8 @@ function initMap() {
 
     districtsLayerGroup = L.layerGroup().addTo(map);
     routeLayerGroup = L.layerGroup().addTo(map);
+    camerasLayerGroup = L.layerGroup().addTo(map);
+    renderCameras();
     updateMapLabelScale();
 
     // Clear selection on map background click
@@ -2513,6 +2657,18 @@ function setupEventListeners() {
         renderServiceSummaryTables();
     }, 120));
 
+    document.querySelectorAll('.chart-metric-tab').forEach(button => {
+        button.addEventListener('click', () => {
+            const metric = button.dataset.chartMetric;
+            const target = button.dataset.chartTarget;
+            if (!CHART_METRIC_DEFS[metric] || !selectedChartMetrics[target] || selectedChartMetrics[target] === metric) return;
+            selectedChartMetrics[target] = metric;
+            syncChartMetricTabs();
+            updateCharts();
+        });
+    });
+    syncChartMetricTabs();
+
     document.getElementById('clearCompanySelectionBtn')?.addEventListener('click', () => {
         selectedServiceCompanies.clear();
         applyFilters();
@@ -2656,6 +2812,21 @@ function setupEventListeners() {
         // Insert before CSV button
         csvBtn.parentNode.insertBefore(clearCacheBtn, csvBtn);
         console.log('Clear cache button added');
+
+        // Add Cameras toggle button
+        const camerasBtn = document.createElement('button');
+        camerasBtn.id = 'camerasToggleBtn';
+        camerasBtn.className = 'theme-toggle-btn';
+        camerasBtn.type = 'button';
+        camerasBtn.title = 'تبديل عرض الكاميرات';
+        camerasBtn.setAttribute('aria-label', 'تبديل الكاميرات');
+        camerasBtn.innerHTML = '<i class="fa-solid fa-video"></i>';
+        camerasBtn.style.marginRight = '15px';
+        camerasBtn.style.opacity = '1';
+        camerasBtn.addEventListener('click', toggleCameras);
+        // Insert before CSV button
+        csvBtn.parentNode.insertBefore(camerasBtn, csvBtn);
+        console.log('Cameras toggle button added');
     } else {
         console.log('top-nav-actions not found');
     }
@@ -2675,6 +2846,13 @@ function setupEventListeners() {
             renderServiceSummaryTables();
         });
     });
+
+    // Event delegation for table rows (performance optimization)
+    document.getElementById('serviceCompaniesTableBody')?.addEventListener('click', handleTableRowClick);
+    document.getElementById('serviceCompaniesTableBody')?.addEventListener('keydown', handleTableRowKeydown);
+    document.getElementById('serviceCentersTableBody')?.addEventListener('click', handleTableRowClick);
+    document.getElementById('serviceCentersTableBody')?.addEventListener('keydown', handleTableRowKeydown);
+
 }
 
 // Apply Filters
@@ -3070,6 +3248,32 @@ function handleTableSelection(row) {
     applyFilters();
 }
 
+function handleTableRowClick(event) {
+    const row = event.target.closest('tr.entity-table-row');
+    if (!row || !row.dataset.itemData) return;
+    try {
+        const item = JSON.parse(row.dataset.itemData);
+        const type = row.dataset.tableType;
+        handleTableSelection({ ...item, type });
+    } catch (e) {
+        console.error('Failed to parse row data:', e);
+    }
+}
+
+function handleTableRowKeydown(event) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const row = event.target.closest('tr.entity-table-row');
+    if (!row || !row.dataset.itemData) return;
+    event.preventDefault();
+    try {
+        const item = JSON.parse(row.dataset.itemData);
+        const type = row.dataset.tableType;
+        handleTableSelection({ ...item, type });
+    } catch (e) {
+        console.error('Failed to parse row data:', e);
+    }
+}
+
 function getEntitySearchText(item, type) {
     return normalizeTextKey([
         item.label,
@@ -3159,6 +3363,8 @@ function renderSummaryTable(tableBodyId, rows, type) {
         row.className = 'entity-table-row';
         row.tabIndex = 0;
         row.dataset.rowKey = getEntityRowKey(item, type);
+        row.dataset.itemData = JSON.stringify(item);
+        row.dataset.tableType = type;
         row.setAttribute('aria-selected', isActive ? 'true' : 'false');
         if (isActive) row.classList.add('active');
 
@@ -3179,14 +3385,6 @@ function renderSummaryTable(tableBodyId, rows, type) {
         badge.textContent = formatCompletionPercentage(item.completion);
         completionCell.appendChild(badge);
         row.appendChild(completionCell);
-
-        row.addEventListener('click', () => handleTableSelection(item));
-        row.addEventListener('keydown', event => {
-            if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                handleTableSelection(item);
-            }
-        });
 
         fragment.appendChild(row);
     });
@@ -3212,9 +3410,120 @@ function getSelectedServiceCenterName() {
     if (!selectedServiceCenters.size) return '';
     if (selectedServiceCenters.size > 1) return `${selectedServiceCenters.size.toLocaleString()} مراكز محددة`;
     const key = Array.from(selectedServiceCenters)[0];
-    return serviceCenterNamesByKey.get(key)
-        || key.split('|')[1]
+    const [companyKeyValue, centerNumber] = key.split('|');
+    const companyName = serviceCompanyNameByKey.get(companyKeyValue) || '';
+    const centerName = serviceCenterNamesByKey.get(key)
+        || centerNumber
         || 'بدون مركز';
+    return !selectedServiceCompanies.size && companyName
+        ? `${companyName} - ${centerName}`
+        : centerName;
+}
+
+function getFilteredPlanGeometries() {
+    // Create a cache key based on filtered data size and first/last plan
+    const cacheKey = filteredData.length > 0
+        ? `${filteredData.length}|${filteredData[0]['plan_id']}|${filteredData[filteredData.length - 1]['plan_id']}`
+        : '0';
+
+    // Return cached geometries if key matches
+    if (cachedFilteredGeometriesKey === cacheKey && cachedFilteredGeometries !== null) {
+        return cachedFilteredGeometries;
+    }
+
+    const geometries = [];
+
+    filteredData.forEach(plan => {
+        const geojsons = getRowGeojsons(plan);
+        geojsons.forEach(item => {
+            if (item.geojson && item.geojson.coordinates) {
+                try {
+                    const feature = turf.feature(item.geojson);
+                    const buffered = turf.buffer(feature, 0.003, { units: 'kilometers' });
+                    geometries.push(buffered.geometry);
+                } catch (e) {
+                    console.warn('Error buffering geometry:', e);
+                }
+            }
+        });
+    });
+
+    // Cache the result
+    cachedFilteredGeometries = geometries;
+    cachedFilteredGeometriesKey = cacheKey;
+
+    return geometries;
+}
+
+function cameraIntersectsGeometries(camera, geometries) {
+    if (!geometries || geometries.length === 0) return false;
+
+    const point = turf.point([camera.longitude, camera.latitude]);
+
+    for (const geom of geometries) {
+        try {
+            // Check if point is within the buffered geometry
+            if (turf.booleanPointInPolygon(point, geom)) {
+                return true;
+            }
+        } catch (e) {
+            // If geometry is not a polygon, try distance-based check
+            try {
+                const distance = turf.distance(point, geom, { units: 'kilometers' });
+                if (distance <= 0.003) { // 3 meters
+                    return true;
+                }
+            } catch (e2) {
+                // Skip this geometry
+            }
+        }
+    }
+
+    return false;
+}
+
+function renderCameras() {
+    if (!camerasLayerGroup) return;
+
+    camerasLayerGroup.clearLayers();
+
+    if (!showCameras || typeof CAMERAS_DATA === 'undefined') return;
+
+    // Get geometries from filtered plans (if any plans are displayed)
+    const planGeometries = filteredData.length > 0 ? getFilteredPlanGeometries() : null;
+
+    CAMERAS_DATA.forEach(camera => {
+        // If there are filtered plans, only show cameras that intersect with them
+        if (planGeometries && planGeometries.length > 0) {
+            if (!cameraIntersectsGeometries(camera, planGeometries)) {
+                return; // Skip this camera
+            }
+        }
+
+        const marker = L.marker([camera.latitude, camera.longitude], {
+            icon: L.divIcon({
+                className: 'camera-marker',
+                html: '<i class="fa-solid fa-video" style="color: #22c55e; font-size: 18px; text-shadow: 0 0 3px #000;"></i>',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12],
+                popupAnchor: [0, -12]
+            })
+        });
+
+        marker.bindPopup(`<strong style="color: #333;">📷 ${camera.name}</strong><br><small>Lat: ${camera.latitude.toFixed(5)}<br>Lng: ${camera.longitude.toFixed(5)}</small>`);
+        marker.addTo(camerasLayerGroup);
+    });
+}
+
+const debouncedRenderCameras = debounce(renderCameras, 300);
+
+function toggleCameras() {
+    showCameras = !showCameras;
+    const btn = document.getElementById('camerasToggleBtn');
+    if (btn) {
+        btn.style.opacity = showCameras ? '1' : '0.4';
+    }
+    debouncedRenderCameras();
 }
 
 function updateMapSelectionTitle() {
@@ -3256,6 +3565,7 @@ function updateDashboard() {
     updateKPIs(stats);
     updateMap();
     updateMapSelectionTitle();
+    debouncedRenderCameras();
     updateCharts(stats);
     renderServiceSummaryTables();
     updatePlanList();
@@ -3276,7 +3586,7 @@ function buildCompletionStats(rows) {
         const completionKey = planTypeCode;
 
         if (!stats.completionByPlanType[completionKey]) {
-            stats.completionByPlanType[completionKey] = { label: planTypeName, planned: 0, target: 0 };
+            stats.completionByPlanType[completionKey] = { planTypeCode, label: planTypeName, planned: 0, target: 0 };
         }
         stats.completionByPlanType[completionKey].planned += haj;
 
@@ -3305,6 +3615,16 @@ function buildCompletionStats(rows) {
 }
 
 function getDashboardStats() {
+    // Create a cache key based on filtered data (memoization)
+    const cacheKey = filteredData.length > 0
+        ? `${filteredData.length}|${filteredData[0]['plan_id']}|${filteredData[filteredData.length - 1]['plan_id']}`
+        : '0';
+
+    // Return cached stats if key matches
+    if (cachedDashboardStatsKey === cacheKey && cachedDashboardStats !== null) {
+        return cachedDashboardStats;
+    }
+
     const stats = {
         totalPilgrims: 0,
         totalBuses: 0,
@@ -3358,7 +3678,7 @@ function getDashboardStats() {
         stats.allPeriodsForEntrance.add(period);
 
         if (!stats.completionByPlanType[completionKey]) {
-            stats.completionByPlanType[completionKey] = { label: planTypeName, planned: 0, target: 0 };
+            stats.completionByPlanType[completionKey] = { planTypeCode, label: planTypeName, planned: 0, target: 0 };
         }
         stats.completionByPlanType[completionKey].planned += haj;
 
@@ -3383,6 +3703,10 @@ function getDashboardStats() {
         }
     });
 
+    // Cache the result
+    cachedDashboardStats = stats;
+    cachedDashboardStatsKey = cacheKey;
+
     return stats;
 }
 
@@ -3392,6 +3716,50 @@ function getTripCount(row, buses) {
     if (transportType.includes('ترددي')) return buses * 3;
     if (transportType.includes('رد') || transportType.includes('ىد')) return buses;
     return buses;
+}
+
+function getChartMetricValue(row, metric = 'pilgrims') {
+    const buses = Number(row['number_of_buses']) || 0;
+    if (metric === 'buses') return buses;
+    if (metric === 'trips') return getTripCount(row, buses);
+    return Number(row['number_of_haj']) || 0;
+}
+
+function buildChartMetricStats(metric = 'pilgrims') {
+    const metricStats = {
+        periodCounts: {},
+        entranceCounts: {},
+        pathCounts: {},
+        districtCounts: {},
+        allPeriodsForEntrance: new Set()
+    };
+
+    filteredData.forEach(row => {
+        const value = getChartMetricValue(row, metric);
+        const period = String(row['period'] || 'غير معروف');
+        const entrance = row['entrance_name'] || row['entrance_asm_code'] || 'بدون مدخل';
+        const path = row['path_name'] || 'بدون مسار';
+        const district = row['start_point_district'] || 'بدون حي';
+
+        addToBucket(metricStats.periodCounts, period, value);
+        addToBucket(metricStats.pathCounts, path, value);
+        addToBucket(metricStats.districtCounts, district, value);
+
+        if (!metricStats.entranceCounts[entrance]) metricStats.entranceCounts[entrance] = {};
+        metricStats.entranceCounts[entrance][period] = (metricStats.entranceCounts[entrance][period] || 0) + value;
+        metricStats.allPeriodsForEntrance.add(period);
+    });
+
+    return metricStats;
+}
+
+function syncChartMetricTabs() {
+    document.querySelectorAll('.chart-metric-tab').forEach(button => {
+        const target = button.dataset.chartTarget;
+        const isActive = Boolean(target) && button.dataset.chartMetric === selectedChartMetrics[target];
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
 }
 
 // Update KPI Cards
@@ -3466,8 +3834,8 @@ function updateMap() {
     const mapStatus = document.getElementById('mapStatus');
     const bounds = L.latLngBounds();
     const serviceEntitySelectionActive = hasServiceEntitySelection();
-    const isFocusedSelection = Boolean(selectedPlanId || selectedEntranceName || selectedPathName || selectedDistrict || serviceEntitySelectionActive);
-    const mapData = isFocusedSelection ? filteredData : filteredData.slice(0, MAP_RENDER_LIMIT);
+    const shouldFitFilteredResults = hasActiveMapFilter();
+    const mapData = shouldFitFilteredResults ? filteredData : filteredData.slice(0, MAP_RENDER_LIMIT);
     const showDetailedMapLabels = Boolean(selectedPlanId || serviceEntitySelectionActive) || filteredData.length <= MAP_DETAIL_LABEL_LIMIT;
 
     if (mapStatus) {
@@ -3680,6 +4048,23 @@ function renderEntranceFloatingLegend(periodsArray, colors) {
 // Update Charts
 function updateCharts(stats = getDashboardStats()) {
     const chartTheme = getThemeColors();
+    const periodMetricDef = CHART_METRIC_DEFS[selectedChartMetrics.period] || CHART_METRIC_DEFS.pilgrims;
+    const entranceMetricDef = CHART_METRIC_DEFS[selectedChartMetrics.entrance] || CHART_METRIC_DEFS.pilgrims;
+    const pathMetricDef = CHART_METRIC_DEFS[selectedChartMetrics.path] || CHART_METRIC_DEFS.pilgrims;
+    const districtMetricDef = CHART_METRIC_DEFS[selectedChartMetrics.district] || CHART_METRIC_DEFS.pilgrims;
+    const periodMetricStats = buildChartMetricStats(selectedChartMetrics.period);
+    const entranceMetricStats = buildChartMetricStats(selectedChartMetrics.entrance);
+    const pathMetricStats = buildChartMetricStats(selectedChartMetrics.path);
+    const districtMetricStats = buildChartMetricStats(selectedChartMetrics.district);
+    const periodTitle = document.getElementById('periodChartTitle');
+    const entranceTitle = document.getElementById('entranceChartTitle');
+    const pathTitle = document.getElementById('pathChartTitle');
+    const districtTitle = document.getElementById('districtChartTitle');
+    if (periodTitle) periodTitle.textContent = periodMetricDef.periodTitle;
+    if (entranceTitle) entranceTitle.textContent = entranceMetricDef.entranceTitle;
+    if (pathTitle) pathTitle.textContent = pathMetricDef.pathTitle;
+    if (districtTitle) districtTitle.textContent = districtMetricDef.districtTitle;
+
     const plotlyConfig = {
         responsive: true,
         displaylogo: false,
@@ -3689,8 +4074,8 @@ function updateCharts(stats = getDashboardStats()) {
     };
 
     // Prepare Data for Period Chart
-    const periodLabels = Object.keys(stats.periodCounts).sort();
-    const periodValues = periodLabels.map(l => stats.periodCounts[l]);
+    const periodLabels = Object.keys(periodMetricStats.periodCounts).sort();
+    const periodValues = periodLabels.map(l => periodMetricStats.periodCounts[l]);
     const periodPlotEl = document.getElementById('periodChart');
     if (periodPlotEl && window.Plotly) {
         const periodTrace = {
@@ -3701,7 +4086,7 @@ function updateCharts(stats = getDashboardStats()) {
             textposition: 'outside',
             cliponaxis: false,
             marker: { color: 'rgba(42, 157, 144, 0.82)', line: { color: 'rgba(42, 157, 144, 1)', width: 1 } },
-            hovertemplate: '%{x}<br>%{y:,}<extra></extra>'
+            hovertemplate: `%{x}<br>${periodMetricDef.label}: %{y:,}<extra></extra>`
         };
         const periodLayout = {
             margin: { l: 46, r: 12, t: 22, b: 44 },
@@ -3728,9 +4113,13 @@ function updateCharts(stats = getDashboardStats()) {
         });
     }
 
-    const transEntries = Object.entries(stats.transportCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 4);
+    const transportFilter = document.getElementById("transportFilter");
+    const transportLabels = transportFilter
+        ? Array.from(transportFilter.options)
+            .filter(option => option.value !== "all")
+            .map(option => option.value)
+        : Object.keys(stats.transportCounts);
+    const transEntries = transportLabels.map(label => [label, stats.transportCounts[label] || 0]);
     const totalTransportBuses = Object.values(stats.transportCounts).reduce((sum, value) => sum + value, 0);
     const transportColors = [
         ["rgba(42, 157, 144, 0.92)", "rgba(148, 163, 184, 0.26)"],
@@ -3748,10 +4137,10 @@ function updateCharts(stats = getDashboardStats()) {
         transEntries.forEach(([label, value], index) => {
             const rest = Math.max(totalTransportBuses - value, 0);
             const percentage = totalTransportBuses > 0 ? Math.round((value / totalTransportBuses) * 100) : 0;
+            const ringValues = totalTransportBuses > 0 ? [value, rest] : [0, 1];
             const item = document.createElement("div");
             item.className = "transport-ring-item";
-            const filterEl = document.getElementById("transportFilter");
-            const isActive = filterEl && filterEl.value === label;
+            const isActive = transportFilter && transportFilter.value === label;
             item.classList.toggle("active", isActive);
             item.setAttribute("aria-pressed", isActive ? "true" : "false");
             item.tabIndex = 0;
@@ -3761,9 +4150,8 @@ function updateCharts(stats = getDashboardStats()) {
             transportContainer.appendChild(item);
 
             const toggleTransportFilter = () => {
-                const filterEl = document.getElementById("transportFilter");
-                if (!filterEl) return;
-                filterEl.value = filterEl.value === label ? "all" : label;
+                if (!transportFilter) return;
+                transportFilter.value = transportFilter.value === label ? "all" : label;
                 selectedPlanId = null;
                 applyFilters();
             };
@@ -3788,7 +4176,7 @@ function updateCharts(stats = getDashboardStats()) {
                 data: {
                     labels: [label, "باقي الأنماط"],
                     datasets: [{
-                        data: [value, rest],
+                        data: ringValues,
                         backgroundColor: transportColors[index % transportColors.length],
                         borderWidth: 0
                     }]
@@ -3812,8 +4200,8 @@ function updateCharts(stats = getDashboardStats()) {
         });
     }
 
-    const entranceLabels = Object.keys(stats.entranceCounts).sort();
-    const periodsArray = Array.from(stats.allPeriodsForEntrance).sort((a, b) => Number(a) - Number(b));
+    const entranceLabels = Object.keys(entranceMetricStats.entranceCounts).sort();
+    const periodsArray = Array.from(entranceMetricStats.allPeriodsForEntrance).sort((a, b) => Number(a) - Number(b));
 
     const colors = [
         'rgba(42, 157, 144, 0.72)',
@@ -3824,7 +4212,7 @@ function updateCharts(stats = getDashboardStats()) {
     ];
 
     const entranceDatasets = periodsArray.map((period, index) => {
-        const data = entranceLabels.map(ent => stats.entranceCounts[ent][period] || 0);
+        const data = entranceLabels.map(ent => entranceMetricStats.entranceCounts[ent][period] || 0);
         return {
             label: `الفترة ${period}`,
             data: data,
@@ -3836,7 +4224,7 @@ function updateCharts(stats = getDashboardStats()) {
     const entrancePlotEl = document.getElementById('entranceChart');
     if (entrancePlotEl && window.Plotly) {
         const entranceTraces = periodsArray.map((period, index) => {
-            const data = entranceLabels.map(ent => stats.entranceCounts[ent][period] || 0);
+            const data = entranceLabels.map(ent => entranceMetricStats.entranceCounts[ent][period] || 0);
             return {
                 type: 'bar',
                 x: entranceLabels,
@@ -3846,7 +4234,7 @@ function updateCharts(stats = getDashboardStats()) {
                 text: data.map(v => v ? Number(v).toLocaleString() : ''),
                 textposition: 'outside',
                 cliponaxis: false,
-                hovertemplate: `%{x}<br>الفترة ${period}: %{y:,}<extra></extra>`
+                hovertemplate: `%{x}<br>الفترة ${period}<br>${entranceMetricDef.label}: %{y:,}<extra></extra>`
             };
         });
         const entranceLayout = {
@@ -3875,8 +4263,8 @@ function updateCharts(stats = getDashboardStats()) {
 
     renderEntranceFloatingLegend(periodsArray, colors);
 
-    const pathLabels = Object.keys(stats.pathCounts).sort((a, b) => stats.pathCounts[b] - stats.pathCounts[a]);
-    const pathValues = pathLabels.map(l => stats.pathCounts[l]);
+    const pathLabels = Object.keys(pathMetricStats.pathCounts).sort((a, b) => pathMetricStats.pathCounts[b] - pathMetricStats.pathCounts[a]);
+    const pathValues = pathLabels.map(l => pathMetricStats.pathCounts[l]);
 
     const pathPlotEl = document.getElementById('pathChart');
     if (pathPlotEl && window.Plotly) {
@@ -3885,7 +4273,7 @@ function updateCharts(stats = getDashboardStats()) {
             x: pathLabels,
             y: pathValues,
             marker: { color: 'rgba(78, 201, 185, 0.82)', line: { color: 'rgba(78, 201, 185, 1)', width: 1 } },
-            hovertemplate: '%{x}<br>%{y:,}<extra></extra>'
+            hovertemplate: `%{x}<br>${pathMetricDef.label}: %{y:,}<extra></extra>`
         };
         const pathLayout = {
             margin: { l: 46, r: 12, t: 16, b: 58 },
@@ -3913,8 +4301,8 @@ function updateCharts(stats = getDashboardStats()) {
     renderCompletionSummaryChart(stats, chartTheme);
     renderResidenceAssignmentChart(chartTheme);
 
-    const distLabels = Object.keys(stats.districtCounts).sort((a, b) => stats.districtCounts[b] - stats.districtCounts[a]);
-    const distValues = distLabels.map(l => stats.districtCounts[l]);
+    const distLabels = Object.keys(districtMetricStats.districtCounts).sort((a, b) => districtMetricStats.districtCounts[b] - districtMetricStats.districtCounts[a]);
+    const distValues = distLabels.map(l => districtMetricStats.districtCounts[l]);
 
     if (districtChartInstance) districtChartInstance.destroy();
     const ctxDist = document.getElementById('districtChart').getContext('2d');
@@ -3991,7 +4379,7 @@ function updateCharts(stats = getDashboardStats()) {
                         label: (context) => {
                             const label = context.label || '';
                             const value = context.raw || 0;
-                            return `${label} - ${value.toLocaleString()}`;
+                            return `${label} - ${districtMetricDef.label}: ${value.toLocaleString()}`;
                         }
                     }
                 }
@@ -4042,8 +4430,11 @@ function renderCompletionSummaryChart(stats, chartTheme) {
             .map(option => option.value)
         : Array.from(rowsByLabel.keys());
     const rows = currentPlanTypeLabels
-        .map(label => rowsByLabel.get(label) || { label, planned: 0, target: 0 })
-        .sort((a, b) => b.target - a.target);
+        .map(label => rowsByLabel.get(label) || { planTypeCode: normalizePlanTypeCode(label), label, planned: 0, target: 0 })
+        .sort((a, b) => {
+            const orderDiff = getPlanTypeRingOrderIndex(a) - getPlanTypeRingOrderIndex(b);
+            return orderDiff || b.target - a.target;
+        });
 
     rows.forEach(row => {
         const planned = row.planned;
@@ -4064,7 +4455,10 @@ function renderCompletionSummaryChart(stats, chartTheme) {
         item.tabIndex = 0;
         item.setAttribute('role', 'button');
         item.setAttribute('aria-pressed', isSelectedPlanType ? 'true' : 'false');
-        item.setAttribute('title', isSelectedPlanType ? 'إزالة من التصفية' : `إضافة ${row.label} للتصفية`);
+        item.setAttribute(
+            'title',
+            `${row.label}\nالاكتمال: ${displayPercent}%\nالمخطط: ${planned.toLocaleString()}\nالمستهدف: ${target.toLocaleString()}`
+        );
         if (isSelectedPlanType) item.classList.add('active');
         item.innerHTML = `
             <div class="progress-ring-wrap">
