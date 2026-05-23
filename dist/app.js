@@ -9,6 +9,7 @@ let camerasLayerGroup;
 let showCameras = false;
 let campsGatesLayerGroup;
 let showCampsGates = false;
+let makafPathsLayerGroup;
 
 // Performance Caches
 let cachedFilteredGeometries = null;
@@ -2381,6 +2382,10 @@ function addRouteConnector(fromLatLng, toLatLng) {
 }
 
 function addDirectionalArrows(latlngs, color) {
+    addDirectionalArrowsToGroup(latlngs, color, routeLayerGroup);
+}
+
+function addDirectionalArrowsToGroup(latlngs, color, group) {
     getRouteFlowSamples(latlngs).forEach((sample, index) => {
         const arrowIcon = L.divIcon({
             className: 'map-arrow-marker',
@@ -2399,7 +2404,7 @@ function addDirectionalArrows(latlngs, color) {
             interactive: false,
             keyboard: false,
             zIndexOffset: 160
-        }).addTo(routeLayerGroup);
+        }).addTo(group);
     });
 }
 
@@ -2476,15 +2481,39 @@ function initMap() {
         positronMap.addTo(map);
     }
 
-    // Layer control
-    const baseMaps = {
-        "الوضع الفاتح": positronMap,
-        "شوارع": streetsMap,
-        "الوضع الداكن": darkMap,
-        "قمر صناعي (Satellite)": satelliteMap
-    };
+    // Layer control — custom buttons
+    const baseLayers = [
+        { label: 'فاتح',        icon: 'fa-sun',       layer: positronMap },
+        { label: 'شوارع',       icon: 'fa-road',      layer: streetsMap },
+        { label: 'داكن',        icon: 'fa-moon',      layer: darkMap },
+        { label: 'قمر صناعي',   icon: 'fa-satellite', layer: satelliteMap }
+    ];
 
-    L.control.layers(baseMaps, null, { position: 'topleft' }).addTo(map);
+    const BasemapControl = L.Control.extend({
+        options: { position: 'topleft' },
+        onAdd() {
+            const container = L.DomUtil.create('div', 'leaflet-control basemap-btn-control');
+            L.DomEvent.disableClickPropagation(container);
+            baseLayers.forEach(({ label, icon, layer }) => {
+                const btn = L.DomUtil.create('button', 'basemap-btn', container);
+                btn.type = 'button';
+                btn.title = label;
+                btn.innerHTML = `<i class="fa-solid ${icon}"></i>`;
+                if (map.hasLayer(layer)) btn.classList.add('active');
+                L.DomEvent.on(btn, 'click', (e) => {
+                    L.DomEvent.preventDefault(e);
+                    baseLayers.forEach(b => map.removeLayer(b.layer));
+                    layer.addTo(map);
+                    container.querySelectorAll('.basemap-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    lightMapLayer = (layer === positronMap) ? positronMap : lightMapLayer;
+                    darkMapLayer  = (layer === darkMap)     ? darkMap     : darkMapLayer;
+                });
+            });
+            return container;
+        }
+    });
+    new BasemapControl().addTo(map);
 
     map.createPane("districtPane");
     map.getPane("districtPane").style.zIndex = 350;
@@ -2493,8 +2522,10 @@ function initMap() {
     routeLayerGroup = L.layerGroup().addTo(map);
     camerasLayerGroup = L.layerGroup().addTo(map);
     campsGatesLayerGroup = L.layerGroup().addTo(map);
+    makafPathsLayerGroup = L.layerGroup().addTo(map);
     renderCameras();
     renderCampsGates();
+    renderMakafPaths();
     updateMapLabelScale();
 
     // Clear selection on map background click
@@ -3456,7 +3487,7 @@ function getFilteredPlanGeometries() {
             if (item.geojson && item.geojson.coordinates) {
                 try {
                     const feature = turf.feature(item.geojson);
-                    const buffered = turf.buffer(feature, 0.003, { units: 'kilometers' });
+                    const buffered = turf.buffer(feature, 0.050, { units: 'kilometers' });
                     geometries.push(buffered.geometry);
                 } catch (e) {
                     console.warn('Error buffering geometry:', e);
@@ -3487,7 +3518,7 @@ function cameraIntersectsGeometries(camera, geometries) {
             // If geometry is not a polygon, try distance-based check
             try {
                 const distance = turf.distance(point, geom, { units: 'kilometers' });
-                if (distance <= 0.003) { // 3 meters
+                if (distance <= 0.050) { // 50 meters
                     return true;
                 }
             } catch (e2) {
@@ -3594,6 +3625,71 @@ function toggleCampsGates() {
     debouncedRenderCampsGates();
 }
 
+function renderMakafPaths() {
+    if (!makafPathsLayerGroup) return;
+    makafPathsLayerGroup.clearLayers();
+    if (typeof MAKAF_PATHS_DATA === 'undefined') return;
+
+    // Collect unique camp_labels from filtered plans — direct_taseed type only
+    const activeCampLabels = new Set(
+        filteredData
+            .filter(row => (row['plan_type_code'] || '').trim() === 'direct_taseed')
+            .map(row => (row['camp_label'] || '').trim())
+            .filter(Boolean)
+    );
+    if (activeCampLabels.size === 0) return;
+
+    MAKAF_PATHS_DATA.features.forEach(feature => {
+        const props = feature.properties;
+        const campLabel = (props.camp_label || '').trim();
+        if (!campLabel || !activeCampLabels.has(campLabel)) return;
+        if (!feature.geometry) return;
+
+        const color = '#f59e0b';
+
+        const popup = [
+            `<strong style="color:#333">\ud83d\ude8c \u0645\u062e\u064a\u0645 ${campLabel}</strong>`,
+            props.MAKARF         ? `<small>\u0645\u0633\u0627\u0631 \u0639\u0631\u0641\u0627\u062a: ${props.MAKARF}</small>` : '',
+            props.ASMARF         ? `<small>\u0646\u0642\u0637\u0629 \u062f\u062e\u0648\u0644 \u0639\u0631\u0641\u0627\u062a: ${props.ASMARF}</small>` : '',
+            props.Transport_mode ? `<small>\u0646\u0648\u0639 \u0627\u0644\u0646\u0642\u0644: ${props.Transport_mode}</small>` : '',
+            props._length        ? `<small>\u0627\u0644\u0637\u0648\u0644: ${Math.round(props._length).toLocaleString()} \u0645</small>` : ''
+        ].filter(Boolean).join('<br>');
+
+        // Convert GeoJSON coords [lon,lat] → latlngs arrays [[lat,lon],...]
+        const geom = feature.geometry;
+        const rings = geom.type === 'MultiLineString'
+            ? geom.coordinates
+            : [geom.coordinates];
+
+        rings.forEach(coords => {
+            const latlngs = coords.map(([lon, lat]) => [lat, lon]);
+            if (latlngs.length < 2) return;
+
+            // Halo
+            L.polyline(latlngs, {
+                color: '#ffffff',
+                weight: 7,
+                opacity: 0.6,
+                className: 'route-line'
+            }).addTo(makafPathsLayerGroup);
+
+            // Colored animated line
+            const line = L.polyline(latlngs, {
+                color,
+                weight: 3,
+                opacity: 0.95,
+                className: 'route-line'
+            });
+            line.bindPopup(popup);
+            line.addTo(makafPathsLayerGroup);
+
+            addDirectionalArrowsToGroup(latlngs, color, makafPathsLayerGroup);
+        });
+    });
+}
+
+const debouncedRenderMakafPaths = debounce(renderMakafPaths, 300);
+
 function toggleCameras() {
     showCameras = !showCameras;
     const btn = document.getElementById('camerasToggleBtn');
@@ -3644,6 +3740,7 @@ function updateDashboard() {
     updateMapSelectionTitle();
     debouncedRenderCameras();
     debouncedRenderCampsGates();
+    debouncedRenderMakafPaths();
     updateCharts(stats);
     renderServiceSummaryTables();
     updatePlanList();

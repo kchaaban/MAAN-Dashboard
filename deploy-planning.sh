@@ -9,7 +9,7 @@ REMOTE_DIST="${REMOTE_DIR}/dist"
 BASE_PATH="/maan-dashboard/"
 PM2_APP="maan-dashboard"
 # SSH key (override with: SSH_KEY=~/.ssh/other_key ./deploy-planning.sh)
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_rsa}"
+SSH_KEY="${SSH_KEY:-$HOME/.ssh/ssh-key-2025-07-21-traffic-analysis.key}"
 SSH_OPTS="-i ${SSH_KEY} -o StrictHostKeyChecking=accept-new"
 # ─────────────────────────────────────────────────────────────────────────────
 
