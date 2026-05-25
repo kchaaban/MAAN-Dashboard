@@ -15,7 +15,8 @@ app.use(express.json());
 const users = {
     'admin': { password: 'password', role: 'Administrator' },
     'manager': { password: 'password', role: 'Operations Manager' },
-    'viewer': { password: 'password', role: 'Viewer' }
+    'viewer': { password: 'password', role: 'Viewer' },
+    'komra': { password: 'FC2026', role: 'Invited User' },
 };
 
 app.post('/maan-dashboard/api/login', (req, res) => {
@@ -77,6 +78,41 @@ app.get('/maan-dashboard/api/data/:filename', authenticateToken, (req, res) => {
         res.status(404).json({ error: 'File not found' });
     }
 });
+
+// Update data.js from uploaded CSV (Administrator/Operations Manager only)
+app.post(
+    '/maan-dashboard/api/update-data',
+    express.text({ limit: '150mb' }),
+    authenticateToken,
+    requireRole(['Administrator', 'Operations Manager']),
+    (req, res) => {
+        const csvText = req.body;
+        if (typeof csvText !== 'string' || csvText.trim().length === 0) {
+            return res.status(400).json({ error: 'Empty or invalid CSV body' });
+        }
+
+        const jsContent = `const CSV_DATA = \`${csvText}\`;\n`;
+
+        const writePaths = [
+            path.join(__dirname, 'data', 'data.js'),
+            path.join(__dirname, '..', 'dist', 'data', 'data.js'),
+            path.join(__dirname, '..', 'public', 'data', 'data.js'),
+        ];
+
+        try {
+            for (const filePath of writePaths) {
+                const dir = path.dirname(filePath);
+                if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                fs.writeFileSync(filePath, jsContent, 'utf-8');
+            }
+            const sizeKb = (Buffer.byteLength(jsContent, 'utf-8') / 1024).toFixed(1);
+            res.json({ ok: true, sizeKb });
+        } catch (err) {
+            console.error('Failed to write data.js:', err.message);
+            res.status(500).json({ error: 'Failed to write data file' });
+        }
+    }
+);
 
 // Serve frontend static files
 const distPath = path.join(__dirname, '..', 'dist');

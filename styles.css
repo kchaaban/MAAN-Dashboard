@@ -25,6 +25,20 @@
     --right-panel-width: 420px;
 }
 
+@media (max-width: 1400px) {
+    :root {
+        --sidebar-width: 320px;
+        --right-panel-width: 380px;
+    }
+}
+
+@media (max-width: 1280px) {
+    :root {
+        --sidebar-width: 280px;
+        --right-panel-width: 340px;
+    }
+}
+
 body.dark-mode {
     color-scheme: dark;
     --bg-color: #0f172a;
@@ -1528,7 +1542,7 @@ body.dark-mode ::-webkit-scrollbar-thumb {
 }
 
 .right-charts-panel .chart-container {
-    min-height: 170px;
+    min-height: 240px;
 }
 
 .side-panel {
@@ -1582,7 +1596,7 @@ body.dark-mode ::-webkit-scrollbar-thumb {
 
 .plan-type-menu-section {
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(250px, 0.92fr);
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.92fr);
     align-items: stretch;
     padding: 0;
     gap: 0.7rem;
@@ -2117,6 +2131,8 @@ body.dark-mode .basemap-btn.active { background: #3b82f6 !important; color: #fff
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     gap: 0.28rem;
+    min-height: 285px;
+    overflow: visible;
 }
 
 .chart-floating-legend {
@@ -2165,10 +2181,6 @@ body.dark-mode .basemap-btn.active { background: #3b82f6 !important; color: #fff
 @media (max-width: 1280px) {
     .rings-row {
         grid-template-columns: minmax(0, 1fr) minmax(150px, 0.28fr);
-    }
-
-    .kpi-cards {
-        grid-template-columns: repeat(7, minmax(0, 1fr));
     }
 }
 
@@ -2251,17 +2263,42 @@ body.dark-mode .basemap-btn.active { background: #3b82f6 !important; color: #fff
 
 }
 
+@media (max-width: 768px) {
+    .map-overlay-card {
+        display: none;
+    }
+
+    .header-logos {
+        display: none;
+    }
+
+    .right-charts-panel .chart-card {
+        min-height: 180px;
+    }
+
+    .right-charts-panel .chart-container {
+        min-height: 140px;
+    }
+
+    .entity-table-section {
+        max-height: 260px;
+    }
+}
+
 @media (max-width: 640px) {
     .main-content,
     .sidebar {
-        padding: 1rem;
+        padding: 0.75rem;
     }
 
     .filters-section,
     .metrics-row,
-    .rings-row,
-    .kpi-cards {
+    .rings-row {
         grid-template-columns: 1fr;
+    }
+
+    .kpi-cards {
+        grid-template-columns: repeat(7, minmax(0, 1fr));
     }
 
     .page-title {
@@ -2273,7 +2310,6 @@ body.dark-mode .basemap-btn.active { background: #3b82f6 !important; color: #fff
     .top-nav-actions {
         align-items: stretch;
     }
-
 
     .plan-type-menu-section {
         grid-template-columns: 1fr;
@@ -2308,7 +2344,7 @@ body.dark-mode .basemap-btn.active { background: #3b82f6 !important; color: #fff
     }
 
     .card {
-        min-height: 380px;
+        min-height: 320px;
     }
 
     .chart-card {
@@ -2915,4 +2951,439 @@ body.light-mode .residence-assignment-ring .progress-ring-wrap span {
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 0.6; }
+}
+
+/* === Interface quality pass: clearer surfaces, rings, and interaction states === */
+:root {
+    --top-unified-ring-size: 64px;
+    --focus-ring: 0 0 0 3px color-mix(in srgb, var(--brand-mint, #4ec9b9) 24%, transparent);
+    --surface-lift: color-mix(in srgb, var(--card-bg) 92%, var(--brand-secondary, #1d5751) 8%);
+    --surface-hairline: color-mix(in srgb, var(--border-color) 72%, var(--brand-mint, #4ec9b9) 28%);
+}
+
+button,
+[role="button"],
+select,
+input,
+.entity-table-row,
+.plan-item {
+    -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+[role="button"]:focus-visible,
+select:focus-visible,
+input:focus-visible,
+.entity-table-row:focus-visible,
+.plan-item:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+    border-color: var(--brand-mint, var(--accent-secondary));
+}
+
+.sidebar,
+.top-nav,
+.glass,
+.card,
+.chart-card,
+.entity-table-section,
+.map-overlay-card,
+.map-selection-title,
+.map-status {
+    border-color: color-mix(in srgb, var(--border-color) 82%, transparent);
+    box-shadow:
+        0 14px 34px rgba(0, 0, 0, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+body.light-mode .sidebar,
+body.light-mode .top-nav,
+body.light-mode .glass,
+body.light-mode .card,
+body.light-mode .chart-card,
+body.light-mode .entity-table-section,
+body.light-mode .map-overlay-card,
+body.light-mode .map-selection-title,
+body.light-mode .map-status {
+    box-shadow:
+        0 14px 34px rgba(15, 23, 42, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.top-nav {
+    min-height: 66px;
+    background:
+        linear-gradient(135deg, color-mix(in srgb, var(--card-bg) 90%, var(--brand-teal, #2a9d90) 10%), var(--card-bg));
+}
+
+.user-profile,
+.search-bar,
+.entity-table-search,
+.chart-metric-tabs {
+    background: color-mix(in srgb, var(--surface-soft) 86%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+}
+
+.search-bar:focus-within,
+.entity-table-search:focus-within,
+.chart-metric-tabs:focus-within {
+    border-color: var(--brand-mint, var(--accent-secondary));
+    box-shadow: var(--focus-ring);
+}
+
+.theme-toggle-btn,
+.logout-btn,
+.table-clear-btn,
+.chart-open-btn,
+.chart-metric-tab,
+.panel-collapse-toggle {
+    transition:
+        transform 0.16s ease,
+        background 0.16s ease,
+        border-color 0.16s ease,
+        color 0.16s ease,
+        box-shadow 0.16s ease;
+}
+
+.theme-toggle-btn:hover,
+.logout-btn:hover,
+.table-clear-btn:hover,
+.chart-open-btn:hover,
+.chart-metric-tab:hover,
+.panel-collapse-toggle:hover {
+    transform: translateY(-1px);
+}
+
+.kpi-cards {
+    gap: 0.55rem;
+}
+
+.kpi-card {
+    position: relative;
+    min-height: 94px;
+    padding: 0.72rem;
+    overflow: hidden;
+    border-top-width: 0;
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--surface) 82%, transparent), var(--card-bg)),
+        radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--kpi-accent, var(--brand-mint)) 22%, transparent), transparent 38%);
+}
+
+.kpi-card::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--kpi-accent, var(--brand-mint));
+}
+
+.kpi-card:has(.pilgrims-icon) { --kpi-accent: #2f80ed; }
+.kpi-card:has(.buses-icon) { --kpi-accent: #8b5cf6; }
+.kpi-card:has(.plans-icon) { --kpi-accent: #2a9d90; }
+.kpi-card:has(.trips-icon) { --kpi-accent: #ebc468; }
+.kpi-card:has(.residence-icon) { --kpi-accent: #c25858; }
+.kpi-card:has(.camp-icon) { --kpi-accent: #4ec9b9; }
+.kpi-card:has(.service-center-icon) { --kpi-accent: #60a5fa; }
+
+.kpi-icon {
+    width: 34px !important;
+    height: 34px !important;
+    background: var(--kpi-accent, var(--brand-mint)) !important;
+    box-shadow:
+        0 10px 22px color-mix(in srgb, var(--kpi-accent, #4ec9b9) 32%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+}
+
+.kpi-info h4 {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    line-height: 1.25;
+}
+
+.kpi-info h2 {
+    font-size: 1rem;
+    font-weight: 850;
+    line-height: 1.1;
+}
+
+.rings-summary-section {
+    gap: 0.8rem;
+}
+
+.rings-summary-section .completion-top-card,
+.rings-summary-section .residence-top-card,
+.rings-summary-section .transport-top-card {
+    height: 154px;
+    padding: 0.65rem 0.7rem 0.7rem;
+    background:
+        linear-gradient(145deg, color-mix(in srgb, var(--surface-lift) 94%, transparent), var(--card-bg)),
+        radial-gradient(circle at 18% 18%, rgba(78, 201, 185, 0.16), transparent 34%),
+        radial-gradient(circle at 86% 18%, rgba(235, 196, 104, 0.12), transparent 30%) !important;
+    border-color: var(--surface-hairline) !important;
+}
+
+body.light-mode .rings-summary-section .completion-top-card,
+body.light-mode .rings-summary-section .residence-top-card,
+body.light-mode .rings-summary-section .transport-top-card {
+    background:
+        linear-gradient(145deg, #ffffff, #f7fafc),
+        radial-gradient(circle at 18% 18%, rgba(42, 157, 144, 0.12), transparent 34%) !important;
+}
+
+.ring-group-title {
+    margin-bottom: 0.48rem;
+    color: var(--text-primary);
+    font-size: 0.88rem;
+}
+
+.rings-summary-section .progress-rings-strip,
+.transport-rings-grid {
+    align-items: start;
+}
+
+.rings-summary-section .progress-ring-item,
+.transport-ring-item {
+    grid-template-rows: var(--top-unified-ring-size) 2.05rem;
+    min-height: 96px;
+    padding: 0.2rem 0.18rem;
+    border: 1px solid transparent;
+    border-radius: 8px;
+}
+
+.progress-ring-wrap,
+.transport-ring-container {
+    filter: drop-shadow(0 9px 14px rgba(0, 0, 0, 0.2));
+}
+
+.progress-ring-wrap::before,
+.transport-ring-container::before {
+    content: '';
+    position: absolute;
+    inset: 8px;
+    border-radius: 999px;
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 78%, #ffffff 6%), var(--card-bg));
+    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.14);
+}
+
+.progress-ring-wrap canvas,
+.transport-ring-container canvas {
+    position: relative;
+    z-index: 1;
+}
+
+.progress-ring-wrap span,
+.transport-ring-container span {
+    z-index: 2;
+    color: var(--brand-mint, #4ec9b9) !important;
+    font-size: 0.76rem;
+    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.38);
+}
+
+body.light-mode .progress-ring-wrap span,
+body.light-mode .transport-ring-container span,
+body.light-mode #residenceAssignmentCharts .progress-ring-wrap span,
+body.light-mode .residence-assignment-ring .progress-ring-wrap span {
+    color: #087f72 !important;
+    -webkit-text-fill-color: #087f72 !important;
+    text-shadow: 0 1px 5px rgba(255, 255, 255, 0.9) !important;
+}
+
+.rings-summary-section .progress-ring-item strong,
+.transport-ring-item strong {
+    height: 2.05rem;
+    max-width: 104px !important;
+    color: var(--text-secondary) !important;
+    font-size: 0.68rem !important;
+    line-height: 1.18 !important;
+    white-space: normal !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.completion-plan-ring:hover,
+.completion-plan-ring:focus-visible,
+.completion-plan-ring.active,
+.transport-ring-item:hover,
+.transport-ring-item:focus-visible,
+.transport-ring-item.active {
+    background: color-mix(in srgb, var(--brand-mint, #4ec9b9) 11%, transparent);
+    border-color: color-mix(in srgb, var(--brand-mint, #4ec9b9) 52%, transparent);
+    box-shadow: var(--focus-ring);
+}
+
+.entity-table-section {
+    padding: 0.7rem;
+}
+
+.entity-table-wrap {
+    border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
+}
+
+.entity-table thead th {
+    background: color-mix(in srgb, var(--surface) 84%, var(--brand-secondary, #1d5751) 8%);
+    color: var(--text-primary);
+}
+
+.entity-table tbody td {
+    border-top-color: color-mix(in srgb, var(--border-color) 70%, transparent);
+}
+
+.entity-table-row:hover {
+    background: color-mix(in srgb, var(--brand-mint, #4ec9b9) 9%, transparent);
+}
+
+.entity-table-row.active,
+.plan-item.active {
+    background: color-mix(in srgb, var(--brand-light, #caab79) 16%, transparent);
+    border-color: var(--brand-light, var(--accent-primary));
+}
+
+.plan-item {
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--surface-soft) 88%, transparent), var(--card-bg));
+}
+
+.chart-card {
+    padding: 0.68rem;
+}
+
+.chart-metric-tab.active {
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--brand-mint, #4ec9b9) 14%, transparent);
+    border-color: color-mix(in srgb, var(--brand-mint, #4ec9b9) 56%, transparent);
+}
+
+.map-container-card {
+    border-color: color-mix(in srgb, var(--border-color) 70%, var(--brand-teal, #2a9d90) 30%);
+}
+
+.map-overlay-card {
+    background: color-mix(in srgb, var(--card-bg) 88%, transparent);
+}
+
+@media (max-width: 1280px) {
+    :root {
+        --top-unified-ring-size: 58px;
+    }
+
+    .rings-summary-section .completion-top-card,
+    .rings-summary-section .residence-top-card,
+    .rings-summary-section .transport-top-card {
+        height: 146px;
+    }
+}
+
+@media (max-width: 760px) {
+    .kpi-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .rings-summary-section .completion-top-card,
+    .rings-summary-section .residence-top-card,
+    .rings-summary-section .transport-top-card {
+        height: auto;
+        min-height: 150px;
+    }
+
+    .completion-top-card .progress-rings-strip,
+    .residence-top-card .progress-rings-strip {
+        overflow-x: auto;
+        justify-content: flex-start;
+    }
+}
+
+/* Keep the rings row fitting when browser zoom reduces available CSS width. */
+.rings-summary-section {
+    container-type: inline-size;
+}
+
+.rings-summary-section.plan-type-menu-section {
+    grid-template-columns:
+        minmax(0, 1.15fr)
+        minmax(0, 1fr)
+        minmax(0, 0.95fr);
+    gap: clamp(0.35rem, 0.75cqw, 0.8rem);
+}
+
+.rings-summary-section .completion-top-card,
+.rings-summary-section .residence-top-card,
+.rings-summary-section .transport-top-card {
+    min-width: 0 !important;
+    overflow: hidden;
+}
+
+.rings-summary-section .progress-rings-strip {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    justify-content: stretch !important;
+    gap: clamp(0.12rem, 0.45cqw, 0.52rem);
+    min-width: 0;
+}
+
+.transport-rings-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: clamp(0.08rem, 0.35cqw, 0.32rem);
+    min-width: 0;
+}
+
+.rings-summary-section .progress-ring-item,
+.transport-ring-item {
+    min-width: 0;
+    width: 100%;
+    padding-inline: clamp(0.04rem, 0.25cqw, 0.18rem);
+}
+
+.rings-summary-section .progress-ring-wrap,
+.rings-summary-section .transport-ring-container,
+.rings-summary-section .progress-ring-wrap canvas,
+.rings-summary-section .transport-ring-container canvas {
+    width: min(var(--top-unified-ring-size), 6.2cqw) !important;
+    height: min(var(--top-unified-ring-size), 6.2cqw) !important;
+}
+
+.rings-summary-section .progress-ring-item,
+.transport-ring-item {
+    grid-template-rows: min(var(--top-unified-ring-size), 6.2cqw) 2.05rem;
+}
+
+.rings-summary-section .progress-ring-item strong,
+.transport-ring-item strong {
+    max-width: 100% !important;
+    font-size: clamp(0.5rem, 0.75cqw, 0.68rem) !important;
+}
+
+.progress-ring-wrap span,
+.transport-ring-container span {
+    font-size: clamp(0.58rem, 0.85cqw, 0.76rem);
+}
+
+@container (max-width: 940px) {
+    .rings-summary-section.plan-type-menu-section {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .rings-summary-section .completion-top-card,
+    .rings-summary-section .residence-top-card,
+    .rings-summary-section .transport-top-card {
+        height: auto;
+        min-height: 132px;
+    }
+
+    .rings-summary-section .progress-ring-wrap,
+    .rings-summary-section .transport-ring-container,
+    .rings-summary-section .progress-ring-wrap canvas,
+    .rings-summary-section .transport-ring-container canvas {
+        width: min(var(--top-unified-ring-size), 12cqw) !important;
+        height: min(var(--top-unified-ring-size), 12cqw) !important;
+    }
+
+    .rings-summary-section .progress-ring-item,
+    .transport-ring-item {
+        grid-template-rows: min(var(--top-unified-ring-size), 12cqw) 2.05rem;
+    }
 }

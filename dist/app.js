@@ -14,8 +14,16 @@ let makafPathsLayerGroup;
 // Performance Caches
 let cachedFilteredGeometries = null;
 let cachedFilteredGeometriesKey = null;
+// Camera plan cache (rebuilt async after every filter change)
+let cameraPlanCache = new Map(); // cameraName → { totalBuses, totalTrips, byKey }
+let cameraCacheKey = null;
+let cameraCacheBuilding = false;
 let cachedDashboardStats = null;
 let cachedDashboardStatsKey = null;
+let cachedDashboardRenderKey = null;
+let cachedMapRenderKey = null;
+let districtChartTheme = null;
+let chartUpdateTimerId = null;
 let periodChartInstance = null;
 let transportChartInstances = [];
 let entranceChartInstance = null;
@@ -60,7 +68,7 @@ let serviceCenterNamesByKey = new Map();
 let plansCsvLoadSequence = 0;
 let activePlansCsvSource = '';
 let dashboardResizeFrameId = null;
-const TOP_RING_CANVAS_SIZE = 52;
+const TOP_RING_CANVAS_SIZE = 64;
 const RESIDENCE_RING_CANVAS_SIZE = TOP_RING_CANVAS_SIZE;
 const TRANSPORT_RING_CANVAS_SIZE = TOP_RING_CANVAS_SIZE;
 const CHART_METRIC_DEFS = {
@@ -1017,6 +1025,29 @@ async function cachePlansCsv(csvText, source) {
     });
 }
 
+async function persistCsvToDisk(csvText) {
+    const token = getPersistentValue(AUTH_TOKEN_STORAGE_KEY);
+    if (!token) return;
+    try {
+        const res = await fetch('/maan-dashboard/api/update-data', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain; charset=utf-8',
+                'Authorization': `Bearer ${token}`
+            },
+            body: csvText
+        });
+        if (res.ok) {
+            const { sizeKb } = await res.json();
+            console.log(`CSV persisted to disk (${sizeKb} KB)`);
+        } else {
+            console.warn('Server rejected CSV persist:', res.status);
+        }
+    } catch (err) {
+        console.warn('Could not persist CSV to disk (server may be offline):', err.message);
+    }
+}
+
 async function clearPlansCsvCache() {
     localStorage.removeItem(PLANS_CSV_SOURCE_STORAGE_KEY);
 
@@ -1572,7 +1603,7 @@ const REQUIRED_CSV_COLUMNS = [
     'number_of_late_haj', 'number_of_early_haj', 'license_number', 'residence_haj',
     'tarwia', 'direct_taseed', 'get_type_parking', 'get_parking_name', 'get_parking_geom',
     'set_type_parking', 'set_parking_name', 'set_parking_geom', 'entrance_asm_code',
-    'entrance_name', 'entrance_polygon', 'entrance_point_geom', 'start_point_name',
+    'entrance_name', 'entrance_point_geom', 'entrance_polygon', 'start_point_name',
     'start_geom', 'start_point_district', 'start_point_type', 'start_point_geom',
     'end_point_name', 'end_geom', 'end_point_type', 'end_point_geom', 'path_geom',
     'path_name', 'internal_path', 'owner_company_name', 'owner_office_number',
@@ -1611,22 +1642,13 @@ function validateCsvStructure(csvText) {
             return { valid: false, error: 'الملف يحتوي على رأس الأعمدة فقط بدون بيانات' };
         }
 
-        // Check column count
-        if (headers.length !== REQUIRED_CSV_COLUMNS.length) {
+        // Check all required columns are present (order does not matter)
+        const headerSet = new Set(headers);
+        const missingColumns = REQUIRED_CSV_COLUMNS.filter(col => !headerSet.has(col));
+        if (missingColumns.length > 0) {
             return {
                 valid: false,
-                error: `عدد الأعمدة غير صحيح: وجدت ${headers.length} أعمدة، المتوقع ${REQUIRED_CSV_COLUMNS.length}`
-            };
-        }
-
-        // Check column order
-        const wrongOrderIndex = headers.findIndex((h, i) => h !== REQUIRED_CSV_COLUMNS[i]);
-        if (wrongOrderIndex >= 0) {
-            const expected = REQUIRED_CSV_COLUMNS[wrongOrderIndex];
-            const actual = headers[wrongOrderIndex];
-            return {
-                valid: false,
-                error: `ترتيب الأعمدة غير صحيح. في الموضع ${wrongOrderIndex + 1}: متوقع "${expected}"، وجدت "${actual}"`
+                error: `أعمدة مفقودة: ${missingColumns.join(', ')}`
             };
         }
 
@@ -2024,6 +2046,15 @@ function getRowGeojsons(row) {
     } else if (targetBaseName && geojsonLookup[targetBaseName]) {
         const feature = geojsonLookup[targetBaseName][row['camp_label']];
         if (feature && feature.geometry) geojsonsToRender.push({ geojson: feature.geometry, type: 'internal' });
+    } else if (planTypeCode === 'direct_taseed' && typeof MAKAF_PATHS_DATA !== 'undefined') {
+        const campLabel = (row['camp_label'] || '').trim();
+        const asmCode = (row['entrance_asm_code'] || '').trim();
+        const feature = MAKAF_PATHS_DATA.features.find(f => {
+            const p = f.properties;
+            return p.camp_label?.trim() === campLabel &&
+                   (!asmCode || p.ASM_CODE?.trim() === asmCode);
+        });
+        if (feature && feature.geometry) geojsonsToRender.push({ geojson: feature.geometry, type: 'internal' });
     }
 
     if (row['path_geom']) {
@@ -2356,7 +2387,7 @@ function addMapLabel(latlng, text, className = 'map-point-label', direction = 't
     }
 }
 
-function addRouteConnector(fromLatLng, toLatLng) {
+function addRouteConnector(fromLatLng, toLatLng, showArrows = false) {
     if (!fromLatLng || !toLatLng) return;
     const gapMeters = getLatLngDistance(fromLatLng, toLatLng);
     if (!Number.isFinite(gapMeters) || gapMeters < 12 || gapMeters > 5000) return;
@@ -2378,11 +2409,23 @@ function addRouteConnector(fromLatLng, toLatLng) {
         className: 'route-line route-connector-line'
     }).addTo(routeLayerGroup);
 
-    addDirectionalArrows(latlngs, '#EBC468');
+    if (showArrows) {
+        addDirectionalArrows(latlngs, '#EBC468');
+    }
 }
 
 function addDirectionalArrows(latlngs, color) {
     addDirectionalArrowsToGroup(latlngs, color, routeLayerGroup);
+}
+
+function shouldShowDirectionalArrows(row, item) {
+    const planTypeCode = normalizePlanTypeCode(row?.['plan_type_code'] || row?.['plan_type_name']);
+    return planTypeCode === 'direct_taseed' && (item?.type === 'internal' || item?.type === 'external');
+}
+
+function shouldRenderRouteConnectors(row) {
+    const planTypeCode = normalizePlanTypeCode(row?.['plan_type_code'] || row?.['plan_type_name']);
+    return planTypeCode === 'direct_taseed';
 }
 
 function addDirectionalArrowsToGroup(latlngs, color, group) {
@@ -2776,6 +2819,7 @@ function setupEventListeners() {
                 try {
                     await cachePlansCsv(CSV_DATA, file.name);
                     console.log('CSV data cached for persistence');
+                    persistCsvToDisk(CSV_DATA).catch(() => {});
                 } catch (cacheError) {
                     console.warn('Failed to cache CSV data:', cacheError);
                 }
@@ -2848,6 +2892,30 @@ function setupEventListeners() {
         csvBtn.parentNode.insertBefore(clearCacheBtn, csvBtn);
         console.log('Clear cache button added');
 
+        // Add clear filters button
+        const clearFiltersBtn = document.createElement('button');
+        clearFiltersBtn.id = 'clearFiltersBtn';
+        clearFiltersBtn.className = 'theme-toggle-btn';
+        clearFiltersBtn.type = 'button';
+        clearFiltersBtn.title = 'مسح جميع الفلاتر';
+        clearFiltersBtn.setAttribute('aria-label', 'مسح الفلاتر');
+        clearFiltersBtn.innerHTML = '<i class="fa-solid fa-filter-circle-xmark"></i>';
+        clearFiltersBtn.style.marginRight = '4px';
+        clearFiltersBtn.addEventListener('click', clearAllFilters);
+        csvBtn.parentNode.insertBefore(clearFiltersBtn, csvBtn);
+
+        // Add camera stats export button
+        const cameraExportBtn = document.createElement('button');
+        cameraExportBtn.id = 'cameraExportBtn';
+        cameraExportBtn.className = 'theme-toggle-btn';
+        cameraExportBtn.type = 'button';
+        cameraExportBtn.title = 'تصدير إحصائيات الكاميرات CSV';
+        cameraExportBtn.setAttribute('aria-label', 'تصدير إحصائيات الكاميرات');
+        cameraExportBtn.innerHTML = '<i class="fa-solid fa-file-csv"></i>';
+        cameraExportBtn.style.marginRight = '4px';
+        cameraExportBtn.addEventListener('click', exportCameraStatsToCSV);
+        csvBtn.parentNode.insertBefore(cameraExportBtn, csvBtn);
+
         // Add Cameras toggle button
         const camerasBtn = document.createElement('button');
         camerasBtn.id = 'camerasToggleBtn';
@@ -2856,24 +2924,12 @@ function setupEventListeners() {
         camerasBtn.title = 'تبديل عرض الكاميرات';
         camerasBtn.setAttribute('aria-label', 'تبديل الكاميرات');
         camerasBtn.innerHTML = '<i class="fa-solid fa-video"></i>';
-        camerasBtn.style.marginRight = '15px';
+        camerasBtn.style.marginRight = '4px';
         camerasBtn.style.opacity = '1';
         camerasBtn.addEventListener('click', toggleCameras);
-        // Insert before CSV button
-        csvBtn.parentNode.insertBefore(camerasBtn, csvBtn);
+        // Insert before export button (so order is: ... | camera-toggle | export | csv)
+        csvBtn.parentNode.insertBefore(camerasBtn, cameraExportBtn);
 
-        // Add Camp Gates toggle button
-        const campsGatesBtn = document.createElement('button');
-        campsGatesBtn.id = 'campsGatesToggleBtn';
-        campsGatesBtn.className = 'theme-toggle-btn';
-        campsGatesBtn.type = 'button';
-        campsGatesBtn.title = 'تبديل عرض بوابات المخيمات';
-        campsGatesBtn.setAttribute('aria-label', 'تبديل بوابات المخيمات');
-        campsGatesBtn.innerHTML = '<i class="fa-solid fa-door-open"></i>';
-        campsGatesBtn.style.marginRight = '15px';
-        campsGatesBtn.style.opacity = '0.4';
-        campsGatesBtn.addEventListener('click', toggleCampsGates);
-        csvBtn.parentNode.insertBefore(campsGatesBtn, csvBtn);
         console.log('Cameras toggle button added');
     } else {
         console.log('top-nav-actions not found');
@@ -3530,6 +3586,249 @@ function cameraIntersectsGeometries(camera, geometries) {
     return false;
 }
 
+// [lng, lat] zone centers used to determine path direction relative to each zone
+const HAJJ_ZONE_CENTERS = [
+    { prefix: 'ARF', coords: [39.9848, 21.3546] },
+    { prefix: 'MNA', coords: [39.8903, 21.4122] },
+    { prefix: 'MZD', coords: [39.9362, 21.3863] },
+    { prefix: 'MKZ', coords: [39.8262, 21.4225] },
+];
+
+function getCameraZoneCenter(camera) {
+    const prefix = camera.name.split('_')[0];
+    const match = HAJJ_ZONE_CENTERS.find(z => z.prefix === prefix);
+    if (match) return match.coords;
+    // Fallback: nearest zone by distance
+    const cam = turf.point([camera.longitude, camera.latitude]);
+    let nearest = HAJJ_ZONE_CENTERS[0];
+    let minDist = Infinity;
+    for (const z of HAJJ_ZONE_CENTERS) {
+        const d = turf.distance(cam, turf.point(z.coords), { units: 'kilometers' });
+        if (d < minDist) { minDist = d; nearest = z; }
+    }
+    return nearest.coords;
+}
+
+// Returns 'entry', 'exit', or 'unknown' based on path bearing at camera vs zone center bearing
+function getPlanDirectionAtCamera(plan, camera) {
+    const geojsons = getRowGeojsons(plan);
+    const camPoint = turf.point([camera.longitude, camera.latitude]);
+    const zoneCoords = getCameraZoneCenter(camera);
+    const bearingToZone = turf.bearing(camPoint, turf.point(zoneCoords));
+
+    for (const item of geojsons) {
+        if (!item.geojson || item.geojson.type !== 'LineString') continue;
+        const coords = item.geojson.coordinates;
+        if (coords.length < 2) continue;
+        try {
+            const line = turf.lineString(coords);
+            const nearest = turf.nearestPointOnLine(line, camPoint, { units: 'kilometers' });
+            const idx = Math.min(nearest.properties.index ?? 0, coords.length - 2);
+            const pathBearing = turf.bearing(turf.point(coords[idx]), turf.point(coords[idx + 1]));
+            let diff = Math.abs(pathBearing - bearingToZone);
+            if (diff > 180) diff = 360 - diff;
+            return diff <= 90 ? 'entry' : 'exit';
+        } catch (e) {}
+    }
+    return 'unknown';
+}
+
+function getCameraFilterKey() {
+    if (!filteredData || filteredData.length === 0) return '0';
+    return `${filteredData.length}|${filteredData[0]['plan_id']}|${filteredData[filteredData.length - 1]['plan_id']}`;
+}
+
+function updateCameraExportBtnState() {
+    const btn = document.getElementById('cameraExportBtn');
+    if (!btn) return;
+    if (cameraCacheBuilding) {
+        btn.disabled = true;
+        btn.title = 'جارٍ تحميل الإحصائيات...';
+        btn.style.opacity = '0.4';
+    } else {
+        btn.disabled = false;
+        btn.title = 'تصدير إحصائيات الكاميرات CSV';
+        btn.style.opacity = showCameras ? '1' : '0.4';
+    }
+}
+
+function buildCameraPlanCacheAsync() {
+    const newKey = getCameraFilterKey();
+    if (cameraCacheKey === newKey) return;
+
+    cameraCacheKey = newKey;
+    cameraPlanCache = new Map();
+    cameraCacheBuilding = true;
+    updateCameraExportBtnState();
+
+    if (typeof CAMERAS_DATA === 'undefined' || filteredData.length === 0) {
+        cameraCacheBuilding = false;
+        updateCameraExportBtnState();
+        return;
+    }
+
+    const cameraPoints = CAMERAS_DATA.map(cam => ({
+        cam,
+        point: turf.point([cam.longitude, cam.latitude])
+    }));
+
+    let planIdx = 0;
+    const CHUNK = 8;
+
+    function processChunk() {
+        if (cameraCacheKey !== newKey) return;
+
+        const end = Math.min(planIdx + CHUNK, filteredData.length);
+        for (let i = planIdx; i < end; i++) {
+            const plan = filteredData[i];
+            const geojsons = getRowGeojsons(plan);
+            const buses = Number(plan.number_of_buses) || 0;
+            const trips = getTripCount(plan, buses);
+            const typeLabel = plan.plan_type_name || plan.plan_type_code || 'غير محدد';
+            const transport = plan.transport_type_name || 'غير محدد';
+            const company = plan.service_company_name || plan.owner_company_name || 'غير محدد';
+            const center = plan.owner_office_number || 'غير محدد';
+            const byKeyLabel = typeLabel + '|||' + transport + '|||' + company + '|||' + center;
+
+            const buffers = [];
+            for (const item of geojsons) {
+                if (!item.geojson || !item.geojson.coordinates) continue;
+                try {
+                    const feature = turf.feature(item.geojson);
+                    buffers.push({ buffered: true, geom: turf.buffer(feature, 0.050, { units: 'kilometers' }) });
+                } catch (_) {
+                    try { buffers.push({ buffered: false, geom: turf.feature(item.geojson) }); } catch (__) {}
+                }
+            }
+            if (buffers.length === 0) continue;
+
+            for (const { cam, point } of cameraPoints) {
+                let intersects = false;
+                for (const b of buffers) {
+                    try {
+                        if (b.buffered) {
+                            if (turf.booleanPointInPolygon(point, b.geom)) { intersects = true; break; }
+                        } else {
+                            if (turf.distance(point, b.geom, { units: 'kilometers' }) <= 0.050) { intersects = true; break; }
+                        }
+                    } catch (_) {}
+                }
+                if (intersects) {
+                    if (!cameraPlanCache.has(cam.name)) {
+                        cameraPlanCache.set(cam.name, { totalBuses: 0, totalTrips: 0, byKey: {} });
+                    }
+                    const entry = cameraPlanCache.get(cam.name);
+                    entry.totalBuses += buses;
+                    entry.totalTrips += trips;
+                    if (!entry.byKey[byKeyLabel]) {
+                        entry.byKey[byKeyLabel] = { typeLabel, transport, company, center, buses: 0, trips: 0 };
+                    }
+                    entry.byKey[byKeyLabel].buses += buses;
+                    entry.byKey[byKeyLabel].trips += trips;
+                }
+            }
+        }
+        planIdx = end;
+
+        if (planIdx >= filteredData.length) {
+            cameraCacheBuilding = false;
+            updateCameraExportBtnState();
+            return;
+        }
+        setTimeout(processChunk, 0);
+    }
+
+    setTimeout(processChunk, 0);
+}
+
+function exportCameraStatsToCSV() {
+    if (cameraCacheBuilding) {
+        alert('جارٍ تحميل الإحصائيات، يرجى الانتظار لحظة ثم حاول مجدداً');
+        return;
+    }
+    if (cameraPlanCache.size === 0) {
+        alert('لا توجد كاميرات مرئية حالياً لتصديرها');
+        return;
+    }
+
+    const rows = [];
+    for (const [cameraName, stats] of cameraPlanCache) {
+        for (const s of Object.values(stats.byKey)) {
+            rows.push([cameraName, s.typeLabel, s.transport, s.company, s.center, s.buses, s.trips]);
+        }
+    }
+
+    if (rows.length === 0) { alert('لم يتم العثور على بيانات للتصدير'); return; }
+
+    const headers = ['اسم الكاميرا', 'نوع الخطة', 'نمط النقل', 'الشركة', 'المركز', 'عدد الحافلات', 'عدد الرحلات'];
+    const csvContent = [headers, ...rows]
+        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\r\n');
+    const blob = new Blob(['﻿' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const now = new Date();
+    const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+    a.href = url; a.download = `احصائيات_الكاميرات_${ts}.csv`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+function clearAllFilters() {
+    // Reset dropdown filters
+    ['periodFilter', 'transportFilter', 'districtFilter'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = 'all';
+    });
+    // Reset search
+    const searchInput = document.querySelector('.search-bar input');
+    if (searchInput) searchInput.value = '';
+    // Reset all state
+    selectedPlanId = null;
+    selectedEntranceName = null;
+    selectedPathName = null;
+    selectedDistrict = null;
+    selectedResidenceMixFilter = 'all';
+    selectedPlanTypes.clear();
+    selectedServiceCompanies.clear();
+    selectedServiceCenters.clear();
+    // Re-render plan type menu so buttons deselect
+    renderPlanTypeMenu();
+    applyFilters();
+}
+
+function getPlansForCamera(camera) {
+    if (!filteredData || filteredData.length === 0) return [];
+
+    const point = turf.point([camera.longitude, camera.latitude]);
+    const matchingPlans = [];
+
+    for (const plan of filteredData) {
+        const geojsons = getRowGeojsons(plan);
+        let intersects = false;
+
+        for (const item of geojsons) {
+            if (!item.geojson || !item.geojson.coordinates) continue;
+            try {
+                const feature = turf.feature(item.geojson);
+                const buffered = turf.buffer(feature, 0.050, { units: 'kilometers' });
+                if (turf.booleanPointInPolygon(point, buffered)) {
+                    intersects = true;
+                    break;
+                }
+            } catch (e) {
+                try {
+                    const dist = turf.distance(point, turf.feature(item.geojson), { units: 'kilometers' });
+                    if (dist <= 0.050) { intersects = true; break; }
+                } catch (e2) {}
+            }
+        }
+
+        if (intersects) matchingPlans.push(plan);
+    }
+
+    return matchingPlans;
+}
+
 function renderCameras() {
     if (!camerasLayerGroup) return;
 
@@ -3558,7 +3857,80 @@ function renderCameras() {
             })
         });
 
-        marker.bindPopup(`<strong style="color: #333;">📷 ${camera.name}</strong><br><small>Lat: ${camera.latitude.toFixed(5)}<br>Lng: ${camera.longitude.toFixed(5)}</small>`);
+        marker.bindPopup(`<strong style="color:#333;">📷 ${camera.name}</strong><br><small style="color:#888;">جارٍ تحميل البيانات...</small>`);
+
+        marker.on('popupopen', function () {
+            const popup = this.getPopup();
+            const SEP = `<hr style="margin:6px 0;border:none;border-top:1px solid rgba(128,128,128,0.25);">`;
+
+            if (cameraCacheBuilding) {
+                popup.setContent(
+                    `<div dir="rtl" style="font-family:inherit;min-width:220px;padding:4px;">
+                        <div style="font-size:13px;font-weight:bold;">📷 ${camera.name}</div>
+                        ${SEP}
+                        <div style="font-size:12px;opacity:0.6;">جارٍ تحميل الإحصائيات...</div>
+                    </div>`
+                );
+                popup.update();
+                return;
+            }
+
+            const cached = cameraPlanCache.get(camera.name);
+            if (!cached) {
+                popup.setContent(
+                    `<div dir="rtl" style="font-family:inherit;min-width:220px;padding:4px;">
+                        <div style="font-size:13px;font-weight:bold;">📷 ${camera.name}</div>
+                        ${SEP}
+                        <div style="font-size:12px;opacity:0.6;">لا توجد رحلات مخططة لهذه الكاميرا</div>
+                    </div>`
+                );
+                popup.update();
+                return;
+            }
+
+            const { totalBuses, totalTrips, byKey } = cached;
+            const typeRows = Object.values(byKey).map(v =>
+                `<tr>
+                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);font-size:11px;">${v.typeLabel}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);font-size:11px;">${v.transport}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);font-size:11px;">${v.company}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);font-size:11px;">${v.center}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);text-align:center;font-size:11px;">${v.buses.toLocaleString()}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);text-align:center;font-size:11px;font-weight:bold;">${v.trips.toLocaleString()}</td>
+                </tr>`
+            ).join('');
+
+            popup.setContent(
+                `<div dir="rtl" style="font-family:inherit;min-width:520px;padding:4px;font-size:13px;">
+                    <div style="font-size:14px;font-weight:bold;">📷 ${camera.name}</div>
+                    ${SEP}
+                    <div style="display:flex;justify-content:space-around;padding:6px 0;">
+                        <div style="text-align:center;">
+                            <div style="font-size:20px;font-weight:bold;color:#3b82f6;">${totalBuses.toLocaleString()}</div>
+                            <div style="font-size:11px;opacity:0.65;margin-top:1px;">الحافلات</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:20px;font-weight:bold;color:#8b5cf6;">${totalTrips.toLocaleString()}</div>
+                            <div style="font-size:11px;opacity:0.65;margin-top:1px;">الرحلات</div>
+                        </div>
+                    </div>
+                    ${SEP}
+                    <table style="width:100%;border-collapse:collapse;">
+                        <thead><tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
+                            <th style="padding:4px 8px;text-align:right;font-size:11px;font-weight:bold;">نوع الخطة</th>
+                            <th style="padding:4px 8px;text-align:right;font-size:11px;font-weight:bold;">نمط النقل</th>
+                            <th style="padding:4px 8px;text-align:right;font-size:11px;font-weight:bold;">الشركة</th>
+                            <th style="padding:4px 8px;text-align:right;font-size:11px;font-weight:bold;">المركز</th>
+                            <th style="padding:4px 8px;text-align:center;font-size:11px;font-weight:bold;">الحافلات</th>
+                            <th style="padding:4px 8px;text-align:center;font-size:11px;font-weight:bold;">الرحلات</th>
+                        </tr></thead>
+                        <tbody>${typeRows}</tbody>
+                    </table>
+                </div>`
+            );
+            popup.update();
+        });
+
         marker.addTo(camerasLayerGroup);
     });
 }
@@ -3673,7 +4045,7 @@ function renderMakafPaths() {
                 className: 'route-line'
             }).addTo(makafPathsLayerGroup);
 
-            // Colored animated line
+            // Keep the dashed flow animation while omitting separate arrow markers.
             const line = L.polyline(latlngs, {
                 color,
                 weight: 3,
@@ -3682,8 +4054,6 @@ function renderMakafPaths() {
             });
             line.bindPopup(popup);
             line.addTo(makafPathsLayerGroup);
-
-            addDirectionalArrowsToGroup(latlngs, color, makafPathsLayerGroup);
         });
     });
 }
@@ -3733,17 +4103,40 @@ function updateMapSelectionTitle() {
 }
 
 // Main Update Function
+function getDashboardRenderKey() {
+    return [
+        filteredData.length,
+        filteredData.length ? filteredData[0]['plan_id'] : '',
+        filteredData.length ? filteredData[filteredData.length - 1]['plan_id'] : '',
+        selectedPlanId, selectedEntranceName, selectedPathName, selectedDistrict,
+        Array.from(selectedServiceCompanies).sort().join(','),
+        Array.from(selectedServiceCenters).sort().join(','),
+        selectedResidenceMixFilter,
+        Array.from(selectedPlanTypes).sort().join(',')
+    ].join('|');
+}
+
 function updateDashboard() {
     const stats = getDashboardStats();
     updateKPIs(stats);
-    updateMap();
-    updateMapSelectionTitle();
     debouncedRenderCameras();
+    buildCameraPlanCacheAsync();
     debouncedRenderCampsGates();
     debouncedRenderMakafPaths();
-    updateCharts(stats);
-    renderServiceSummaryTables();
+
+    const renderKey = getDashboardRenderKey();
+    if (renderKey === cachedDashboardRenderKey) return;
+    cachedDashboardRenderKey = renderKey;
+
+    updateMap();
+    updateMapSelectionTitle();
     updatePlanList();
+
+    clearTimeout(chartUpdateTimerId);
+    chartUpdateTimerId = setTimeout(() => {
+        updateCharts(stats);
+        renderServiceSummaryTables();
+    }, 0);
 }
 
 function buildCompletionStats(rows) {
@@ -3887,7 +4280,7 @@ function getDashboardStats() {
 
 function getTripCount(row, buses) {
     const transportType = row['transport_type_name'] || '';
-    if (transportType.includes('ردين')) return buses * 2;
+    if (transportType.includes('ردين') || transportType.includes('تقليدي رد')) return buses * 2;
     if (transportType.includes('ترددي')) return buses * 3;
     if (transportType.includes('رد') || transportType.includes('ىد')) return buses;
     return buses;
@@ -4004,6 +4397,17 @@ function updateSecondaryStats(stats) {
 
 // Update Map Routes
 function updateMap() {
+    const mapKey = [
+        filteredData.length,
+        filteredData.length ? filteredData[0]['plan_id'] : '',
+        filteredData.length ? filteredData[filteredData.length - 1]['plan_id'] : '',
+        selectedPlanId, selectedEntranceName, selectedPathName, selectedDistrict,
+        Array.from(selectedServiceCompanies).sort().join(','),
+        Array.from(selectedServiceCenters).sort().join(',')
+    ].join('|');
+    if (mapKey === cachedMapRenderKey) return;
+    cachedMapRenderKey = mapKey;
+
     routeLayerGroup.clearLayers();
     districtsLayerGroup.clearLayers();
     const mapStatus = document.getElementById('mapStatus');
@@ -4187,8 +4591,10 @@ function updateMap() {
 
                         bindPopupToLayer(halo, row, item);
                         bindPopupToLayer(polyline, row, item);
-                        if (showDetailedMapLabels) {
+                        if (showDetailedMapLabels && shouldShowDirectionalArrows(row, item)) {
                             addDirectionalArrows(latlngs, color);
+                        }
+                        if (showDetailedMapLabels) {
                             const areaLabel = getAreaLabel(row, item);
                             const midpoint = getMidpointLatLng(latlngs);
                             if (areaLabel && midpoint && item.type !== 'external') {
@@ -4199,11 +4605,11 @@ function updateMap() {
                 }
             });
 
-            if (connectedLineSequence.length > 1) {
+            if (connectedLineSequence.length > 1 && shouldRenderRouteConnectors(row)) {
                 for (let index = 0; index < connectedLineSequence.length - 1; index++) {
                     const current = connectedLineSequence[index].latlngs;
                     const next = connectedLineSequence[index + 1].latlngs;
-                    addRouteConnector(current[current.length - 1], next[0]);
+                    addRouteConnector(current[current.length - 1], next[0], shouldShowDirectionalArrows(row, connectedLineSequence[index]));
                 }
             }
         } catch (e) {
@@ -4317,7 +4723,7 @@ function updateCharts(stats = getDashboardStats()) {
             dragmode: 'zoom'
         };
         Plotly.react(periodPlotEl, [periodTrace], periodLayout, plotlyConfig);
-        requestDashboardResize();
+        periodPlotEl.removeAllListeners('plotly_click');
         periodPlotEl.on('plotly_click', event => {
             const point = event?.points?.[0];
             const label = point ? String(point.x || '').trim() : '';
@@ -4345,9 +4751,30 @@ function updateCharts(stats = getDashboardStats()) {
         ["rgba(194, 88, 88, 0.92)", "rgba(148, 163, 184, 0.26)"]
     ];
 
+    const transportContainer = document.getElementById("transportCharts");
+    const canReuseTransport = transportChartInstances.length === transEntries.length &&
+        transportContainer?.children.length === transEntries.length;
+
+    if (canReuseTransport) {
+        transEntries.forEach(([label, value], index) => {
+            const rest = Math.max(totalTransportBuses - value, 0);
+            const percentage = totalTransportBuses > 0 ? Math.round((value / totalTransportBuses) * 100) : 0;
+            const ringValues = totalTransportBuses > 0 ? [value, rest] : [0, 1];
+            const chart = transportChartInstances[index];
+            if (chart) { chart.data.datasets[0].data = ringValues; chart.update('none'); }
+            const item = transportContainer.children[index];
+            if (item) {
+                const span = item.querySelector('span');
+                if (span) span.textContent = percentage + '%';
+                const isActive = transportFilter && transportFilter.value === label;
+                item.classList.toggle('active', isActive);
+                item.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                item.setAttribute('title', label + ' - ' + Number(value || 0).toLocaleString() + ' (' + percentage + '%)');
+            }
+        });
+    } else {
     transportChartInstances.forEach(chart => chart.destroy());
     transportChartInstances = [];
-    const transportContainer = document.getElementById("transportCharts");
     if (transportContainer) {
         transportContainer.replaceChildren();
 
@@ -4395,13 +4822,16 @@ function updateCharts(stats = getDashboardStats()) {
                     datasets: [{
                         data: ringValues,
                         backgroundColor: transportColors[index % transportColors.length],
-                        borderWidth: 0
+                        borderWidth: 0,
+                        borderRadius: 8,
+                        spacing: 2,
+                        hoverOffset: 2
                     }]
                 },
                 options: {
                     responsive: false,
                     maintainAspectRatio: true,
-                    cutout: "72%",
+                    cutout: "68%",
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -4416,6 +4846,7 @@ function updateCharts(stats = getDashboardStats()) {
             }));
         });
     }
+    } // end canReuseTransport else
 
     const entranceLabels = Object.keys(entranceMetricStats.entranceCounts).sort();
     const periodsArray = Array.from(entranceMetricStats.allPeriodsForEntrance).sort((a, b) => Number(a) - Number(b));
@@ -4438,6 +4869,10 @@ function updateCharts(stats = getDashboardStats()) {
         };
     });
 
+    // Short labels for display: strip leading "مدخل " to save space
+    const entranceShortLabels = entranceLabels.map(l => l.replace(/^مدخل\s+/, ''));
+    const entranceShortToFull = Object.fromEntries(entranceLabels.map((f, i) => [entranceShortLabels[i], f]));
+
     const entrancePlotEl = document.getElementById('entranceChart');
     if (entrancePlotEl && window.Plotly) {
         const entranceTraces = periodsArray.map((period, index) => {
@@ -4455,19 +4890,29 @@ function updateCharts(stats = getDashboardStats()) {
             };
         });
         const entranceLayout = {
-            margin: { l: 46, r: 12, t: 24, b: 58 },
+            margin: { l: 46, r: 12, t: 26, b: 72 },
             paper_bgcolor: 'rgba(0,0,0,0)',
             plot_bgcolor: 'rgba(0,0,0,0)',
             font: { color: chartTheme.text, family: 'Inter, IBM Plex Sans Arabic, sans-serif' },
             barmode: 'group',
-            xaxis: { tickangle: -35, tickfont: { color: chartTheme.text }, showgrid: false, fixedrange: false },
+            xaxis: {
+                tickvals: entranceLabels,
+                ticktext: entranceShortLabels,
+                tickangle: -28,
+                tickfont: { size: 11, color: chartTheme.text },
+                automargin: true,
+                showgrid: false,
+                fixedrange: false
+            },
             yaxis: { tickfont: { color: chartTheme.text }, gridcolor: chartTheme.grid, zeroline: false, fixedrange: false },
             showlegend: false,
             hovermode: 'closest',
             dragmode: 'zoom'
         };
         Plotly.react(entrancePlotEl, entranceTraces, entranceLayout, plotlyConfig);
-        requestDashboardResize();
+        entrancePlotEl.removeAllListeners('plotly_click');
+        entrancePlotEl.removeAllListeners('plotly_afterplot');
+        // Bar click: point.x is the full label from the trace
         entrancePlotEl.on('plotly_click', event => {
             const point = event?.points?.[0];
             const label = point ? String(point.x || '').trim() : '';
@@ -4476,6 +4921,31 @@ function updateCharts(stats = getDashboardStats()) {
             selectedPlanId = null;
             applyFilters();
         });
+        // Style tick labels after each render (displayed text is the short label)
+        entrancePlotEl.on('plotly_afterplot', () => {
+            entrancePlotEl.querySelectorAll('.xtick text').forEach(tick => {
+                tick.style.cursor = 'pointer';
+                const fullName = entranceShortToFull[tick.textContent.trim()] || tick.textContent.trim();
+                const isSelected = fullName === selectedEntranceName;
+                tick.style.fill = isSelected ? '#f59e0b' : '';
+                tick.style.fontWeight = isSelected ? '700' : '';
+                tick.style.textDecoration = isSelected ? 'underline' : '';
+            });
+        });
+        // Tick label click via event delegation — map short→full name
+        if (entrancePlotEl._tickClickHandler) {
+            entrancePlotEl.removeEventListener('click', entrancePlotEl._tickClickHandler);
+        }
+        entrancePlotEl._tickClickHandler = e => {
+            if (e.target.tagName !== 'text' || !e.target.parentElement?.classList.contains('xtick')) return;
+            const short = e.target.textContent.trim();
+            const label = entranceShortToFull[short] || short;
+            if (!label) return;
+            selectedEntranceName = selectedEntranceName === label ? null : label;
+            selectedPlanId = null;
+            applyFilters();
+        };
+        entrancePlotEl.addEventListener('click', entrancePlotEl._tickClickHandler);
     }
 
     renderEntranceFloatingLegend(periodsArray, colors);
@@ -4504,7 +4974,7 @@ function updateCharts(stats = getDashboardStats()) {
             dragmode: 'zoom'
         };
         Plotly.react(pathPlotEl, [pathTrace], pathLayout, plotlyConfig);
-        requestDashboardResize();
+        pathPlotEl.removeAllListeners('plotly_click');
         pathPlotEl.on('plotly_click', event => {
             const point = event?.points?.[0];
             const label = point ? String(point.x || '').trim() : '';
@@ -4521,10 +4991,15 @@ function updateCharts(stats = getDashboardStats()) {
     const distLabels = Object.keys(districtMetricStats.districtCounts).sort((a, b) => districtMetricStats.districtCounts[b] - districtMetricStats.districtCounts[a]);
     const distValues = distLabels.map(l => districtMetricStats.districtCounts[l]);
 
-    if (districtChartInstance) districtChartInstance.destroy();
-    const ctxDist = document.getElementById('districtChart').getContext('2d');
-
-    districtChartInstance = new Chart(ctxDist, {
+    if (districtChartInstance && districtChartTheme === chartTheme.title) {
+        districtChartInstance.data.labels = distLabels;
+        districtChartInstance.data.datasets[0].data = distValues;
+        districtChartInstance.update('none');
+    } else {
+        if (districtChartInstance) districtChartInstance.destroy();
+        districtChartTheme = chartTheme.title;
+        const ctxDist = document.getElementById('districtChart').getContext('2d');
+        districtChartInstance = new Chart(ctxDist, {
         type: 'doughnut',
         data: {
             labels: distLabels,
@@ -4610,6 +5085,7 @@ function updateCharts(stats = getDashboardStats()) {
             }
         }
     });
+    }
 }
 
 function handleDistrictSelection(label) {
@@ -4633,10 +5109,6 @@ function renderCompletionSummaryChart(stats, chartTheme) {
     const container = document.getElementById('completionSummaryCharts');
     if (!container) return;
 
-    completionSummaryChartInstances.forEach(chart => chart.destroy());
-    completionSummaryChartInstances = [];
-    container.replaceChildren();
-
     const planTypeSelect = document.getElementById('planTypeFilter');
     const activePlanTypes = getActivePlanTypeLabels();
     const summaryStats = buildCompletionStats(planTypeBaseData.length ? planTypeBaseData : rawData);
@@ -4652,6 +5124,36 @@ function renderCompletionSummaryChart(stats, chartTheme) {
             const orderDiff = getPlanTypeRingOrderIndex(a) - getPlanTypeRingOrderIndex(b);
             return orderDiff || b.target - a.target;
         });
+
+    if (completionSummaryChartInstances.length === rows.length && container.children.length === rows.length) {
+        rows.forEach((row, index) => {
+            const planned = row.planned;
+            const target = row.target;
+            const percent = target > 0 ? Math.round((planned / target) * 1000) / 10 : 0;
+            const displayPercent = clampCompletionPercentage(percent);
+            const complete = Math.min(planned, target);
+            const remaining = Math.max(target - planned, 0);
+            const over = Math.max(planned - target, 0);
+            const hasVisibleProgressData = complete > 0 || remaining > 0 || over > 0;
+            const ringValues = hasVisibleProgressData ? (over > 0 ? [complete, over] : [complete, remaining]) : [0, 1];
+            const chart = completionSummaryChartInstances[index];
+            if (chart) { chart.data.datasets[0].data = ringValues; chart.update('none'); }
+            const item = container.children[index];
+            if (item) {
+                const span = item.querySelector('span');
+                if (span) span.textContent = displayPercent + '%';
+                const isSelectedPlanType = activePlanTypes.has(row.label);
+                item.classList.toggle('active', isSelectedPlanType);
+                item.setAttribute('aria-pressed', isSelectedPlanType ? 'true' : 'false');
+                item.setAttribute('title', `${row.label}\nالاكتمال: ${displayPercent}%\nالمخطط: ${planned.toLocaleString()}\nالمستهدف: ${target.toLocaleString()}`);
+            }
+        });
+        return;
+    }
+
+    completionSummaryChartInstances.forEach(chart => chart.destroy());
+    completionSummaryChartInstances = [];
+    container.replaceChildren();
 
     rows.forEach(row => {
         const planned = row.planned;
@@ -4726,13 +5228,16 @@ function renderCompletionSummaryChart(stats, chartTheme) {
                             : ['rgba(42, 157, 144, 0.96)', 'rgba(148, 163, 184, 0.28)'])
                         : ['rgba(48, 220, 148, 0)', 'rgba(148, 163, 184, 0.34)'],
                     borderColor: chartTheme.border,
-                    borderWidth: 2
+                    borderWidth: 2,
+                    borderRadius: 8,
+                    spacing: 2,
+                    hoverOffset: 2
                 }]
             },
             options: {
                 responsive: false,
                 maintainAspectRatio: true,
-                cutout: '72%',
+                cutout: '68%',
                 plugins: {
                     legend: { display: false },
                     tooltip: {
@@ -4758,10 +5263,6 @@ function renderCompletionSummaryChart(stats, chartTheme) {
 function renderResidenceAssignmentChart(chartTheme) {
     const container = document.getElementById('residenceAssignmentCharts');
     if (!container) return;
-
-    residenceAssignmentChartInstances.forEach(chart => chart.destroy());
-    residenceAssignmentChartInstances = [];
-    container.replaceChildren();
 
     const coverage = getResidenceAssignmentCoverage();
     const mix = getResidenceMixStats();
@@ -4823,6 +5324,33 @@ function renderResidenceAssignmentChart(chartTheme) {
         }
     ];
 
+    if (residenceAssignmentChartInstances.length === ringDefs.length && container.children.length === ringDefs.length) {
+        ringDefs.forEach((def, index) => {
+            const total = def.total;
+            const done = Math.max(0, Math.min(def.done, total));
+            const rest = Math.max(total - done, 0);
+            const hasData = total > 0;
+            const percent = hasData ? Math.round((done / total) * 1000) / 10 : 0;
+            const chart = residenceAssignmentChartInstances[index];
+            if (chart) { chart.data.datasets[0].data = hasData ? [done, rest] : [0, 1]; chart.update('none'); }
+            const item = container.children[index];
+            if (item) {
+                const span = item.querySelector('span');
+                if (span) span.textContent = percent + '%';
+                if (def.filterKey) {
+                    const isActive = selectedResidenceMixFilter === def.filterKey;
+                    item.classList.toggle('active', isActive);
+                    item.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                }
+            }
+        });
+        return;
+    }
+
+    residenceAssignmentChartInstances.forEach(chart => chart.destroy());
+    residenceAssignmentChartInstances = [];
+    container.replaceChildren();
+
     ringDefs.forEach(def => {
         const total = def.total;
         const done = Math.max(0, Math.min(def.done, total));
@@ -4882,13 +5410,16 @@ function renderResidenceAssignmentChart(chartTheme) {
                     data: hasData ? [done, rest] : [0, 1],
                     backgroundColor: hasData ? def.colors : ['rgba(0,0,0,0)', 'rgba(148, 163, 184, 0.34)'],
                     borderColor: chartTheme.border,
-                    borderWidth: 2
+                    borderWidth: 2,
+                    borderRadius: 8,
+                    spacing: 2,
+                    hoverOffset: 2
                 }]
             },
             options: {
                 responsive: false,
                 maintainAspectRatio: true,
-                cutout: '72%',
+                cutout: '68%',
                 plugins: {
                     legend: { display: false },
                     tooltip: {

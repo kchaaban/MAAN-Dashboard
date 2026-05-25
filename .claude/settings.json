@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check /Users/khaledchaaban/dev/maan-dashboard/public/app.js)",
+      "Bash(python3 -c ' *)",
+      "Bash(bash deploy-planning.sh)",
+      "Bash(chmod -R u+w /Users/khaledchaaban/dev/maan-dashboard/dist/)",
+      "Bash(sudo chown -R khaledchaaban /Users/khaledchaaban/dev/maan-dashboard/dist/)",
+      "Bash(mv /Users/khaledchaaban/dev/maan-dashboard/dist /tmp/maan-dist-old && bash deploy-planning.sh 2>&1)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}
