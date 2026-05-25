@@ -4,4 +4,8 @@ node_modules
 .vscode
 .DS_Store
 *.swp
-*.swo   
+*.swo
+
+# Data directories
+data/
+**/data/   

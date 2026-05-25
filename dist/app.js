@@ -2867,31 +2867,6 @@ function setupEventListeners() {
         }
         console.log('CSV loader button added');
 
-        // Add Clear Cache button to revert to default data.js
-        const clearCacheBtn = document.createElement('button');
-        clearCacheBtn.id = 'clearCacheBtn';
-        clearCacheBtn.className = 'theme-toggle-btn';
-        clearCacheBtn.type = 'button';
-        clearCacheBtn.title = 'مسح بيانات CSV المحفوظة والعودة للبيانات الافتراضية';
-        clearCacheBtn.setAttribute('aria-label', 'مسح البيانات المحفوظة');
-        clearCacheBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
-        clearCacheBtn.style.marginRight = '15px';
-        clearCacheBtn.addEventListener('click', async () => {
-            if (confirm('هل تريد مسح بيانات CSV المحفوظة والعودة للبيانات الافتراضية؟')) {
-                try {
-                    await clearPlansCsvCache();
-                    // Reload page to restore default data.js
-                    window.location.reload();
-                } catch (error) {
-                    alert('فشل مسح البيانات المحفوظة');
-                    console.error('Failed to clear cache:', error);
-                }
-            }
-        });
-        // Insert before CSV button
-        csvBtn.parentNode.insertBefore(clearCacheBtn, csvBtn);
-        console.log('Clear cache button added');
-
         // Add clear filters button
         const clearFiltersBtn = document.createElement('button');
         clearFiltersBtn.id = 'clearFiltersBtn';
@@ -3891,44 +3866,58 @@ function renderCameras() {
             const { totalBuses, totalTrips, byKey } = cached;
             const typeRows = Object.values(byKey).map(v =>
                 `<tr>
-                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);font-size:11px;">${v.typeLabel}</td>
-                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);font-size:11px;">${v.transport}</td>
-                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);font-size:11px;">${v.company}</td>
-                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);font-size:11px;">${v.center}</td>
-                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);text-align:center;font-size:11px;">${v.buses.toLocaleString()}</td>
-                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);text-align:center;font-size:11px;font-weight:bold;">${v.trips.toLocaleString()}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);font-size:12px;">${v.typeLabel}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);font-size:12px;">${v.transport}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);text-align:center;font-size:12px;">${v.buses.toLocaleString()}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid rgba(128,128,128,0.15);text-align:center;font-size:12px;font-weight:bold;">${v.trips.toLocaleString()}</td>
                 </tr>`
             ).join('');
 
+            const exportBtnId = 'camExportBtn_' + camera.name.replace(/\W/g, '_');
             popup.setContent(
-                `<div dir="rtl" style="font-family:inherit;min-width:520px;padding:4px;font-size:13px;">
+                `<div dir="rtl" style="font-family:inherit;min-width:260px;padding:4px;font-size:13px;">
                     <div style="font-size:14px;font-weight:bold;">📷 ${camera.name}</div>
                     ${SEP}
-                    <div style="display:flex;justify-content:space-around;padding:6px 0;">
+                    <div style="display:flex;justify-content:space-around;padding:8px 0;">
                         <div style="text-align:center;">
-                            <div style="font-size:20px;font-weight:bold;color:#3b82f6;">${totalBuses.toLocaleString()}</div>
-                            <div style="font-size:11px;opacity:0.65;margin-top:1px;">الحافلات</div>
+                            <div style="font-size:24px;font-weight:bold;color:#3b82f6;">${totalBuses.toLocaleString()}</div>
+                            <div style="font-size:11px;opacity:0.65;margin-top:2px;">الحافلات</div>
                         </div>
                         <div style="text-align:center;">
-                            <div style="font-size:20px;font-weight:bold;color:#8b5cf6;">${totalTrips.toLocaleString()}</div>
-                            <div style="font-size:11px;opacity:0.65;margin-top:1px;">الرحلات</div>
+                            <div style="font-size:24px;font-weight:bold;color:#8b5cf6;">${totalTrips.toLocaleString()}</div>
+                            <div style="font-size:11px;opacity:0.65;margin-top:2px;">الرحلات</div>
                         </div>
                     </div>
                     ${SEP}
-                    <table style="width:100%;border-collapse:collapse;">
-                        <thead><tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
-                            <th style="padding:4px 8px;text-align:right;font-size:11px;font-weight:bold;">نوع الخطة</th>
-                            <th style="padding:4px 8px;text-align:right;font-size:11px;font-weight:bold;">نمط النقل</th>
-                            <th style="padding:4px 8px;text-align:right;font-size:11px;font-weight:bold;">الشركة</th>
-                            <th style="padding:4px 8px;text-align:right;font-size:11px;font-weight:bold;">المركز</th>
-                            <th style="padding:4px 8px;text-align:center;font-size:11px;font-weight:bold;">الحافلات</th>
-                            <th style="padding:4px 8px;text-align:center;font-size:11px;font-weight:bold;">الرحلات</th>
-                        </tr></thead>
-                        <tbody>${typeRows}</tbody>
-                    </table>
+                    <div style="display:flex;justify-content:flex-end;padding-top:2px;">
+                        <button id="${exportBtnId}" style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:7px;border:1px solid rgba(128,128,128,0.4);background:transparent;color:inherit;cursor:pointer;font-size:12px;">
+                            <i class="fa-solid fa-file-csv"></i> تصدير CSV
+                        </button>
+                    </div>
                 </div>`
             );
             popup.update();
+
+            requestAnimationFrame(() => {
+                const btn = document.getElementById(exportBtnId);
+                if (!btn) return;
+                btn.addEventListener('click', () => {
+                    const rows = Object.values(byKey).map(v =>
+                        [camera.name, v.typeLabel, v.transport, v.company, v.center, v.buses, v.trips]
+                    );
+                    const headers = ['اسم الكاميرا', 'نوع الخطة', 'نمط النقل', 'الشركة', 'المركز', 'عدد الحافلات', 'عدد الرحلات'];
+                    const csvContent = [headers, ...rows]
+                        .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
+                        .join('\r\n');
+                    const blob = new Blob(['﻿' + csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    const now = new Date();
+                    const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+                    a.href = url; a.download = `كاميرا_${camera.name}_${ts}.csv`; a.click();
+                    setTimeout(() => URL.revokeObjectURL(url), 10000);
+                });
+            });
         });
 
         marker.addTo(camerasLayerGroup);
@@ -4396,6 +4385,33 @@ function updateSecondaryStats(stats) {
 }
 
 // Update Map Routes
+function getTransportTypeColor(transportTypeName) {
+    const t = String(transportTypeName || '');
+    if (t.includes('ترددي'))       return { color: '#f97316', fillColor: '#fed7aa' }; // orange
+    if (t.includes('ردين'))         return { color: '#8b5cf6', fillColor: '#ddd6fe' }; // purple
+    if (t.includes('رد'))           return { color: '#3b82f6', fillColor: '#bfdbfe' }; // blue
+    if (t.includes('قطار'))         return { color: '#f59e0b', fillColor: '#fde68a' }; // amber
+    return { color: '#22c55e', fillColor: '#bbf7d0' };                                 // green default
+}
+
+function sampleAcrossPlanTypes(data, limit) {
+    if (data.length <= limit) return data;
+    const byType = {};
+    data.forEach(row => {
+        const t = row['plan_type_code'] || 'unknown';
+        if (!byType[t]) byType[t] = [];
+        byType[t].push(row);
+    });
+    const types = Object.keys(byType);
+    const perType = Math.floor(limit / types.length);
+    const remainder = limit - perType * types.length;
+    const result = [];
+    types.forEach((t, i) => {
+        result.push(...byType[t].slice(0, perType + (i < remainder ? 1 : 0)));
+    });
+    return result;
+}
+
 function updateMap() {
     const mapKey = [
         filteredData.length,
@@ -4414,7 +4430,7 @@ function updateMap() {
     const bounds = L.latLngBounds();
     const serviceEntitySelectionActive = hasServiceEntitySelection();
     const shouldFitFilteredResults = hasActiveMapFilter();
-    const mapData = shouldFitFilteredResults ? filteredData : filteredData.slice(0, MAP_RENDER_LIMIT);
+    const mapData = shouldFitFilteredResults ? filteredData : sampleAcrossPlanTypes(filteredData, MAP_RENDER_LIMIT);
     const showDetailedMapLabels = Boolean(selectedPlanId || serviceEntitySelectionActive) || filteredData.length <= MAP_DETAIL_LABEL_LIMIT;
 
     if (mapStatus) {
@@ -4492,8 +4508,10 @@ function updateMap() {
                     let fillColor = '#93c5fd';
                     if (item.type === 'internal') { color = '#10b981'; fillColor = '#6ee7b7'; }
                     else if (item.type === 'entrance') { color = '#EBC468'; fillColor = '#fcd34d'; }
-                    else if (item.type === 'start') { color = '#22c55e'; fillColor = '#86efac'; }
-                    else if (item.type === 'end') { color = '#ef4444'; fillColor = '#fca5a5'; }
+                    else if (item.type === 'start' || item.type === 'end') {
+                        const tc = getTransportTypeColor(row['transport_type_name']);
+                        color = tc.color; fillColor = tc.fillColor;
+                    }
                     else if (item.type === 'get_parking') { color = '#f59e0b'; fillColor = '#fcd34d'; }
                     else if (item.type === 'set_parking') { color = '#ec4899'; fillColor = '#fbcfe8'; }
                     else if (item.type === 'parking_combined') { color = '#8b5cf6'; fillColor = '#ddd6fe'; }

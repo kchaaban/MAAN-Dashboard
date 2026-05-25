@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(python3 -c ' *)",
+      "Bash(awk -F',' 'NR>1{print $33}' /Users/khaledchaaban/dev/maan-dashboard/server/data/simulation_data_view_202605250448.csv)",
+      "Bash(git -C /Users/khaledchaaban/dev/maan-dashboard check-ignore -v dist/data public/data server/data)",
+      "Bash(git -C /Users/khaledchaaban/dev/maan-dashboard status --short dist/data public/data server/data)",
+      "Bash(git -C /Users/khaledchaaban/dev/maan-dashboard ls-files dist/data public/data server/data)"
     ]
   }
 }
