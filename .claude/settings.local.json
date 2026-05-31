@@ -6,7 +6,12 @@
       "Bash(awk -F',' 'NR>1{print $33}' /Users/khaledchaaban/dev/maan-dashboard/server/data/simulation_data_view_202605250448.csv)",
       "Bash(git -C /Users/khaledchaaban/dev/maan-dashboard check-ignore -v dist/data public/data server/data)",
       "Bash(git -C /Users/khaledchaaban/dev/maan-dashboard status --short dist/data public/data server/data)",
-      "Bash(git -C /Users/khaledchaaban/dev/maan-dashboard ls-files dist/data public/data server/data)"
+      "Bash(git -C /Users/khaledchaaban/dev/maan-dashboard ls-files dist/data public/data server/data)",
+      "Bash(awk '-F\"' '{for\\(i=1;i<=NF;i++\\) if\\($i~/entrance_name/ || \\(prev~/entrance_name/\\)\\) print $i; prev=$i}')",
+      "Bash(npm run *)",
+      "Bash(sudo cp /Users/khaledchaaban/dev/maan-dashboard/styles.css /Users/khaledchaaban/dev/maan-dashboard/dist/assets/index-Ckf1N2sq.css)",
+      "Bash(chmod u+w /Users/khaledchaaban/dev/maan-dashboard/dist/assets/index-Ckf1N2sq.css)",
+      "Bash(sudo cp styles.css dist/assets/index-CQEvPKqj.css)"
     ]
   }
 }

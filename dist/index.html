@@ -11,10 +11,11 @@
     <!-- FontAwesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Custom CSS -->
-  <link rel="stylesheet" crossorigin href="/maan-dashboard/assets/index-B8FvjLMS.css">
+  <link rel="stylesheet" crossorigin href="/maan-dashboard/assets/index-DxqnY3zU.css">
 </head>
 <body class="dark-mode auth-required">
 
+    <div class="mobile-sidebar-backdrop" id="mobileSidebarBackdrop"></div>
     <div id="dashboardApp" class="dashboard-container" hidden>
         <!-- Sidebar -->
         <aside class="sidebar">
@@ -26,56 +27,12 @@
                 </div>
             </div>
 
-            <div class="selection-section">
-                <div class="entity-table-section glass">
-                    <div class="entity-section-header">
-                        <h3><i class="fa-solid fa-building"></i> &#1588;&#1585;&#1603;&#1575;&#1578; &#1575;&#1604;&#1582;&#1583;&#1605;&#1577;</h3>
-                        <button id="clearCompanySelectionBtn" class="table-clear-btn" type="button">&#1575;&#1604;&#1603;&#1604;</button>
-                    </div>
-                    <div class="entity-table-search">
-                        <i class="fa-solid fa-magnifying-glass"></i>
-                        <input id="serviceCompaniesSearch" type="search" placeholder="بحث في الشركات" autocomplete="off">
-                    </div>
-                    <div class="entity-table-wrap">
-                        <table class="entity-table service-companies-table" data-table-type="company">
-                            <thead>
-                                <tr>
-                                    <th data-sort-key="label">&#1575;&#1604;&#1588;&#1585;&#1603;&#1577;</th>
-                                    <th data-sort-key="totalPilgrims">&#1575;&#1604;&#1581;&#1580;&#1575;&#1580;</th>
-                                    <th data-sort-key="residences">&#1575;&#1604;&#1605;&#1587;&#1575;&#1603;&#1606;</th>
-                                    <th data-sort-key="completion">&#1575;&#1604;&#1575;&#1603;&#1578;&#1605;&#1575;&#1604;</th>
-                                </tr>
-                            </thead>
-                            <tbody id="serviceCompaniesTableBody"></tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div class="entity-table-section glass">
-                    <div class="entity-section-header">
-                        <h3><i class="fa-solid fa-sitemap"></i> &#1605;&#1585;&#1575;&#1603;&#1586; &#1575;&#1604;&#1582;&#1583;&#1605;&#1577;</h3>
-                        <button id="clearCenterSelectionBtn" class="table-clear-btn" type="button">&#1575;&#1604;&#1603;&#1604;</button>
-                    </div>
-                    <div class="entity-table-search">
-                        <i class="fa-solid fa-magnifying-glass"></i>
-                        <input id="serviceCentersSearch" type="search" placeholder="بحث في المراكز" autocomplete="off">
-                    </div>
-                    <div class="entity-table-wrap">
-                        <table class="entity-table service-centers-table" data-table-type="center">
-                            <thead>
-                                <tr>
-                                    <th data-sort-key="centerNumber">رقم المكتب</th>
-                                    <th data-sort-key="label">&#1575;&#1604;&#1605;&#1585;&#1603;&#1586;</th>
-                                    <th data-sort-key="sublabel">&#1575;&#1604;&#1588;&#1585;&#1603;&#1577;</th>
-                                    <th data-sort-key="totalPilgrims">&#1575;&#1604;&#1581;&#1580;&#1575;&#1580;</th>
-                                    <th data-sort-key="residences">&#1575;&#1604;&#1605;&#1587;&#1575;&#1603;&#1606;</th>
-                                    <th data-sort-key="completion">&#1575;&#1604;&#1575;&#1603;&#1578;&#1605;&#1575;&#1604;</th>
-                                </tr>
-                            </thead>
-                            <tbody id="serviceCentersTableBody"></tbody>
-                        </table>
-                    </div>
-                </div>
+            <div class="visually-hidden" aria-hidden="true">
+                <tbody id="serviceCompaniesTableBody"></tbody>
+                <tbody id="serviceCentersTableBody"></tbody>
+                <select id="companyDropdown"></select>
+                <select id="centerDropdown"></select>
+                <select id="campDropdown"></select>
             </div>
 
             <div class="visually-hidden" aria-hidden="true">
@@ -90,6 +47,33 @@
                 </select>
             </div>
 
+
+            <div class="sidebar-filters-section">
+                <div class="sidebar-filters-header">
+                    <span class="sidebar-filters-label"><i class="fa-solid fa-sliders"></i> الفلاتر</span>
+                    <button id="sidebarClearFiltersBtn" class="sidebar-clear-x-btn" type="button" title="مسح الفلاتر" aria-label="مسح الفلاتر" hidden>
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="sidebar-searchable-wrap">
+                    <i class="fa-solid fa-building sidebar-select-icon"></i>
+                    <input type="text" class="sidebar-select" id="companySearch" placeholder="شركات الخدمة" autocomplete="off" aria-label="شركة الخدمة">
+                    <button id="companyClearBtn" class="sidebar-input-clear-btn" type="button" title="مسح" aria-label="مسح الشركة" hidden><i class="fa-solid fa-xmark"></i></button>
+                    <ul class="sidebar-dropdown-list" id="companyDropdownList" hidden></ul>
+                </div>
+                <div class="sidebar-searchable-wrap">
+                    <i class="fa-solid fa-sitemap sidebar-select-icon"></i>
+                    <input type="text" class="sidebar-select" id="centerSearch" placeholder="مراكز الخدمة" autocomplete="off" aria-label="مركز الخدمة">
+                    <button id="centerClearBtn" class="sidebar-input-clear-btn" type="button" title="مسح" aria-label="مسح المركز" hidden><i class="fa-solid fa-xmark"></i></button>
+                    <ul class="sidebar-dropdown-list" id="centerDropdownList" hidden></ul>
+                </div>
+                <div class="sidebar-searchable-wrap">
+                    <i class="fa-solid fa-campground sidebar-select-icon"></i>
+                    <input type="text" class="sidebar-select" id="campSearch" placeholder="المخيمات" autocomplete="off" aria-label="المخيم">
+                    <button id="campClearBtn" class="sidebar-input-clear-btn" type="button" title="مسح" aria-label="مسح المخيم" hidden><i class="fa-solid fa-xmark"></i></button>
+                    <ul class="sidebar-dropdown-list" id="campDropdownList" hidden></ul>
+                </div>
+            </div>
 
             <div class="plan-list-section">
                 <h3><i class="fa-solid fa-clock-rotate-left"></i> الخطط الأخيرة</h3>
@@ -109,6 +93,9 @@
         <main class="main-content">
             <header class="top-nav">
                 <div class="top-nav-actions">
+                    <button id="mobileMenuBtn" class="mobile-menu-btn" type="button" aria-label="القائمة الجانبية" title="القائمة">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
                     <div class="search-bar">
                         <i class="fa-solid fa-magnifying-glass search-icon"></i>
                         <input type="text" placeholder="البحث في الخطط...">
@@ -284,8 +271,6 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Plotly -->
-    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <!-- Turf.js for geometric operations -->
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
     

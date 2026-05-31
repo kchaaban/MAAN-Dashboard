@@ -50,7 +50,11 @@ let assignCampRows = [];
 let assignmentTotalsFromCamps = { companyMetrics: new Map(), centerMetrics: new Map() };
 let selectedServiceCompanies = new Set();
 let selectedServiceCenters = new Set();
+let selectedCampLabel = '';
 let selectedResidenceMixFilter = 'all';
+let companyDD = null;
+let centerDD = null;
+let campDD = null;
 const selectedChartMetrics = {
     period: 'pilgrims',
     entrance: 'pilgrims',
@@ -71,6 +75,59 @@ let dashboardResizeFrameId = null;
 const TOP_RING_CANVAS_SIZE = 64;
 const RESIDENCE_RING_CANVAS_SIZE = TOP_RING_CANVAS_SIZE;
 const TRANSPORT_RING_CANVAS_SIZE = TOP_RING_CANVAS_SIZE;
+
+const segmentPctPlugin = {
+    id: 'segmentPct',
+    afterDraw(chart) {
+        if (chart.options?.plugins?.segmentPct?.display === false) return;
+        const { ctx, data } = chart;
+        const dataset = data.datasets[0];
+        const total = dataset.percentageTotal ?? dataset.data.reduce((s, v) => s + (v || 0), 0);
+        if (!total) return;
+        const meta = chart.getDatasetMeta(0);
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        meta.data.forEach((arc, i) => {
+            const val = data.datasets[0].data[i];
+            const pct = Math.round(val / total * 100);
+            if (pct < 3) return;
+            const arcSpan = arc.endAngle - arc.startAngle;
+            if (arcSpan < 0.18) return;
+            const midAngle = (arc.startAngle + arc.endAngle) / 2;
+            const r = (arc.outerRadius + arc.innerRadius) / 2;
+            const thickness = arc.outerRadius - arc.innerRadius;
+            const arcLength = arcSpan * r;
+            const label = pct + '%';
+            let fontSize = Math.min(thickness * 0.52, arcLength * 0.34, 12);
+            fontSize = Math.max(Math.floor(fontSize), 8);
+            ctx.font = `bold ${fontSize}px sans-serif`;
+            const textWidth = ctx.measureText(label).width;
+            if (textWidth > arcLength * 0.78 || textWidth > thickness * 1.7) return;
+            const x = arc.x + Math.cos(midAngle) * r;
+            const y = arc.y + Math.sin(midAngle) * r;
+            ctx.fillStyle = '#fff';
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+            ctx.lineWidth = Math.max(2, fontSize * 0.18);
+            ctx.strokeText(label, x, y);
+            ctx.fillText(label, x, y);
+        });
+        ctx.restore();
+    }
+};
+
+function formatRingPercent(value, total) {
+    if (!total || !value) return '0%';
+    return Math.round((value / total) * 100) + '%';
+}
+
+function getTarwiaDirectTaseedTotal(rows) {
+    return rows.reduce((sum, row) => {
+        const code = normalizePlanTypeCode(row.planTypeCode || row.plan_type_code || row.code || row.label);
+        if (code !== 'tarwia' && code !== 'direct_taseed') return sum;
+        return sum + (row.target || 0);
+    }, 0);
+}
 const CHART_METRIC_DEFS = {
     pilgrims: { label: 'الحجاج', periodTitle: 'الحجاج حسب الفترة', entranceTitle: 'الحجاج لكل مدخل', pathTitle: 'الحجاج حسب المسار', districtTitle: 'الحجاج حسب الحي' },
     buses: { label: 'الحافلات', periodTitle: 'الحافلات حسب الفترة', entranceTitle: 'الحافلات لكل مدخل', pathTitle: 'الحافلات حسب المسار', districtTitle: 'الحافلات حسب الحي' },
@@ -83,6 +140,7 @@ const MAP_FIT_MAX_ZOOM = 16;
 const MAP_LABEL_MIN_ZOOM = 15;
 const ASSIGNMENT_RENDER_LIMIT = 350;
 const MAP_DETAIL_LABEL_LIMIT = 18;
+const CAMERA_PLAN_BUFFER_KM = 0.020; // 20 meters
 const SIDEBAR_WIDTH_STORAGE_KEY = 'dashboard-sidebar-width';
 const RIGHT_PANEL_WIDTH_STORAGE_KEY = 'dashboard-right-panel-width';
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'dashboard-sidebar-collapsed';
@@ -128,9 +186,26 @@ function hashString(value) {
     }, 0);
 }
 
-function getDistrictBaseColor(districtName) {
-    const index = Math.abs(hashString(normalizeArabic(districtName))) % DISTRICT_COLOR_PALETTE.length;
-    return DISTRICT_COLOR_PALETTE[index];
+function getDistrictDensityColor(intensity) {
+    // YlOrRd choropleth: yellow → orange → red based on pilgrim density (0..1)
+    const stops = [
+        [0.00, [255, 255, 204]],
+        [0.25, [254, 217, 118]],
+        [0.50, [253, 141,  60]],
+        [0.75, [227,  26,  28]],
+        [1.00, [128,   0,  38]]
+    ];
+    let lo = stops[0], hi = stops[stops.length - 1];
+    for (let i = 0; i < stops.length - 1; i++) {
+        if (intensity >= stops[i][0] && intensity <= stops[i + 1][0]) {
+            lo = stops[i]; hi = stops[i + 1]; break;
+        }
+    }
+    const t = lo[0] === hi[0] ? 0 : (intensity - lo[0]) / (hi[0] - lo[0]);
+    const r = Math.round(lo[1][0] + t * (hi[1][0] - lo[1][0]));
+    const g = Math.round(lo[1][1] + t * (hi[1][1] - lo[1][1]));
+    const b = Math.round(lo[1][2] + t * (hi[1][2] - lo[1][2]));
+    return `rgb(${r},${g},${b})`;
 }
 
 function buildDistrictMapStats(rows) {
@@ -159,16 +234,17 @@ function buildDistrictMapStats(rows) {
 
 function getDistrictPolygonStyle(districtName, districtStats, maxPilgrims) {
     const isSelected = selectedDistrict && normalizeArabic(selectedDistrict) === normalizeArabic(districtName);
-    const color = getDistrictBaseColor(districtName);
     const intensity = maxPilgrims > 0 ? Math.min(1, districtStats.pilgrims / maxPilgrims) : 0;
+    const fillColor = getDistrictDensityColor(intensity);
+    const strokeColor = isSelected ? '#1e40af' : '#374151';
 
     return {
-        color,
-        weight: isSelected ? 4 : 1.6,
-        opacity: isSelected ? 0.95 : 0.78,
-        fillColor: color,
-        fillOpacity: isSelected ? 0.58 : 0.22 + (intensity * 0.24),
-        dashArray: isSelected ? null : "5 4",
+        color: strokeColor,
+        weight: isSelected ? 3 : 1,
+        opacity: 0.9,
+        fillColor,
+        fillOpacity: isSelected ? 0.8 : Math.max(0.35, 0.35 + intensity * 0.45),
+        dashArray: isSelected ? null : "4 3",
         className: isSelected ? "district-polygon district-polygon-selected" : "district-polygon"
     };
 }
@@ -480,8 +556,8 @@ async function initializeDashboardApp() {
         // Continue with default data.js CSV
     }
 
-    loadData();
     setupEventListeners();
+    loadData();
 }
 
 // Initialize Application
@@ -638,10 +714,13 @@ async function openChartElementInNewPage(element) {
 
     let imageData = '';
     const isCanvas = element.tagName?.toLowerCase() === 'canvas';
-    const isPlotly = element.classList?.contains('plotly-chart');
+    const isChartContainer = element.classList?.contains('plotly-chart');
 
-    if (isPlotly && typeof Plotly !== 'undefined') {
-        imageData = await Plotly.toImage(element, { format: 'png', width: 1400, height: 860 });
+    if (isChartContainer) {
+        const canvas = element.querySelector('canvas');
+        if (!canvas) return;
+        const chart = (typeof Chart !== 'undefined' && Chart.getChart) ? Chart.getChart(canvas) : null;
+        imageData = chart?.toBase64Image?.() || canvas.toDataURL('image/png');
     } else if (isCanvas) {
         const chart = (typeof Chart !== 'undefined' && Chart.getChart) ? Chart.getChart(element) : null;
         imageData = chart?.toBase64Image?.() || element.toDataURL('image/png');
@@ -745,23 +824,12 @@ function initChartViewer() {
     });
 }
 
-function resizePlotlyCharts() {
-    if (!window.Plotly?.Plots?.resize) return;
-
-    ['periodChart', 'entranceChart', 'pathChart'].forEach(id => {
-        const element = document.getElementById(id);
-        if (!element) return;
-        Plotly.Plots.resize(element);
-    });
-}
-
 function requestDashboardResize() {
     if (dashboardResizeFrameId) cancelAnimationFrame(dashboardResizeFrameId);
 
     dashboardResizeFrameId = requestAnimationFrame(() => {
         dashboardResizeFrameId = null;
         if (map) map.invalidateSize();
-        resizePlotlyCharts();
     });
 }
 
@@ -1600,8 +1668,7 @@ function loadData() {
 
 const REQUIRED_CSV_COLUMNS = [
     'plan_id', 'camp_label', 'allocated_haj', 'number_of_buses', 'number_of_haj',
-    'number_of_late_haj', 'number_of_early_haj', 'license_number', 'residence_haj',
-    'tarwia', 'direct_taseed', 'get_type_parking', 'get_parking_name', 'get_parking_geom',
+    'get_type_parking', 'get_parking_name', 'get_parking_geom',
     'set_type_parking', 'set_parking_name', 'set_parking_geom', 'entrance_asm_code',
     'entrance_name', 'entrance_point_geom', 'entrance_polygon', 'start_point_name',
     'start_geom', 'start_point_district', 'start_point_type', 'start_point_geom',
@@ -1613,7 +1680,7 @@ const REQUIRED_CSV_COLUMNS = [
 
 const NUMERIC_COLUMNS = new Set([
     'allocated_haj', 'number_of_buses', 'number_of_haj',
-    'number_of_late_haj', 'number_of_early_haj', 'license_number', 'residence_haj',
+    'number_of_late_haj', 'number_of_early_haj',
     'owner_office_number'
 ]);
 
@@ -2409,9 +2476,6 @@ function addRouteConnector(fromLatLng, toLatLng, showArrows = false) {
         className: 'route-line route-connector-line'
     }).addTo(routeLayerGroup);
 
-    if (showArrows) {
-        addDirectionalArrows(latlngs, '#EBC468');
-    }
 }
 
 function addDirectionalArrows(latlngs, color) {
@@ -2499,9 +2563,13 @@ function initMap() {
     }).addTo(map);
 
     // Basemaps
-    const darkMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+    const darkBaseMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri'
     });
+    const darkRoadLabelsMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Labels &copy; Esri'
+    });
+    const darkMap = L.layerGroup([darkBaseMap, darkRoadLabelsMap]);
 
     const positronMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
@@ -2612,6 +2680,227 @@ function populateFilters() {
     syncPlanTypeSelectValue();
 
     renderPlanTypeMenu();
+    populateTopNavDropdowns();
+}
+
+function populateTopNavDropdowns() {
+    if (!companyDD) return;
+    const companyOpts = serviceCompaniesCatalog
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name, 'ar'))
+        .map(c => ({ value: c.key, label: c.name }));
+    companyDD.setOptions(companyOpts);
+    companyDD.setValue(selectedServiceCompanies.size === 1 ? Array.from(selectedServiceCompanies)[0] : '');
+    populateCenterDropdown();
+}
+
+function populateCenterDropdown() {
+    if (!centerDD) return;
+    const selectedCompanyKey = companyDD ? companyDD.getValue() : '';
+    const rows = buildServiceCenterRows(rawData);
+    const filtered = selectedCompanyKey
+        ? rows.filter(r => r.companyKey && r.companyKey.startsWith(selectedCompanyKey))
+        : rows;
+    const centerOpts = filtered
+        .sort((a, b) => String(a.centerNumber || '').localeCompare(String(b.centerNumber || ''), 'ar'))
+        .map(r => ({ value: r.centerKey, label: (r.centerNumber ? r.centerNumber + ' - ' : '') + r.label }));
+    centerDD.setOptions(centerOpts);
+    centerDD.setValue(selectedServiceCenters.size === 1 ? Array.from(selectedServiceCenters)[0] : '');
+    populateCampDropdown();
+}
+
+function populateCampDropdown() {
+    if (!campDD) return;
+    const companyKey = companyDD ? companyDD.getValue() : '';
+    const centerKey = centerDD ? centerDD.getValue() : '';
+    const baseRows = rawData.filter(d => {
+        if (companyKey && !matchesCompanyOwnerFilters(d['owner_company_name'], d['owner_office_number'],
+            new Set([companyKey]), new Set())) return false;
+        if (centerKey && !matchesCompanyOwnerFilters(d['owner_company_name'], d['owner_office_number'],
+            new Set(), new Set([centerKey]))) return false;
+        return true;
+    });
+    const campOpts = [...new Set(baseRows.map(d => (d['camp_label'] || '').trim()).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, 'ar'))
+        .map(c => ({ value: c, label: c }));
+    campDD.setOptions(campOpts);
+    campDD.setValue(selectedCampLabel && campOpts.find(o => o.value === selectedCampLabel) ? selectedCampLabel : '');
+    if (!campDD.getValue()) selectedCampLabel = '';
+}
+
+function buildSearchableDropdown(inputId, listId, hiddenSelectId, onSelect, clearBtnId) {
+    const input = document.getElementById(inputId);
+    const list = document.getElementById(listId);
+    if (!input || !list) return null;
+
+    let opts = [];
+    let selectedValue = '';
+
+    function setClearBtnVisible(visible) {
+        const btn = clearBtnId ? document.getElementById(clearBtnId) : null;
+        if (btn) btn.hidden = !visible;
+    }
+
+    function renderList() {
+        const q = input.value.toLowerCase();
+        const selOpt = opts.find(o => o.value === selectedValue);
+        const isDisplayingLabel = selOpt && input.value === selOpt.label;
+        const filtered = (!input.value || isDisplayingLabel)
+            ? opts
+            : opts.filter(o => o.label.toLowerCase().includes(q));
+        list.innerHTML = '';
+        if (!filtered.length) {
+            const li = document.createElement('li');
+            li.className = 'sidebar-dropdown-empty';
+            li.textContent = 'لا توجد نتائج';
+            list.appendChild(li);
+            return;
+        }
+        filtered.forEach(o => {
+            const li = document.createElement('li');
+            li.className = 'sidebar-dropdown-item' + (o.value === selectedValue ? ' active' : '');
+            li.textContent = o.label;
+            li.addEventListener('mousedown', e => { e.preventDefault(); pick(o.value, o.label); });
+            list.appendChild(li);
+        });
+    }
+
+    function pick(value, label) {
+        selectedValue = value;
+        input.value = label;
+        list.hidden = true;
+        setClearBtnVisible(!!value);
+        const hs = document.getElementById(hiddenSelectId);
+        if (hs) hs.value = value;
+        onSelect(value);
+        updateSidebarClearBtn();
+    }
+
+    input.addEventListener('focus', () => {
+        if (selectedValue) input.value = '';
+        renderList();
+        list.hidden = false;
+    });
+    input.addEventListener('click', () => {
+        if (list.hidden) {
+            if (selectedValue) input.value = '';
+            renderList();
+            list.hidden = false;
+        }
+    });
+    input.addEventListener('input', () => { renderList(); list.hidden = false; });
+    input.addEventListener('blur', () => {
+        list.hidden = true;
+        const sel = opts.find(o => o.value === selectedValue);
+        input.value = sel ? sel.label : '';
+    });
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { list.hidden = true; input.blur(); }
+    });
+
+    return {
+        setOptions(newOpts) {
+            opts = newOpts;
+            const hs = document.getElementById(hiddenSelectId);
+            if (hs) {
+                hs.innerHTML = '<option value=""></option>';
+                opts.forEach(o => {
+                    const opt = document.createElement('option');
+                    opt.value = o.value; opt.textContent = o.label;
+                    hs.appendChild(opt);
+                });
+            }
+            if (selectedValue && !opts.find(o => o.value === selectedValue)) {
+                selectedValue = ''; input.value = '';
+            } else {
+                const sel = opts.find(o => o.value === selectedValue);
+                input.value = sel ? sel.label : '';
+            }
+        },
+        setValue(value) {
+            selectedValue = value;
+            const sel = opts.find(o => o.value === value);
+            input.value = sel ? sel.label : '';
+            setClearBtnVisible(!!value);
+            const hs = document.getElementById(hiddenSelectId);
+            if (hs) hs.value = value;
+        },
+        getValue() { return selectedValue; },
+        clear() {
+            selectedValue = ''; input.value = '';
+            setClearBtnVisible(false);
+            const hs = document.getElementById(hiddenSelectId);
+            if (hs) hs.value = '';
+        }
+    };
+}
+
+function updateSidebarClearBtn() {
+    const btn = document.getElementById('sidebarClearFiltersBtn');
+    if (!btn) return;
+    const active = (companyDD && companyDD.getValue()) ||
+                   (centerDD && centerDD.getValue()) ||
+                   selectedCampLabel;
+    btn.hidden = !active;
+}
+
+function setupTopNavDropdownEvents() {
+    companyDD = buildSearchableDropdown('companySearch', 'companyDropdownList', 'companyDropdown', value => {
+        selectedServiceCompanies.clear();
+        selectedServiceCenters.clear();
+        selectedCampLabel = '';
+        if (value) selectedServiceCompanies.add(value);
+        populateCenterDropdown();
+        selectedPlanId = null;
+        applyFilters();
+    }, 'companyClearBtn');
+
+    centerDD = buildSearchableDropdown('centerSearch', 'centerDropdownList', 'centerDropdown', value => {
+        selectedServiceCenters.clear();
+        selectedCampLabel = '';
+        if (value) selectedServiceCenters.add(value);
+        populateCampDropdown();
+        selectedPlanId = null;
+        applyFilters();
+    }, 'centerClearBtn');
+
+    campDD = buildSearchableDropdown('campSearch', 'campDropdownList', 'campDropdown', value => {
+        selectedCampLabel = value;
+        selectedPlanId = null;
+        applyFilters();
+    }, 'campClearBtn');
+
+    document.getElementById('companyClearBtn')?.addEventListener('click', () => {
+        companyDD.clear();
+        selectedServiceCompanies.clear();
+        selectedServiceCenters.clear();
+        selectedCampLabel = '';
+        populateCenterDropdown();
+        selectedPlanId = null;
+        applyFilters();
+        updateSidebarClearBtn();
+    });
+
+    document.getElementById('centerClearBtn')?.addEventListener('click', () => {
+        centerDD.clear();
+        selectedServiceCenters.clear();
+        selectedCampLabel = '';
+        populateCampDropdown();
+        selectedPlanId = null;
+        applyFilters();
+        updateSidebarClearBtn();
+    });
+
+    document.getElementById('campClearBtn')?.addEventListener('click', () => {
+        campDD.clear();
+        selectedCampLabel = '';
+        selectedPlanId = null;
+        applyFilters();
+        updateSidebarClearBtn();
+    });
+
+    const sidebarClearBtn = document.getElementById('sidebarClearFiltersBtn');
+    if (sidebarClearBtn) sidebarClearBtn.addEventListener('click', clearAllFilters);
 }
 
 function syncPlanTypeSelectValue() {
@@ -2694,7 +2983,20 @@ function updatePlanTypeMenuState() {
 }
 
 // Event Listeners for Filters
+function setupMobileMenu() {
+    const menuBtn = document.getElementById('mobileMenuBtn');
+    const backdrop = document.getElementById('mobileSidebarBackdrop');
+    const closeSidebar = () => document.body.classList.remove('mobile-sidebar-open');
+    menuBtn?.addEventListener('click', () => document.body.classList.toggle('mobile-sidebar-open'));
+    backdrop?.addEventListener('click', closeSidebar);
+    document.querySelector('.sidebar')?.addEventListener('click', e => {
+        if (e.target.closest('.panel-collapse-toggle')) closeSidebar();
+    });
+}
+
 function setupEventListeners() {
+    setupMobileMenu();
+    setupTopNavDropdownEvents();
     const filters = ['periodFilter', 'transportFilter', 'planTypeFilter', 'districtFilter'];
     filters.forEach(id => {
         document.getElementById(id).addEventListener('change', () => {
@@ -2763,18 +3065,7 @@ function setupEventListeners() {
             const currentTheme = getPersistentValue(THEME_STORAGE_KEY) || 'dark';
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
             applyTheme(newTheme);
-            // Redraw charts with new theme
-            if (window.Plotly) {
-                const isDark = newTheme === 'dark';
-                const layout = {
-                    paper_bgcolor: isDark ? '#0f172a' : '#ffffff',
-                    plot_bgcolor: isDark ? '#1e293b' : '#f5f5f5',
-                    font: { color: isDark ? '#cbd5e1' : '#333333' }
-                };
-                Plotly.restyle('periodChart', {}, layout);
-                Plotly.restyle('entranceChart', {}, layout);
-                Plotly.restyle('pathChart', {}, layout);
-            }
+            applyFilters();
         });
     }
 
@@ -2967,6 +3258,8 @@ function applyFilters() {
                 : (selectedResidenceMixFilter === 'direct' ? residenceMixSets.direct : residenceMixSets.mixed);
             if (!selectedSet.has(residenceNameKey)) return false;
         }
+
+        if (selectedCampLabel && (d['camp_label'] || '').trim() !== selectedCampLabel) return false;
 
         if (search) {
             const planStr = (d['owner_company_name'] || '') + ' ' + (d['plan_type_name'] || '') + ' ' + (d['start_point_name'] || '');
@@ -3518,7 +3811,7 @@ function getFilteredPlanGeometries() {
             if (item.geojson && item.geojson.coordinates) {
                 try {
                     const feature = turf.feature(item.geojson);
-                    const buffered = turf.buffer(feature, 0.050, { units: 'kilometers' });
+                    const buffered = turf.buffer(feature, CAMERA_PLAN_BUFFER_KM, { units: 'kilometers' });
                     geometries.push(buffered.geometry);
                 } catch (e) {
                     console.warn('Error buffering geometry:', e);
@@ -3549,7 +3842,7 @@ function cameraIntersectsGeometries(camera, geometries) {
             // If geometry is not a polygon, try distance-based check
             try {
                 const distance = turf.distance(point, geom, { units: 'kilometers' });
-                if (distance <= 0.050) { // 50 meters
+                if (distance <= CAMERA_PLAN_BUFFER_KM) {
                     return true;
                 }
             } catch (e2) {
@@ -3670,7 +3963,7 @@ function buildCameraPlanCacheAsync() {
                 if (!item.geojson || !item.geojson.coordinates) continue;
                 try {
                     const feature = turf.feature(item.geojson);
-                    buffers.push({ buffered: true, geom: turf.buffer(feature, 0.050, { units: 'kilometers' }) });
+                    buffers.push({ buffered: true, geom: turf.buffer(feature, CAMERA_PLAN_BUFFER_KM, { units: 'kilometers' }) });
                 } catch (_) {
                     try { buffers.push({ buffered: false, geom: turf.feature(item.geojson) }); } catch (__) {}
                 }
@@ -3684,7 +3977,7 @@ function buildCameraPlanCacheAsync() {
                         if (b.buffered) {
                             if (turf.booleanPointInPolygon(point, b.geom)) { intersects = true; break; }
                         } else {
-                            if (turf.distance(point, b.geom, { units: 'kilometers' }) <= 0.050) { intersects = true; break; }
+                            if (turf.distance(point, b.geom, { units: 'kilometers' }) <= CAMERA_PLAN_BUFFER_KM) { intersects = true; break; }
                         }
                     } catch (_) {}
                 }
@@ -3749,15 +4042,15 @@ function exportCameraStatsToCSV() {
 }
 
 function clearAllFilters() {
-    // Reset dropdown filters
     ['periodFilter', 'transportFilter', 'districtFilter'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = 'all';
     });
-    // Reset search
+    companyDD?.clear();
+    centerDD?.clear();
+    campDD?.clear();
     const searchInput = document.querySelector('.search-bar input');
     if (searchInput) searchInput.value = '';
-    // Reset all state
     selectedPlanId = null;
     selectedEntranceName = null;
     selectedPathName = null;
@@ -3766,7 +4059,10 @@ function clearAllFilters() {
     selectedPlanTypes.clear();
     selectedServiceCompanies.clear();
     selectedServiceCenters.clear();
-    // Re-render plan type menu so buttons deselect
+    selectedCampLabel = '';
+    populateCenterDropdown();
+    populateCampDropdown();
+    updateSidebarClearBtn();
     renderPlanTypeMenu();
     applyFilters();
 }
@@ -3785,7 +4081,7 @@ function getPlansForCamera(camera) {
             if (!item.geojson || !item.geojson.coordinates) continue;
             try {
                 const feature = turf.feature(item.geojson);
-                const buffered = turf.buffer(feature, 0.050, { units: 'kilometers' });
+                const buffered = turf.buffer(feature, CAMERA_PLAN_BUFFER_KM, { units: 'kilometers' });
                 if (turf.booleanPointInPolygon(point, buffered)) {
                     intersects = true;
                     break;
@@ -3793,7 +4089,7 @@ function getPlansForCamera(camera) {
             } catch (e) {
                 try {
                     const dist = turf.distance(point, turf.feature(item.geojson), { units: 'kilometers' });
-                    if (dist <= 0.050) { intersects = true; break; }
+                    if (dist <= CAMERA_PLAN_BUFFER_KM) { intersects = true; break; }
                 } catch (e2) {}
             }
         }
@@ -4268,10 +4564,10 @@ function getDashboardStats() {
 }
 
 function getTripCount(row, buses) {
-    const transportType = row['transport_type_name'] || '';
-    if (transportType.includes('ردين') || transportType.includes('تقليدي رد')) return buses * 2;
-    if (transportType.includes('ترددي')) return buses * 3;
-    if (transportType.includes('رد') || transportType.includes('ىد')) return buses;
+    const transportType = (row['transport_type_name'] || '').trim();
+    if (transportType === 'تقليدي رد') return buses;
+    if (transportType === 'تقليدي ردين') return buses * 2;
+    if (transportType === 'ترددي' || transportType === 'قطار') return buses * 3;
     return buses;
 }
 
@@ -4318,6 +4614,68 @@ function syncChartMetricTabs() {
         button.setAttribute('aria-selected', isActive ? 'true' : 'false');
     });
 }
+
+function formatAxisLabel(value, maxLineLength = 9) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    const words = text.split(/\s+/);
+    const lines = [];
+    let currentLine = '';
+
+    words.forEach(word => {
+        const nextLine = currentLine ? `${currentLine} ${word}` : word;
+        if (nextLine.length > maxLineLength && currentLine) {
+            lines.push(currentLine);
+            currentLine = word;
+        } else {
+            currentLine = nextLine;
+        }
+    });
+
+    if (currentLine) lines.push(currentLine);
+    return lines.slice(0, 2);
+}
+
+function truncateAxisLabel(value, maxLength = 28) {
+    const text = String(value || '').trim();
+    if (text.length <= maxLength) return text;
+    return text.slice(0, maxLength - 1) + '…';
+}
+
+const angledXAxisLabelsPlugin = {
+    id: 'angledXAxisLabels',
+    afterDraw(chart, _args, pluginOptions = {}) {
+        const xScale = chart.scales?.x;
+        const labels = pluginOptions.labels || chart.data?.labels || [];
+        if (!xScale || !labels.length) return;
+
+        const ctx = chart.ctx;
+        const angle = (pluginOptions.angle ?? -55) * Math.PI / 180;
+        const color = pluginOptions.color || '#fafafa';
+        const fontSize = pluginOptions.fontSize || 10;
+        const maxLength = pluginOptions.maxLength || 28;
+        const yOffset = pluginOptions.bottomOffset || 16;
+        const y = Math.min(chart.height - 8, chart.chartArea.bottom + yOffset);
+
+        ctx.save();
+        ctx.direction = 'rtl';
+        ctx.fillStyle = color;
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.font = `700 ${fontSize}px Inter, IBM Plex Sans Arabic, sans-serif`;
+
+        labels.forEach((label, index) => {
+            const x = xScale.getPixelForTick(index);
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+            ctx.fillText(truncateAxisLabel(label, maxLength), 0, 0);
+            ctx.restore();
+        });
+
+        ctx.restore();
+    }
+};
 
 // Update KPI Cards
 function updateKPIs(stats) {
@@ -4609,9 +4967,6 @@ function updateMap() {
 
                         bindPopupToLayer(halo, row, item);
                         bindPopupToLayer(polyline, row, item);
-                        if (showDetailedMapLabels && shouldShowDirectionalArrows(row, item)) {
-                            addDirectionalArrows(latlngs, color);
-                        }
                         if (showDetailedMapLabels) {
                             const areaLabel = getAreaLabel(row, item);
                             const midpoint = getMidpointLatLng(latlngs);
@@ -4627,7 +4982,7 @@ function updateMap() {
                 for (let index = 0; index < connectedLineSequence.length - 1; index++) {
                     const current = connectedLineSequence[index].latlngs;
                     const next = connectedLineSequence[index + 1].latlngs;
-                    addRouteConnector(current[current.length - 1], next[0], shouldShowDirectionalArrows(row, connectedLineSequence[index]));
+                    addRouteConnector(current[current.length - 1], next[0]);
                 }
             }
         } catch (e) {
@@ -4706,51 +5061,65 @@ function updateCharts(stats = getDashboardStats()) {
     if (pathTitle) pathTitle.textContent = pathMetricDef.pathTitle;
     if (districtTitle) districtTitle.textContent = districtMetricDef.districtTitle;
 
-    const plotlyConfig = {
-        responsive: true,
-        displaylogo: false,
-        scrollZoom: true,
-        modeBarButtonsToAdd: ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'resetScale2d'],
-        toImageButtonOptions: { format: 'png', scale: 2 }
-    };
-
-    // Prepare Data for Period Chart
+    // Period Chart
     const periodLabels = Object.keys(periodMetricStats.periodCounts).sort();
     const periodValues = periodLabels.map(l => periodMetricStats.periodCounts[l]);
     const periodPlotEl = document.getElementById('periodChart');
-    if (periodPlotEl && window.Plotly) {
-        const periodTrace = {
+    if (periodPlotEl) {
+        if (periodChartInstance) { periodChartInstance.destroy(); periodChartInstance = null; }
+        let periodCanvas = periodPlotEl.querySelector('canvas');
+        if (!periodCanvas) { periodCanvas = document.createElement('canvas'); periodPlotEl.replaceChildren(periodCanvas); }
+        periodChartInstance = new Chart(periodCanvas, {
             type: 'bar',
-            x: periodLabels,
-            y: periodValues,
-            text: periodValues.map(v => Number(v || 0).toLocaleString()),
-            textposition: 'outside',
-            cliponaxis: false,
-            marker: { color: 'rgba(42, 157, 144, 0.82)', line: { color: 'rgba(42, 157, 144, 1)', width: 1 } },
-            hovertemplate: `%{x}<br>${periodMetricDef.label}: %{y:,}<extra></extra>`
-        };
-        const periodLayout = {
-            margin: { l: 46, r: 12, t: 22, b: 44 },
-            paper_bgcolor: 'rgba(0,0,0,0)',
-            plot_bgcolor: 'rgba(0,0,0,0)',
-            font: { color: chartTheme.text, family: 'Inter, IBM Plex Sans Arabic, sans-serif' },
-            xaxis: { tickfont: { color: chartTheme.text }, showgrid: false, fixedrange: false },
-            yaxis: { tickfont: { color: chartTheme.text }, gridcolor: chartTheme.grid, zeroline: false, fixedrange: false },
-            showlegend: false,
-            hovermode: 'closest',
-            dragmode: 'zoom'
-        };
-        Plotly.react(periodPlotEl, [periodTrace], periodLayout, plotlyConfig);
-        periodPlotEl.removeAllListeners('plotly_click');
-        periodPlotEl.on('plotly_click', event => {
-            const point = event?.points?.[0];
-            const label = point ? String(point.x || '').trim() : '';
-            if (!label) return;
-            const periodValue = String(label).replace('الفترة ', '').trim();
-            const filterEl = document.getElementById('periodFilter');
-            filterEl.value = filterEl.value === periodValue ? 'all' : periodValue;
-            selectedPlanId = null;
-            applyFilters();
+            data: {
+                labels: periodLabels,
+                datasets: [{
+                    data: periodValues,
+                    backgroundColor: 'rgba(42, 157, 144, 0.82)',
+                    borderColor: 'rgba(42, 157, 144, 1)',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: { bottom: 8 }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        rtl: true,
+                        textDirection: 'rtl',
+                        callbacks: { label: ctx => periodMetricDef.label + ': ' + Number(ctx.raw || 0).toLocaleString() }
+                    }
+                },
+                scales: {
+                    x: {
+                        afterFit: scale => { scale.height = Math.max(scale.height, 48); },
+                        ticks: {
+                            color: chartTheme.text,
+                            autoSkip: false,
+                            maxRotation: 0,
+                            minRotation: 0,
+                            padding: 8,
+                            font: { family: 'Inter, IBM Plex Sans Arabic, sans-serif', size: 11, weight: '700' }
+                        },
+                        grid: { display: false }
+                    },
+                    y: { ticks: { color: chartTheme.text }, grid: { color: chartTheme.grid } }
+                },
+                onClick: (e, elements) => {
+                    if (!elements.length) return;
+                    const label = periodLabels[elements[0].index];
+                    const periodValue = String(label).replace('الفترة ', '').trim();
+                    const filterEl = document.getElementById('periodFilter');
+                    filterEl.value = filterEl.value === periodValue ? 'all' : periodValue;
+                    selectedPlanId = null;
+                    applyFilters();
+                }
+            }
         });
     }
 
@@ -4762,109 +5131,118 @@ function updateCharts(stats = getDashboardStats()) {
         : Object.keys(stats.transportCounts);
     const transEntries = transportLabels.map(label => [label, stats.transportCounts[label] || 0]);
     const totalTransportBuses = Object.values(stats.transportCounts).reduce((sum, value) => sum + value, 0);
-    const transportColors = [
-        ["rgba(42, 157, 144, 0.92)", "rgba(148, 163, 184, 0.26)"],
-        ["rgba(78, 201, 185, 0.92)", "rgba(148, 163, 184, 0.26)"],
-        ["rgba(235, 196, 104, 0.92)", "rgba(148, 163, 184, 0.26)"],
-        ["rgba(194, 88, 88, 0.92)", "rgba(148, 163, 184, 0.26)"]
+    const transportSegmentColors = [
+        "rgba(42, 157, 144, 0.92)",
+        "rgba(78, 201, 185, 0.92)",
+        "rgba(235, 196, 104, 0.92)",
+        "rgba(194, 88, 88, 0.92)"
     ];
 
     const transportContainer = document.getElementById("transportCharts");
-    const canReuseTransport = transportChartInstances.length === transEntries.length &&
-        transportContainer?.children.length === transEntries.length;
+    const segmentValues = transEntries.map(([, v]) => totalTransportBuses > 0 ? (v || 0) : 0);
+    const canReuseTransport = transportChartInstances.length === 1 &&
+        transportContainer?.querySelector('canvas');
 
     if (canReuseTransport) {
-        transEntries.forEach(([label, value], index) => {
-            const rest = Math.max(totalTransportBuses - value, 0);
-            const percentage = totalTransportBuses > 0 ? Math.round((value / totalTransportBuses) * 100) : 0;
-            const ringValues = totalTransportBuses > 0 ? [value, rest] : [0, 1];
-            const chart = transportChartInstances[index];
-            if (chart) { chart.data.datasets[0].data = ringValues; chart.update('none'); }
-            const item = transportContainer.children[index];
-            if (item) {
-                const span = item.querySelector('span');
-                if (span) span.textContent = percentage + '%';
-                const isActive = transportFilter && transportFilter.value === label;
-                item.classList.toggle('active', isActive);
-                item.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-                item.setAttribute('title', label + ' - ' + Number(value || 0).toLocaleString() + ' (' + percentage + '%)');
-            }
+        const chart = transportChartInstances[0];
+        chart.data.datasets[0].data = segmentValues;
+        chart.update('none');
+        // Update legend active state
+        const legendItems = transportContainer.querySelectorAll('.transport-legend-item');
+        legendItems.forEach((item, i) => {
+            const label = transEntries[i]?.[0];
+            const value = transEntries[i]?.[1] || 0;
+            const isActive = transportFilter && transportFilter.value === label;
+            item.classList.toggle('active', isActive);
+            const pctEl = item.querySelector('.transport-legend-pct');
+            if (pctEl) pctEl.textContent = formatRingPercent(value, totalTransportBuses);
         });
     } else {
-    transportChartInstances.forEach(chart => chart.destroy());
-    transportChartInstances = [];
-    if (transportContainer) {
-        transportContainer.replaceChildren();
+        transportChartInstances.forEach(chart => chart.destroy());
+        transportChartInstances = [];
+        if (transportContainer) {
+            transportContainer.replaceChildren();
+            const outerWrap = document.createElement('div');
+            outerWrap.className = 'transport-outer-wrap';
+            transportContainer.appendChild(outerWrap);
 
-        transEntries.forEach(([label, value], index) => {
-            const rest = Math.max(totalTransportBuses - value, 0);
-            const percentage = totalTransportBuses > 0 ? Math.round((value / totalTransportBuses) * 100) : 0;
-            const ringValues = totalTransportBuses > 0 ? [value, rest] : [0, 1];
-            const item = document.createElement("div");
-            item.className = "transport-ring-item";
-            const isActive = transportFilter && transportFilter.value === label;
-            item.classList.toggle("active", isActive);
-            item.setAttribute("aria-pressed", isActive ? "true" : "false");
-            item.tabIndex = 0;
-            item.setAttribute("role", "button");
-            item.setAttribute("title", label + " - " + Number(value || 0).toLocaleString() + " (" + percentage + "%)");
-            item.innerHTML = "<div class=\"transport-ring-container\"><canvas></canvas><span>" + percentage + "%</span></div><strong>" + label + "</strong>";
-            transportContainer.appendChild(item);
+            const ringWrap = document.createElement('div');
+            ringWrap.className = 'transport-combined-ring';
+            const canvas = document.createElement('canvas');
+            ringWrap.appendChild(canvas);
+            outerWrap.appendChild(ringWrap);
 
-            const toggleTransportFilter = () => {
-                if (!transportFilter) return;
-                transportFilter.value = transportFilter.value === label ? "all" : label;
-                selectedPlanId = null;
-                applyFilters();
-            };
+            const legendWrap = document.createElement('div');
+            legendWrap.className = 'transport-combined-legend';
+            outerWrap.appendChild(legendWrap);
 
-            item.addEventListener("click", toggleTransportFilter);
-            item.addEventListener("keydown", event => {
-                if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    toggleTransportFilter();
-                }
-            });
-
-            const transportCanvas = item.querySelector("canvas");
-            transportCanvas.width = TRANSPORT_RING_CANVAS_SIZE;
-            transportCanvas.height = TRANSPORT_RING_CANVAS_SIZE;
-            transportCanvas.style.width = TRANSPORT_RING_CANVAS_SIZE + "px";
-            transportCanvas.style.height = TRANSPORT_RING_CANVAS_SIZE + "px";
-            const ctxTrans = transportCanvas.getContext("2d");
-
-            transportChartInstances.push(new Chart(ctxTrans, {
-                type: "doughnut",
+            const ctxTrans = canvas.getContext('2d');
+            const combinedChart = new Chart(ctxTrans, {
+                type: 'doughnut',
                 data: {
-                    labels: [label, "باقي الأنماط"],
+                    labels: transEntries.map(([l]) => l),
                     datasets: [{
-                        data: ringValues,
-                        backgroundColor: transportColors[index % transportColors.length],
+                        data: segmentValues,
+                        backgroundColor: transportSegmentColors.slice(0, transEntries.length),
                         borderWidth: 0,
-                        borderRadius: 8,
+                        borderRadius: 6,
                         spacing: 2,
-                        hoverOffset: 2
+                        hoverOffset: 4
                     }]
                 },
                 options: {
-                    responsive: false,
+                    responsive: true,
                     maintainAspectRatio: true,
-                    cutout: "68%",
+                    cutout: '62%',
                     plugins: {
                         legend: { display: false },
                         tooltip: {
                             rtl: true,
-                            textDirection: "rtl",
+                            textDirection: 'rtl',
                             callbacks: {
-                                label: context => context.label + ": " + Number(context.raw || 0).toLocaleString()
+                                label: ctx => {
+                                    const pct = totalTransportBuses > 0 ? Math.round((ctx.raw / totalTransportBuses) * 100) : 0;
+                                    return ctx.label + ': ' + Number(ctx.raw || 0).toLocaleString() + ' (' + pct + '%)';
+                                }
                             }
-                        }
+                        },
+                        segmentPct: { display: false }
+                    },
+                    onClick: (e, elements) => {
+                        if (!transportFilter || !elements.length) return;
+                        const idx = elements[0].index;
+                        const clickedLabel = transEntries[idx]?.[0];
+                        if (!clickedLabel) return;
+                        transportFilter.value = transportFilter.value === clickedLabel ? 'all' : clickedLabel;
+                        selectedPlanId = null;
+                        applyFilters();
                     }
-                }
-            }));
-        });
+                },
+                plugins: [segmentPctPlugin]
+            });
+            transportChartInstances.push(combinedChart);
+
+            transEntries.forEach(([label, value], i) => {
+                const item = document.createElement('div');
+                item.className = 'transport-legend-item';
+                const isActive = transportFilter && transportFilter.value === label;
+                item.classList.toggle('active', isActive);
+                item.setAttribute('title', label + ' - ' + Number(value || 0).toLocaleString());
+                item.innerHTML =
+                    '<span class="transport-legend-dot" style="background:' + transportSegmentColors[i % transportSegmentColors.length] + '"></span>' +
+                    '<span class="transport-legend-label">' + label + '</span>' +
+                    '<span class="transport-legend-pct">' + formatRingPercent(value, totalTransportBuses) + '</span>';
+                item.style.cursor = 'pointer';
+                item.addEventListener('click', () => {
+                    if (!transportFilter) return;
+                    transportFilter.value = transportFilter.value === label ? 'all' : label;
+                    selectedPlanId = null;
+                    applyFilters();
+                });
+                legendWrap.appendChild(item);
+            });
+        }
     }
-    } // end canReuseTransport else
 
     const entranceLabels = Object.keys(entranceMetricStats.entranceCounts).sort();
     const periodsArray = Array.from(entranceMetricStats.allPeriodsForEntrance).sort((a, b) => Number(a) - Number(b));
@@ -4891,115 +5269,126 @@ function updateCharts(stats = getDashboardStats()) {
     const entranceShortLabels = entranceLabels.map(l => l.replace(/^مدخل\s+/, ''));
     const entranceShortToFull = Object.fromEntries(entranceLabels.map((f, i) => [entranceShortLabels[i], f]));
 
+    // Entrance Chart
     const entrancePlotEl = document.getElementById('entranceChart');
-    if (entrancePlotEl && window.Plotly) {
-        const entranceTraces = periodsArray.map((period, index) => {
-            const data = entranceLabels.map(ent => entranceMetricStats.entranceCounts[ent][period] || 0);
-            return {
-                type: 'bar',
-                x: entranceLabels,
-                y: data,
-                name: `الفترة ${period}`,
-                marker: { color: colors[index % colors.length] },
-                text: data.map(v => v ? Number(v).toLocaleString() : ''),
-                textposition: 'outside',
-                cliponaxis: false,
-                hovertemplate: `%{x}<br>الفترة ${period}<br>${entranceMetricDef.label}: %{y:,}<extra></extra>`
-            };
-        });
-        const entranceLayout = {
-            margin: { l: 46, r: 12, t: 26, b: 72 },
-            paper_bgcolor: 'rgba(0,0,0,0)',
-            plot_bgcolor: 'rgba(0,0,0,0)',
-            font: { color: chartTheme.text, family: 'Inter, IBM Plex Sans Arabic, sans-serif' },
-            barmode: 'group',
-            xaxis: {
-                tickvals: entranceLabels,
-                ticktext: entranceShortLabels,
-                tickangle: -28,
-                tickfont: { size: 11, color: chartTheme.text },
-                automargin: true,
-                showgrid: false,
-                fixedrange: false
+    if (entrancePlotEl) {
+        if (entranceChartInstance) { entranceChartInstance.destroy(); entranceChartInstance = null; }
+        let entranceCanvas = entrancePlotEl.querySelector('canvas');
+        if (!entranceCanvas) { entranceCanvas = document.createElement('canvas'); entrancePlotEl.replaceChildren(entranceCanvas); }
+        entranceChartInstance = new Chart(entranceCanvas, {
+            type: 'bar',
+            data: {
+                labels: entranceShortLabels,
+                datasets: entranceDatasets.map(ds => ({ ...ds, borderRadius: 3 }))
             },
-            yaxis: { tickfont: { color: chartTheme.text }, gridcolor: chartTheme.grid, zeroline: false, fixedrange: false },
-            showlegend: false,
-            hovermode: 'closest',
-            dragmode: 'zoom'
-        };
-        Plotly.react(entrancePlotEl, entranceTraces, entranceLayout, plotlyConfig);
-        entrancePlotEl.removeAllListeners('plotly_click');
-        entrancePlotEl.removeAllListeners('plotly_afterplot');
-        // Bar click: point.x is the full label from the trace
-        entrancePlotEl.on('plotly_click', event => {
-            const point = event?.points?.[0];
-            const label = point ? String(point.x || '').trim() : '';
-            if (!label) return;
-            selectedEntranceName = selectedEntranceName === label ? null : label;
-            selectedPlanId = null;
-            applyFilters();
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: { bottom: 118 }
+                },
+                plugins: {
+                    legend: { display: false },
+                    angledXAxisLabels: {
+                        labels: entranceShortLabels,
+                        color: chartTheme.text,
+                        maxLength: 28,
+                        angle: -55,
+                        bottomOffset: 12
+                    },
+                    tooltip: {
+                        rtl: true,
+                        textDirection: 'rtl',
+                        callbacks: {
+                            title: items => entranceLabels[items[0]?.dataIndex] || items[0]?.label || '',
+                            label: ctx => `${ctx.dataset.label}: ${Number(ctx.raw || 0).toLocaleString()}`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            display: false
+                        },
+                        grid: { display: false }
+                    },
+                    y: { ticks: { color: chartTheme.text }, grid: { color: chartTheme.grid } }
+                },
+                onClick: (e, elements) => {
+                    if (!elements.length) return;
+                    const short = entranceShortLabels[elements[0].index];
+                    const label = entranceShortToFull[short] || short;
+                    selectedEntranceName = selectedEntranceName === label ? null : label;
+                    selectedPlanId = null;
+                    applyFilters();
+                }
+            },
+            plugins: [angledXAxisLabelsPlugin]
         });
-        // Style tick labels after each render (displayed text is the short label)
-        entrancePlotEl.on('plotly_afterplot', () => {
-            entrancePlotEl.querySelectorAll('.xtick text').forEach(tick => {
-                tick.style.cursor = 'pointer';
-                const fullName = entranceShortToFull[tick.textContent.trim()] || tick.textContent.trim();
-                const isSelected = fullName === selectedEntranceName;
-                tick.style.fill = isSelected ? '#f59e0b' : '';
-                tick.style.fontWeight = isSelected ? '700' : '';
-                tick.style.textDecoration = isSelected ? 'underline' : '';
-            });
-        });
-        // Tick label click via event delegation — map short→full name
-        if (entrancePlotEl._tickClickHandler) {
-            entrancePlotEl.removeEventListener('click', entrancePlotEl._tickClickHandler);
-        }
-        entrancePlotEl._tickClickHandler = e => {
-            if (e.target.tagName !== 'text' || !e.target.parentElement?.classList.contains('xtick')) return;
-            const short = e.target.textContent.trim();
-            const label = entranceShortToFull[short] || short;
-            if (!label) return;
-            selectedEntranceName = selectedEntranceName === label ? null : label;
-            selectedPlanId = null;
-            applyFilters();
-        };
-        entrancePlotEl.addEventListener('click', entrancePlotEl._tickClickHandler);
     }
 
     renderEntranceFloatingLegend(periodsArray, colors);
 
+    // Path Chart
     const pathLabels = Object.keys(pathMetricStats.pathCounts).sort((a, b) => pathMetricStats.pathCounts[b] - pathMetricStats.pathCounts[a]);
     const pathValues = pathLabels.map(l => pathMetricStats.pathCounts[l]);
 
     const pathPlotEl = document.getElementById('pathChart');
-    if (pathPlotEl && window.Plotly) {
-        const pathTrace = {
+    if (pathPlotEl) {
+        if (pathChartInstance) { pathChartInstance.destroy(); pathChartInstance = null; }
+        let pathCanvas = pathPlotEl.querySelector('canvas');
+        if (!pathCanvas) { pathCanvas = document.createElement('canvas'); pathPlotEl.replaceChildren(pathCanvas); }
+        pathChartInstance = new Chart(pathCanvas, {
             type: 'bar',
-            x: pathLabels,
-            y: pathValues,
-            marker: { color: 'rgba(78, 201, 185, 0.82)', line: { color: 'rgba(78, 201, 185, 1)', width: 1 } },
-            hovertemplate: `%{x}<br>${pathMetricDef.label}: %{y:,}<extra></extra>`
-        };
-        const pathLayout = {
-            margin: { l: 46, r: 12, t: 16, b: 58 },
-            paper_bgcolor: 'rgba(0,0,0,0)',
-            plot_bgcolor: 'rgba(0,0,0,0)',
-            font: { color: chartTheme.text, family: 'Inter, IBM Plex Sans Arabic, sans-serif' },
-            xaxis: { tickangle: -35, tickfont: { color: chartTheme.text }, showgrid: false, fixedrange: false },
-            yaxis: { tickfont: { color: chartTheme.text }, gridcolor: chartTheme.grid, zeroline: false, fixedrange: false },
-            showlegend: false,
-            hovermode: 'closest',
-            dragmode: 'zoom'
-        };
-        Plotly.react(pathPlotEl, [pathTrace], pathLayout, plotlyConfig);
-        pathPlotEl.removeAllListeners('plotly_click');
-        pathPlotEl.on('plotly_click', event => {
-            const point = event?.points?.[0];
-            const label = point ? String(point.x || '').trim() : '';
-            if (!label) return;
-            selectedPathName = selectedPathName === label ? null : label;
-            selectedPlanId = null;
-            applyFilters();
+            data: {
+                labels: pathLabels,
+                datasets: [{
+                    data: pathValues,
+                    backgroundColor: 'rgba(78, 201, 185, 0.82)',
+                    borderColor: 'rgba(78, 201, 185, 1)',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: { bottom: 122 }
+                },
+                plugins: {
+                    legend: { display: false },
+                    angledXAxisLabels: {
+                        labels: pathLabels,
+                        color: chartTheme.text,
+                        maxLength: 30,
+                        angle: -55,
+                        bottomOffset: 12
+                    },
+                    tooltip: {
+                        rtl: true,
+                        textDirection: 'rtl',
+                        callbacks: { label: ctx => pathMetricDef.label + ': ' + Number(ctx.raw || 0).toLocaleString() }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            display: false
+                        },
+                        grid: { display: false }
+                    },
+                    y: { ticks: { color: chartTheme.text }, grid: { color: chartTheme.grid } }
+                },
+                onClick: (e, elements) => {
+                    if (!elements.length) return;
+                    const label = pathLabels[elements[0].index];
+                    selectedPathName = selectedPathName === label ? null : label;
+                    selectedPlanId = null;
+                    applyFilters();
+                }
+            },
+            plugins: [angledXAxisLabelsPlugin]
         });
     }
 
@@ -5092,7 +5481,8 @@ function updateCharts(stats = getDashboardStats()) {
                             return `${label} - ${districtMetricDef.label}: ${value.toLocaleString()}`;
                         }
                     }
-                }
+                },
+                segmentPct: { display: false }
             },
             onClick: (event, elements, chart) => {
                 if (elements && elements.length > 0) {
@@ -5129,12 +5519,12 @@ function renderCompletionSummaryChart(stats, chartTheme) {
 
     const planTypeSelect = document.getElementById('planTypeFilter');
     const activePlanTypes = getActivePlanTypeLabels();
-    const summaryStats = buildCompletionStats(planTypeBaseData.length ? planTypeBaseData : rawData);
+    const baseForCompletion = (planTypeBaseData.length ? planTypeBaseData : rawData)
+        .filter(d => matchesCompanyOwnerFilters(d['owner_company_name'], d['owner_office_number']));
+    const summaryStats = buildCompletionStats(baseForCompletion);
     const rowsByLabel = new Map(Object.values(summaryStats.completionByPlanType).map(row => [row.label, row]));
     const currentPlanTypeLabels = planTypeSelect
-        ? Array.from(planTypeSelect.options)
-            .filter(option => option.value !== 'all')
-            .map(option => option.value)
+        ? Array.from(planTypeSelect.options).filter(o => o.value !== 'all').map(o => o.value)
         : Array.from(rowsByLabel.keys());
     const rows = currentPlanTypeLabels
         .map(label => rowsByLabel.get(label) || { planTypeCode: normalizePlanTypeCode(label), label, planned: 0, target: 0 })
@@ -5143,71 +5533,121 @@ function renderCompletionSummaryChart(stats, chartTheme) {
             return orderDiff || b.target - a.target;
         });
 
-    if (completionSummaryChartInstances.length === rows.length && container.children.length === rows.length) {
-        rows.forEach((row, index) => {
-            const planned = row.planned;
-            const target = row.target;
-            const percent = target > 0 ? Math.round((planned / target) * 1000) / 10 : 0;
-            const displayPercent = clampCompletionPercentage(percent);
-            const complete = Math.min(planned, target);
-            const remaining = Math.max(target - planned, 0);
-            const over = Math.max(planned - target, 0);
-            const hasVisibleProgressData = complete > 0 || remaining > 0 || over > 0;
-            const ringValues = hasVisibleProgressData ? (over > 0 ? [complete, over] : [complete, remaining]) : [0, 1];
-            const chart = completionSummaryChartInstances[index];
-            if (chart) { chart.data.datasets[0].data = ringValues; chart.update('none'); }
-            const item = container.children[index];
-            if (item) {
-                const span = item.querySelector('span');
-                if (span) span.textContent = displayPercent + '%';
-                const isSelectedPlanType = activePlanTypes.has(row.label);
-                item.classList.toggle('active', isSelectedPlanType);
-                item.setAttribute('aria-pressed', isSelectedPlanType ? 'true' : 'false');
-                item.setAttribute('title', `${row.label}\nالاكتمال: ${displayPercent}%\nالمخطط: ${planned.toLocaleString()}\nالمستهدف: ${target.toLocaleString()}`);
-            }
+    const planTypeColors = [
+        'rgba(42, 157, 144, 0.92)',
+        'rgba(78, 201, 185, 0.92)',
+        'rgba(235, 196, 104, 0.92)',
+        'rgba(194, 88, 88, 0.92)',
+        'rgba(99, 155, 232, 0.92)',
+        'rgba(168, 85, 247, 0.92)'
+    ];
+    const totalTarget = rows.reduce((s, r) => s + (r.target || 0), 0);
+    const completionPercentTotal = getTarwiaDirectTaseedTotal(rows) || totalTarget;
+    const segmentValues = rows.map(r => totalTarget > 0 ? (r.target || 0) : 0);
+
+    const canReuse = completionSummaryChartInstances.length === 1 && container.children.length === 1;
+
+    if (canReuse) {
+        const chart = completionSummaryChartInstances[0];
+        if (chart) {
+            chart.data.datasets[0].data = segmentValues;
+            chart.data.datasets[0].percentageTotal = completionPercentTotal;
+            chart.update('none');
+        }
+        container.querySelectorAll('.completion-legend-item').forEach((item, i) => {
+            const value = rows[i]?.target || 0;
+            item.classList.toggle('active', activePlanTypes.has(rows[i]?.label));
+            const pctEl = item.querySelector('.transport-legend-pct');
+            if (pctEl) pctEl.textContent = formatRingPercent(value, completionPercentTotal);
         });
         return;
     }
 
-    completionSummaryChartInstances.forEach(chart => chart.destroy());
+    completionSummaryChartInstances.forEach(c => c.destroy());
     completionSummaryChartInstances = [];
     container.replaceChildren();
 
-    rows.forEach(row => {
-        const planned = row.planned;
-        const target = row.target;
-        const percent = target > 0 ? Math.round((planned / target) * 1000) / 10 : 0;
-        const displayPercent = clampCompletionPercentage(percent);
-        const complete = Math.min(planned, target);
-        const remaining = Math.max(target - planned, 0);
-        const over = Math.max(planned - target, 0);
-        const hasVisibleProgressData = complete > 0 || remaining > 0 || over > 0;
-        const ringValues = hasVisibleProgressData
-            ? (over > 0 ? [complete, over] : [complete, remaining])
-            : [0, 1];
+    const wrap = document.createElement('div');
+    wrap.className = 'completion-combined-wrap';
+
+    const ringDiv = document.createElement('div');
+    ringDiv.className = 'transport-combined-ring';
+    const canvas = document.createElement('canvas');
+    ringDiv.appendChild(canvas);
+    wrap.appendChild(ringDiv);
+
+    const legendDiv = document.createElement('div');
+    legendDiv.className = 'transport-combined-legend';
+    wrap.appendChild(legendDiv);
+    container.appendChild(wrap);
+
+    const chart = new Chart(canvas.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels: rows.map(r => r.label),
+            datasets: [{
+                data: segmentValues,
+                percentageTotal: completionPercentTotal,
+                backgroundColor: planTypeColors.slice(0, rows.length),
+                borderWidth: 0,
+                borderRadius: 6,
+                spacing: 2,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            cutout: '62%',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    rtl: true,
+                    textDirection: 'rtl',
+                    callbacks: {
+                        label: ctx => {
+                            const row = rows[ctx.dataIndex];
+                            const pct = completionPercentTotal > 0 ? Math.round((ctx.raw / completionPercentTotal) * 100) : 0;
+                            const completePct = row.target > 0 ? Math.round((row.planned / row.target) * 1000) / 10 : 0;
+                            return [
+                                ctx.label + ': ' + Number(ctx.raw || 0).toLocaleString() + ' (' + pct + '%)',
+                                'الاكتمال: ' + clampCompletionPercentage(completePct) + '%'
+                            ];
+                        }
+                    }
+                },
+                segmentPct: { display: false }
+            },
+            onClick: (e, elements) => {
+                if (!elements.length) return;
+                const row = rows[elements[0].index];
+                if (!row) return;
+                selectedPlanTypes.clear();
+                selectedPlanTypes.add(row.label);
+                syncPlanTypeSelectValue();
+                selectedPlanId = null;
+                selectedEntranceName = null;
+                selectedPathName = null;
+                selectedDistrict = null;
+                updatePlanTypeMenuState();
+                applyFilters();
+            }
+        },
+        plugins: [segmentPctPlugin]
+    });
+    completionSummaryChartInstances.push(chart);
+
+    rows.forEach((row, i) => {
         const item = document.createElement('div');
-        const isSelectedPlanType = activePlanTypes.has(row.label);
-
-        item.className = 'progress-ring-item completion-plan-ring';
-        item.tabIndex = 0;
-        item.setAttribute('role', 'button');
-        item.setAttribute('aria-pressed', isSelectedPlanType ? 'true' : 'false');
-        item.setAttribute(
-            'title',
-            `${row.label}\nالاكتمال: ${displayPercent}%\nالمخطط: ${planned.toLocaleString()}\nالمستهدف: ${target.toLocaleString()}`
-        );
-        if (isSelectedPlanType) item.classList.add('active');
-        item.innerHTML = `
-            <div class="progress-ring-wrap">
-                <canvas></canvas>
-                <span>${displayPercent}%</span>
-            </div>
-            <strong title="${row.label}">${row.label}</strong>
-        `;
-        const togglePlanTypeFilter = () => {
-            const select = document.getElementById('planTypeFilter');
-            if (!select) return;
-
+        item.className = 'transport-legend-item completion-legend-item';
+        item.classList.toggle('active', activePlanTypes.has(row.label));
+        item.setAttribute('title', row.label);
+        item.innerHTML =
+            '<span class="transport-legend-dot" style="background:' + planTypeColors[i % planTypeColors.length] + '"></span>' +
+            '<span class="transport-legend-label">' + row.label + '</span>' +
+            '<span class="transport-legend-pct">' + formatRingPercent(row.target || 0, completionPercentTotal) + '</span>';
+        item.style.cursor = 'pointer';
+        item.addEventListener('click', () => {
             selectedPlanTypes.clear();
             selectedPlanTypes.add(row.label);
             syncPlanTypeSelectValue();
@@ -5217,64 +5657,8 @@ function renderCompletionSummaryChart(stats, chartTheme) {
             selectedDistrict = null;
             updatePlanTypeMenuState();
             applyFilters();
-        };
-
-        item.addEventListener('click', togglePlanTypeFilter);
-        item.addEventListener('keydown', event => {
-            if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                togglePlanTypeFilter();
-            }
         });
-        container.appendChild(item);
-
-        const ringCanvas = item.querySelector('canvas');
-        ringCanvas.width = TOP_RING_CANVAS_SIZE;
-        ringCanvas.height = TOP_RING_CANVAS_SIZE;
-        ringCanvas.style.width = TOP_RING_CANVAS_SIZE + 'px';
-        ringCanvas.style.height = TOP_RING_CANVAS_SIZE + 'px';
-        const ctx = ringCanvas.getContext('2d');
-        completionSummaryChartInstances.push(new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: over > 0 ? ['مكتمل', 'زيادة'] : ['مكتمل', 'متبقي'],
-                datasets: [{
-                    data: ringValues,
-                    backgroundColor: hasVisibleProgressData
-                        ? (over > 0
-                            ? ['rgba(42, 157, 144, 0.96)', 'rgba(235, 196, 104, 0.86)']
-                            : ['rgba(42, 157, 144, 0.96)', 'rgba(148, 163, 184, 0.28)'])
-                        : ['rgba(48, 220, 148, 0)', 'rgba(148, 163, 184, 0.34)'],
-                    borderColor: chartTheme.border,
-                    borderWidth: 2,
-                    borderRadius: 8,
-                    spacing: 2,
-                    hoverOffset: 2
-                }]
-            },
-            options: {
-                responsive: false,
-                maintainAspectRatio: true,
-                cutout: '68%',
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            title: () => row.label,
-                            label: context => {
-                                const rawValue = hasVisibleProgressData ? Number(context.raw) : 0;
-                                return context.label + ": " + rawValue.toLocaleString();
-                            },
-                            afterBody: () => [
-                                `الاكتمال: ${displayPercent}%`,
-                                `المخطط: ${planned.toLocaleString()}`,
-                                `المستهدف: ${target.toLocaleString()}`
-                            ]
-                        }
-                    }
-                }
-            }
-        }));
+        legendDiv.appendChild(item);
     });
 }
 
@@ -5282,85 +5666,25 @@ function renderResidenceAssignmentChart(chartTheme) {
     const container = document.getElementById('residenceAssignmentCharts');
     if (!container) return;
 
-    const coverage = getResidenceAssignmentCoverage();
     const mix = getResidenceMixStats();
-    const ringDefs = [
-        {
-            label: 'اكتمال المساكن',
-            done: coverage.assigned,
-            total: coverage.total,
-            doneLabel: 'مراكز مرتبطة',
-            restLabel: 'مراكز ناقصة',
-            afterBody: percent => [
-                `نسبة الربط: ${percent}%`,
-                `مراكز لها مساكن: ${coverage.assigned.toLocaleString()}`,
-                `إجمالي مراكز data.js: ${coverage.total.toLocaleString()}`
-            ],
-            colors: ['rgba(42, 157, 144, 0.96)', 'rgba(194, 88, 88, 0.86)']
-        },
-        {
-            label: 'مساكن تروية',
-            filterKey: 'tarwiyah',
-            done: mix.tarwiyahOnly,
-            total: mix.total,
-            doneLabel: 'تروية فقط',
-            restLabel: 'غير تروية فقط',
-            afterBody: percent => [
-                `النسبة: ${percent}%`,
-                `تروية فقط: ${mix.tarwiyahOnly.toLocaleString()}`,
-                `إجمالي المساكن: ${mix.total.toLocaleString()}`
-            ],
-            colors: ['rgba(78, 201, 185, 0.96)', 'rgba(148, 163, 184, 0.34)']
-        },
-        {
-            label: 'مساكن تصعيد مباشر',
-            filterKey: 'direct',
-            done: mix.directTaseedOnly,
-            total: mix.total,
-            doneLabel: 'تصعيد مباشر فقط',
-            restLabel: 'غير تصعيد مباشر فقط',
-            afterBody: percent => [
-                `النسبة: ${percent}%`,
-                `تصعيد مباشر فقط: ${mix.directTaseedOnly.toLocaleString()}`,
-                `إجمالي المساكن: ${mix.total.toLocaleString()}`
-            ],
-            colors: ['rgba(42, 157, 144, 0.96)', 'rgba(148, 163, 184, 0.34)']
-        },
-        {
-            label: 'مساكن مختلط',
-            filterKey: 'mixed',
-            done: mix.mixed,
-            total: mix.total,
-            doneLabel: 'مختلط',
-            restLabel: 'غير مختلط',
-            afterBody: percent => [
-                `النسبة: ${percent}%`,
-                `مختلط: ${mix.mixed.toLocaleString()}`,
-                `إجمالي المساكن: ${mix.total.toLocaleString()}`
-            ],
-            colors: ['rgba(235, 196, 104, 0.96)', 'rgba(148, 163, 184, 0.34)']
-        }
-    ];
 
-    if (residenceAssignmentChartInstances.length === ringDefs.length && container.children.length === ringDefs.length) {
-        ringDefs.forEach((def, index) => {
-            const total = def.total;
-            const done = Math.max(0, Math.min(def.done, total));
-            const rest = Math.max(total - done, 0);
-            const hasData = total > 0;
-            const percent = hasData ? Math.round((done / total) * 1000) / 10 : 0;
-            const chart = residenceAssignmentChartInstances[index];
-            if (chart) { chart.data.datasets[0].data = hasData ? [done, rest] : [0, 1]; chart.update('none'); }
-            const item = container.children[index];
-            if (item) {
-                const span = item.querySelector('span');
-                if (span) span.textContent = percent + '%';
-                if (def.filterKey) {
-                    const isActive = selectedResidenceMixFilter === def.filterKey;
-                    item.classList.toggle('active', isActive);
-                    item.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-                }
-            }
+    // Residence type segments for combined ring
+    const residenceDefs = [
+        { label: 'تروية', filterKey: 'tarwiyah', value: mix.tarwiyahOnly, color: 'rgba(78, 201, 185, 0.92)' },
+        { label: 'تصعيد مباشر', filterKey: 'direct', value: mix.directTaseedOnly, color: 'rgba(42, 157, 144, 0.92)' },
+        { label: 'مختلط', filterKey: 'mixed', value: mix.mixed, color: 'rgba(235, 196, 104, 0.92)' }
+    ];
+    const totalResidences = mix.total;
+
+    const canReuse = residenceAssignmentChartInstances.length === 1 && container.children.length === 1;
+
+    if (canReuse) {
+        const combinedChart = residenceAssignmentChartInstances[0];
+        if (combinedChart) { combinedChart.data.datasets[0].data = residenceDefs.map(d => totalResidences > 0 ? (d.value || 0) : 0); combinedChart.update('none'); }
+        container.querySelectorAll('.residence-legend-item').forEach((item, i) => {
+            item.classList.toggle('active', selectedResidenceMixFilter === residenceDefs[i]?.filterKey);
+            const pctEl = item.querySelector('.transport-legend-pct');
+            if (pctEl) pctEl.textContent = formatRingPercent(residenceDefs[i]?.value || 0, totalResidences);
         });
         return;
     }
@@ -5369,94 +5693,88 @@ function renderResidenceAssignmentChart(chartTheme) {
     residenceAssignmentChartInstances = [];
     container.replaceChildren();
 
-    ringDefs.forEach(def => {
-        const total = def.total;
-        const done = Math.max(0, Math.min(def.done, total));
-        const rest = Math.max(total - done, 0);
-        const hasData = total > 0;
-        const percent = hasData ? Math.round((done / total) * 1000) / 10 : 0;
+    // ── Combined residence types ring ──
+    const combinedWrap = document.createElement('div');
+    combinedWrap.className = 'residence-combined-wrap';
 
-        const item = document.createElement('div');
-        item.className = 'progress-ring-item residence-assignment-ring';
-        if (def.filterKey) {
-            item.classList.add('completion-plan-ring');
-            item.tabIndex = 0;
-            item.setAttribute('role', 'button');
-            const isActive = selectedResidenceMixFilter === def.filterKey;
-            item.classList.toggle('active', isActive);
-            item.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-            item.setAttribute('title', isActive ? 'إلغاء التصفية' : `تصفية حسب ${def.label}`);
-        }
-        item.innerHTML = `
-            <div class="progress-ring-wrap">
-                <canvas></canvas>
-                <span>${percent}%</span>
-            </div>
-            <strong title="${def.label}">${def.label}</strong>
-        `;
-        container.appendChild(item);
+    const ringWrap = document.createElement('div');
+    ringWrap.className = 'transport-combined-ring';
+    const combinedCanvas = document.createElement('canvas');
+    ringWrap.appendChild(combinedCanvas);
+    combinedWrap.appendChild(ringWrap);
 
-        if (def.filterKey) {
-            const toggleResidenceMixFilter = () => {
-                selectedResidenceMixFilter = selectedResidenceMixFilter === def.filterKey ? 'all' : def.filterKey;
+    const legendWrap = document.createElement('div');
+    legendWrap.className = 'transport-combined-legend';
+    combinedWrap.appendChild(legendWrap);
+    container.appendChild(combinedWrap);
+
+    const segmentValues = residenceDefs.map(d => totalResidences > 0 ? (d.value || 0) : 0);
+    const combinedChart = new Chart(combinedCanvas.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels: residenceDefs.map(d => d.label),
+            datasets: [{
+                data: segmentValues,
+                backgroundColor: residenceDefs.map(d => d.color),
+                borderWidth: 0,
+                borderRadius: 6,
+                spacing: 2,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            cutout: '62%',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    rtl: true,
+                    textDirection: 'rtl',
+                    callbacks: {
+                        label: ctx => {
+                            const pct = totalResidences > 0 ? Math.round((ctx.raw / totalResidences) * 100) : 0;
+                            return ctx.label + ': ' + Number(ctx.raw || 0).toLocaleString() + ' (' + pct + '%)';
+                        }
+                    }
+                },
+                segmentPct: { display: false }
+            },
+            onClick: (e, elements) => {
+                if (!elements.length) return;
+                const clickedKey = residenceDefs[elements[0].index]?.filterKey;
+                if (!clickedKey) return;
+                selectedResidenceMixFilter = selectedResidenceMixFilter === clickedKey ? 'all' : clickedKey;
                 selectedPlanId = null;
                 selectedEntranceName = null;
                 selectedPathName = null;
                 selectedDistrict = null;
                 applyFilters();
-            };
-            item.addEventListener('click', toggleResidenceMixFilter);
-            item.addEventListener('keydown', event => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    toggleResidenceMixFilter();
-                }
-            });
-        }
-
-        const ringCanvas = item.querySelector('canvas');
-        ringCanvas.width = RESIDENCE_RING_CANVAS_SIZE;
-        ringCanvas.height = RESIDENCE_RING_CANVAS_SIZE;
-        ringCanvas.style.width = RESIDENCE_RING_CANVAS_SIZE + 'px';
-        ringCanvas.style.height = RESIDENCE_RING_CANVAS_SIZE + 'px';
-        const ctx = ringCanvas.getContext('2d');
-        residenceAssignmentChartInstances.push(new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: [def.doneLabel, def.restLabel],
-                datasets: [{
-                    data: hasData ? [done, rest] : [0, 1],
-                    backgroundColor: hasData ? def.colors : ['rgba(0,0,0,0)', 'rgba(148, 163, 184, 0.34)'],
-                    borderColor: chartTheme.border,
-                    borderWidth: 2,
-                    borderRadius: 8,
-                    spacing: 2,
-                    hoverOffset: 2
-                }]
-            },
-            options: {
-                responsive: false,
-                maintainAspectRatio: true,
-                cutout: '68%',
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: 'rgba(9, 9, 11, 0.96)',
-                        titleColor: chartTheme.title || '#fafafa',
-                        bodyColor: chartTheme.text || '#afafaf',
-                        borderColor: chartTheme.border || '#27272a',
-                        borderWidth: 1,
-                        rtl: true,
-                        textDirection: 'rtl',
-                        callbacks: {
-                            title: () => def.label,
-                            label: context => `${context.label}: ${Number(context.raw).toLocaleString()}`,
-                            afterBody: () => def.afterBody(percent)
-                        }
-                    }
-                }
             }
-        }));
+        },
+        plugins: [segmentPctPlugin]
+    });
+    residenceAssignmentChartInstances.push(combinedChart);
+
+    residenceDefs.forEach((def, i) => {
+        const item = document.createElement('div');
+        item.className = 'transport-legend-item residence-legend-item';
+        item.classList.toggle('active', selectedResidenceMixFilter === def.filterKey);
+        item.setAttribute('title', def.label);
+        item.innerHTML =
+            '<span class="transport-legend-dot" style="background:' + def.color + '"></span>' +
+            '<span class="transport-legend-label">' + def.label + '</span>' +
+            '<span class="transport-legend-pct">' + formatRingPercent(def.value || 0, totalResidences) + '</span>';
+        item.style.cursor = 'pointer';
+        item.addEventListener('click', () => {
+            selectedResidenceMixFilter = selectedResidenceMixFilter === def.filterKey ? 'all' : def.filterKey;
+            selectedPlanId = null;
+            selectedEntranceName = null;
+            selectedPathName = null;
+            selectedDistrict = null;
+            applyFilters();
+        });
+        legendWrap.appendChild(item);
     });
 }
 
