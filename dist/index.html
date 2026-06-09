@@ -11,7 +11,7 @@
     <!-- FontAwesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Custom CSS -->
-  <link rel="stylesheet" crossorigin href="/maan-dashboard/assets/index-DxqnY3zU.css">
+  <link rel="stylesheet" crossorigin href="/maan-dashboard/assets/index-CJqDHZpK.css">
 </head>
 <body class="dark-mode auth-required">
 
@@ -121,6 +121,16 @@
                 <div class="main-left-col">
 
                 <section class="plan-type-menu-section rings-summary-section glass" aria-label="اكتمال المراحل والمساكن">
+                <div class="top-filter-menu-bar" aria-label="فلاتر أنواع الخطط والنقل">
+                    <div class="top-filter-menu-group">
+                        <span class="section-label"><i class="fa-solid fa-route"></i> نوع الخطة</span>
+                        <div id="planTypeMenu" class="plan-type-menu" role="tablist" aria-label="نوع الخطة"></div>
+                    </div>
+                    <div class="top-filter-menu-group">
+                        <span class="section-label"><i class="fa-solid fa-bus-simple"></i> نوع النقل</span>
+                        <div id="transportTypeMenu" class="plan-type-menu" role="tablist" aria-label="نوع النقل"></div>
+                    </div>
+                </div>
                 <select id="planTypeFilter" class="visually-hidden" aria-label="المرحلة">
                     <option value="all">الكل</option>
                 </select>
@@ -278,10 +288,12 @@
     <script src="data/data.js"></script>
     <script src="data/assign_camps.js"></script>
     <script src="data/assign_residences.js"></script>
-    <script src="data/cameras.js"></script>
+    <script src="data/cameras.js?v=20260610"></script>
     <script src="data/districts.js"></script>
     <script src="data/camps_gates.js"></script>
     <script src="data/makaf_paths.js"></script>
+    <script src="min_minasm.js"></script>
+    <script src="exit_points.js"></script>
     <!-- Auth and App Logic -->
     <script src="auth.js"></script>
 </body>

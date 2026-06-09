@@ -7,13 +7,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', 'data');
 
 /**
- * Generate data modules from CSV files (assign_camps.js, assign_residences.js, and data.js)
+ * Generate data modules from CSV/Excel/GeoJSON files.
  * Usage:
  *   node generate-data-from-csv.mjs              # Auto-find and regenerate all
  *   node generate-data-from-csv.mjs camps        # Regenerate only camps from latest CSV
  *   node generate-data-from-csv.mjs camps-excel  # Regenerate camps from assign_camps.xlsx
  *   node generate-data-from-csv.mjs residences   # Regenerate only residences
  *   node generate-data-from-csv.mjs simulation   # Regenerate only simulation (data.js)
+ *   node generate-data-from-csv.mjs exit-paths   # Regenerate Tarwiya exit path GeoJSON data
  *   node generate-data-from-csv.mjs both         # Regenerate camps and residences
  *   node generate-data-from-csv.mjs all          # Regenerate all three
  *   node generate-data-from-csv.mjs <csv-file>   # Specific file by name
@@ -134,11 +135,56 @@ function generateFromCsv(csvPath, variableName, outputBaseName) {
     return true;
 }
 
+function writeGeneratedModule(jsContent, outputPaths) {
+    outputPaths.forEach(outputPath => {
+        const dirPath = path.dirname(outputPath);
+        if (!fs.existsSync(dirPath)) {
+            fs.mkdirSync(dirPath, { recursive: true });
+        }
+        fs.writeFileSync(outputPath, jsContent, 'utf-8');
+        const size = fs.statSync(outputPath).size;
+        console.log(`  ✓ ${path.relative(process.cwd(), outputPath)} (${(size / 1024).toFixed(2)} KB)`);
+    });
+}
+
+function generateFromGeojson(geojsonPath, variableName, outputBaseName) {
+    if (!fs.existsSync(geojsonPath)) {
+        console.error(`❌ File not found: ${geojsonPath}`);
+        return false;
+    }
+
+    const geojson = JSON.parse(fs.readFileSync(geojsonPath, 'utf-8'));
+    const jsContent = `const ${variableName} = ${JSON.stringify(geojson)};\n`;
+    const outputPaths = [
+        path.join(dataDir, '..', '..', 'public', `${outputBaseName}.js`),
+        path.join(dataDir, '..', '..', 'dist', `${outputBaseName}.js`)
+    ];
+
+    writeGeneratedModule(jsContent, outputPaths);
+    console.log(`\n✓ Generated from: ${path.relative(process.cwd(), geojsonPath)}\n`);
+    return true;
+}
+
+function generateExitPaths() {
+    console.log('🚪 Tarwiya Exit Paths:');
+    const minMinaOk = generateFromGeojson(
+        path.join(dataDir, 'MIN_MINASM.geojson'),
+        'MIN_MINASM_DATA',
+        'min_minasm'
+    );
+    const exitPointsOk = generateFromGeojson(
+        path.join(dataDir, 'ExitPoints.geojson'),
+        'EXIT_POINTS_DATA',
+        'exit_points'
+    );
+    return minMinaOk && exitPointsOk;
+}
+
 async function main() {
     const arg = process.argv[2]?.toLowerCase() || 'all';
-    const validArgs = ['all', 'both', 'residences', 'camps', 'camps-excel', 'simulation', 'data'];
+    const validArgs = ['all', 'both', 'residences', 'camps', 'camps-excel', 'simulation', 'data', 'exit-paths'];
 
-    console.log('📦 Generating data modules from CSV/Excel files...\n');
+    console.log('📦 Generating data modules from CSV/Excel/GeoJSON files...\n');
 
     let success = false;
 
@@ -162,6 +208,7 @@ async function main() {
                                        (!validArgs.includes(arg) && arg.includes('residence'));
     const shouldRegenerateSimulation = arg === 'all' || arg === 'simulation' || arg === 'data' ||
                                        (!validArgs.includes(arg) && arg.includes('simulation'));
+    const shouldRegenerateExitPaths = arg === 'all' || arg === 'exit-paths';
 
     // Handle camps
     if (shouldRegenerateCamps) {
@@ -203,6 +250,10 @@ async function main() {
                 success = true;
             }
         }
+    }
+
+    if (shouldRegenerateExitPaths && generateExitPaths()) {
+        success = true;
     }
 
     if (!success) {

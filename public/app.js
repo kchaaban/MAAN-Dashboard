@@ -10,6 +10,7 @@ let showCameras = false;
 let campsGatesLayerGroup;
 let showCampsGates = false;
 let makafPathsLayerGroup;
+let showTarwiaExitPaths = false;
 
 // Performance Caches
 let cachedFilteredGeometries = null;
@@ -150,6 +151,7 @@ const AUTH_TOKEN_STORAGE_KEY = 'maan-dashboard-auth-token';
 const AUTH_ROLE_STORAGE_KEY = 'maan-dashboard-auth-role';
 const THEME_STORAGE_KEY = 'dashboard-theme';
 const PLAN_TYPE_RING_ORDER = ['tarwia', 'direct_taseed', 'taseed_tarwia', 'efada', 'nafra'];
+const TRANSPORT_TYPE_MENU_OPTIONS = ['ترددي', 'تقليدي رد', 'تقليدي ردين', 'قطار'];
 const DISTRICT_COLOR_PALETTE = [
     "#2A9D90",
     "#4EC9B9",
@@ -2092,9 +2094,37 @@ function parseGeom(str) {
     return null;
 }
 
+function normalizeCampLabel(value) {
+    return String(value || '').trim();
+}
+
+function getTarwiaExitRouteForCamp(campLabel) {
+    const normalizedCampLabel = normalizeCampLabel(campLabel);
+    if (!normalizedCampLabel || typeof MIN_MINASM_DATA === 'undefined' || !Array.isArray(MIN_MINASM_DATA.features)) {
+        return null;
+    }
+
+    const routeFeature = MIN_MINASM_DATA.features.find(feature =>
+        normalizeCampLabel(feature?.properties?.camp_label) === normalizedCampLabel
+    );
+    if (!routeFeature?.geometry) return null;
+
+    const exitCode = String(routeFeature.properties?.ASMCODE || '').trim();
+    const exitFeature = typeof EXIT_POINTS_DATA !== 'undefined' && Array.isArray(EXIT_POINTS_DATA.features)
+        ? EXIT_POINTS_DATA.features.find(feature => String(feature?.properties?.MINASM_Code || '').trim() === exitCode)
+        : null;
+
+    return {
+        routeFeature,
+        exitFeature,
+        exitCode,
+        exitName: exitFeature?.properties?.MINASM_Name || routeFeature.properties?.MINASM || exitCode
+    };
+}
+
 function getRowGeojsons(row) {
     const geojsonsToRender = [];
-    const planTypeCode = row['plan_type_code'];
+    const planTypeCode = normalizePlanTypeCode(row['plan_type_code'] || row['plan_type_name']);
 
     let targetBaseName = null;
     if (planTypeCode === 'tarwia') targetBaseName = 'ASMMIN';
@@ -2122,6 +2152,27 @@ function getRowGeojsons(row) {
                    (!asmCode || p.ASM_CODE?.trim() === asmCode);
         });
         if (feature && feature.geometry) geojsonsToRender.push({ geojson: feature.geometry, type: 'internal' });
+    }
+
+    if (planTypeCode === 'tarwia') {
+        const exitRoute = getTarwiaExitRouteForCamp(row['camp_label']);
+        if (exitRoute?.routeFeature?.geometry) {
+            geojsonsToRender.push({
+                geojson: exitRoute.routeFeature.geometry,
+                type: 'tarwia_exit',
+                label: exitRoute.exitName,
+                exitCode: exitRoute.exitCode,
+                exitLatLng: getRepresentativeLatLngFromGeojson(exitRoute.exitFeature?.geometry)
+            });
+        }
+        if (exitRoute?.exitFeature?.geometry) {
+            geojsonsToRender.push({
+                geojson: exitRoute.exitFeature.geometry,
+                type: 'tarwia_exit_point',
+                label: exitRoute.exitName,
+                exitCode: exitRoute.exitCode
+            });
+        }
     }
 
     if (row['path_geom']) {
@@ -2201,6 +2252,7 @@ function extendBoundsFromGeojson(bounds, geojson) {
 }
 
 function getPointLabel(row, item) {
+    if (item.type === 'tarwia_exit_point') return String(item.label || item.exitCode || '').trim();
     if (item.type === 'start') return String(row['start_point_name'] || '').trim();
     if (item.type === 'end') return String(row['end_point_name'] || '').trim();
     if (item.type === 'entrance') return String(row['entrance_name'] || row['entrance_asm_code'] || '').trim();
@@ -2225,6 +2277,8 @@ function getPointLabel(row, item) {
 }
 
 function getAreaLabel(row, item) {
+    if (item.type === 'tarwia_exit') return String(item.label || item.exitCode || row['camp_label'] || '').trim();
+    if (item.type === 'tarwia_exit_point') return String(item.label || item.exitCode || '').trim();
     if (item.type === 'internal') return String(row['path_name'] || row['camp_label'] || '').trim();
     if (item.type === 'entrance') return String(row['entrance_name'] || row['entrance_asm_code'] || '').trim();
     if (item.type === 'end') return String(row['end_point_name'] || '').trim();
@@ -2654,7 +2708,10 @@ function initMap() {
 // Populate Filter Dropdowns
 function populateFilters() {
     const periods = [...new Set(rawData.map(d => d['period']).filter(Boolean))];
-    const transports = [...new Set(rawData.map(d => d['transport_type_name']).filter(Boolean))];
+    const transports = [...new Set([
+        ...TRANSPORT_TYPE_MENU_OPTIONS,
+        ...rawData.map(d => d['transport_type_name']).filter(Boolean)
+    ])];
     const planTypes = [...new Set(rawData.map(d => d['plan_type_name']).filter(Boolean))];
     const districts = [...new Set(rawData.map(d => d['start_point_district']).filter(Boolean))];
 
@@ -2680,6 +2737,7 @@ function populateFilters() {
     syncPlanTypeSelectValue();
 
     renderPlanTypeMenu();
+    renderTransportTypeMenu();
     populateTopNavDropdowns();
 }
 
@@ -2917,13 +2975,59 @@ function getActivePlanTypeLabels() {
     return selectedPlanTypes;
 }
 
+function getAvailablePlanTypeLabelsForCurrentContext() {
+    const sourceRows = planTypeBaseData.length || hasActiveMapFilter() || hasServiceEntitySelection()
+        ? planTypeBaseData
+        : rawData;
+    const labelsByName = new Map();
+
+    sourceRows.forEach(row => {
+        const label = String(row['plan_type_name'] || '').trim();
+        if (label && !labelsByName.has(label)) labelsByName.set(label, row);
+    });
+
+    selectedPlanTypes.forEach(label => {
+        if (label && !labelsByName.has(label)) {
+            labelsByName.set(label, { plan_type_name: label, plan_type_code: normalizePlanTypeCode(label) });
+        }
+    });
+
+    return Array.from(labelsByName.keys()).sort((a, b) => {
+        const rowA = labelsByName.get(a) || { label: a };
+        const rowB = labelsByName.get(b) || { label: b };
+        const orderDiff = getPlanTypeRingOrderIndex(rowA) - getPlanTypeRingOrderIndex(rowB);
+        return orderDiff || String(a).localeCompare(String(b), 'ar');
+    });
+}
+
+function applyPlanTypeChartSelection(planTypeLabel) {
+    if (!planTypeLabel) return;
+
+    const wasSelected = selectedPlanTypes.size === 1 && selectedPlanTypes.has(planTypeLabel);
+    selectedPlanTypes.clear();
+    if (!wasSelected) selectedPlanTypes.add(planTypeLabel);
+
+    syncPlanTypeSelectValue();
+    selectedPlanId = null;
+    selectedEntranceName = null;
+    selectedPathName = null;
+    selectedDistrict = null;
+    updatePlanTypeMenuState();
+    applyFilters();
+}
+
 function renderPlanTypeMenu() {
     const select = document.getElementById('planTypeFilter');
     const menu = document.getElementById('planTypeMenu');
     if (!select || !menu) return;
 
     const fragment = document.createDocumentFragment();
-    Array.from(select.options).forEach(option => {
+    const options = [
+        { value: 'all', textContent: select.querySelector('option[value="all"]')?.textContent || 'الكل' },
+        ...getAvailablePlanTypeLabelsForCurrentContext().map(label => ({ value: label, textContent: label }))
+    ];
+
+    options.forEach(option => {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'plan-type-option';
@@ -2937,23 +3041,15 @@ function renderPlanTypeMenu() {
 
         button.addEventListener('click', (e) => {
             e.preventDefault();
-            console.log('Plan type clicked:', option.value, 'Before:', Array.from(selectedPlanTypes));
 
             if (option.value === 'all') {
                 selectedPlanTypes.clear();
             } else {
-                const wasSelected = selectedPlanTypes.has(option.value);
-                if (wasSelected) {
-                    // Clicking selected = deselect and show all
-                    selectedPlanTypes.delete(option.value);
-                } else {
-                    // Clicking unselected = select only this one
-                    selectedPlanTypes.clear();
-                    selectedPlanTypes.add(option.value);
-                }
+                const wasSelected = selectedPlanTypes.size === 1 && selectedPlanTypes.has(option.value);
+                selectedPlanTypes.clear();
+                if (!wasSelected) selectedPlanTypes.add(option.value);
             }
 
-            console.log('After:', Array.from(selectedPlanTypes));
             syncPlanTypeSelectValue();
             selectedPlanId = null;
             selectedEntranceName = null;
@@ -2977,6 +3073,58 @@ function updatePlanTypeMenuState() {
     menu.querySelectorAll('.plan-type-option').forEach(button => {
         const value = button.dataset.value;
         const isActive = value !== 'all' ? selectedPlanTypes.has(value) : selectedPlanTypes.size === 0;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+}
+
+function renderTransportTypeMenu() {
+    const select = document.getElementById('transportFilter');
+    const menu = document.getElementById('transportTypeMenu');
+    if (!select || !menu) return;
+
+    const fragment = document.createDocumentFragment();
+    const options = [
+        { value: 'all', textContent: select.querySelector('option[value="all"]')?.textContent || 'الكل' },
+        ...TRANSPORT_TYPE_MENU_OPTIONS.map(label => ({ value: label, textContent: label }))
+    ];
+
+    options.forEach(option => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'plan-type-option transport-type-option';
+        button.textContent = option.textContent;
+        button.dataset.value = option.value;
+        button.setAttribute('role', 'tab');
+
+        const isActive = select.value === option.value || (option.value === 'all' && select.value === 'all');
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+
+        button.addEventListener('click', (e) => {
+            e.preventDefault();
+            select.value = select.value === option.value && option.value !== 'all' ? 'all' : option.value;
+            selectedPlanId = null;
+            selectedEntranceName = null;
+            selectedPathName = null;
+            selectedDistrict = null;
+            updateTransportTypeMenuState();
+            applyFilters();
+        });
+
+        fragment.appendChild(button);
+    });
+
+    menu.replaceChildren(fragment);
+}
+
+function updateTransportTypeMenuState() {
+    const select = document.getElementById('transportFilter');
+    const menu = document.getElementById('transportTypeMenu');
+    if (!select || !menu) return;
+
+    menu.querySelectorAll('.transport-type-option').forEach(button => {
+        const isActive = select.value === button.dataset.value;
         button.classList.toggle('active', isActive);
         button.setAttribute('aria-selected', isActive ? 'true' : 'false');
     });
@@ -3015,6 +3163,7 @@ function setupEventListeners() {
                 // Skip - plan type selection is now handled by buttons in renderPlanTypeMenu
                 return;
             }
+            if (id === 'transportFilter') updateTransportTypeMenuState();
             applyFilters();
         });
     });
@@ -3196,6 +3345,18 @@ function setupEventListeners() {
         // Insert before export button (so order is: ... | camera-toggle | export | csv)
         csvBtn.parentNode.insertBefore(camerasBtn, cameraExportBtn);
 
+        const exitPathsBtn = document.createElement('button');
+        exitPathsBtn.id = 'exitPathsToggleBtn';
+        exitPathsBtn.className = 'theme-toggle-btn active';
+        exitPathsBtn.type = 'button';
+        exitPathsBtn.title = 'تبديل عرض مسارات الخروج';
+        exitPathsBtn.setAttribute('aria-label', 'تبديل مسارات الخروج');
+        exitPathsBtn.innerHTML = '<i class="fa-solid fa-route"></i>';
+        exitPathsBtn.style.marginRight = '4px';
+        exitPathsBtn.style.opacity = showTarwiaExitPaths ? '1' : '0.4';
+        exitPathsBtn.addEventListener('click', toggleTarwiaExitPaths);
+        csvBtn.parentNode.insertBefore(exitPathsBtn, camerasBtn);
+
         console.log('Cameras toggle button added');
     } else {
         console.log('top-nav-actions not found');
@@ -3277,6 +3438,8 @@ function applyFilters() {
         d['owner_office_number']
     ));
 
+    renderPlanTypeMenu();
+    renderTransportTypeMenu();
     scheduleDashboardUpdate();
 }
 function ensureCompanyMetricsEntry(map, company) {
@@ -3854,6 +4017,106 @@ function cameraIntersectsGeometries(camera, geometries) {
     return false;
 }
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+const CAMERA_TOKEN_LABELS = {
+    ARF: 'عرفات',
+    MNA: 'منى',
+    MZD: 'مزدلفة',
+    MKZ: 'مكة',
+    UNIV: 'الجامعة',
+    BRG: 'جسر',
+    RD26: 'طريق 26',
+    MDRING: 'الدائري الأوسط',
+    TNL: 'نفق',
+    PRK: 'مواقف',
+    PKG: 'مواقف',
+    BASIN: 'حوض',
+    WBR: 'جسر وادي عرنة',
+    DQM: 'الدقم',
+    SUP: 'دعم',
+    GEN: 'عام',
+    SEC: 'الأمن'
+};
+
+function decodeCameraToken(token) {
+    const normalized = String(token || '').trim().toUpperCase();
+    return CAMERA_TOKEN_LABELS[normalized] || token;
+}
+
+function getCameraDirectionLabel(tokens, camera = null) {
+    const sourceDirection = String(camera?.direction || camera?.['الإتجاه'] || '').trim();
+    if (sourceDirection) return sourceDirection;
+
+    const hasEntry = tokens.includes('ENT') || tokens.includes('IN');
+    const hasExit = tokens.includes('EXT') || tokens.includes('OUT');
+    if (hasEntry && hasExit) return 'دخول وخروج';
+    if (hasEntry) return 'دخول';
+    if (hasExit) return 'خروج';
+    return 'غير محدد';
+}
+
+function getCameraTypeLabel(tokens, camera = null) {
+    const sourceType = String(camera?.type || camera?.['النوع'] || '').trim();
+    if (sourceType) return sourceType;
+
+    if (tokens.includes('TRN')) return 'قطار';
+    if (tokens.includes('MSH')) return 'مشاة';
+    if (tokens.includes('PRK') || tokens.includes('PKG')) return 'مواقف';
+    if (tokens.includes('TNL')) return 'نفق';
+    if (tokens.includes('SUP')) return 'مساندة';
+    return 'كاميرا مراقبة';
+}
+
+function getCameraLocationLabel(camera) {
+    const sourceLocation = String(camera?.location || camera?.['الموقع'] || camera?.shortName || '').trim();
+    if (sourceLocation) return sourceLocation;
+
+    const tokens = String(camera.name || '').split('_').filter(Boolean);
+    const primaryZone = tokens.find(token => ['ARF', 'MNA', 'MZD', 'MKZ'].includes(token));
+    const descriptorTokens = tokens.filter(token => ![
+        'ENT', 'EXT', 'IN', 'OUT', 'MSH', 'TRN', 'SUP'
+    ].includes(token) && !/^\d+$/.test(token));
+
+    const labels = descriptorTokens.map(decodeCameraToken).filter(Boolean);
+    const uniqueLabels = Array.from(new Set(labels));
+    if (uniqueLabels.length) return uniqueLabels.join(' - ');
+    return primaryZone ? decodeCameraToken(primaryZone) : 'غير محدد';
+}
+
+function getCameraDetails(camera) {
+    const tokens = String(camera.name || '').split('_').filter(Boolean);
+
+    return {
+        name: camera.name || 'غير محدد',
+        location: getCameraLocationLabel(camera),
+        direction: getCameraDirectionLabel(tokens, camera),
+        type: getCameraTypeLabel(tokens, camera),
+        latitude: Number(camera.latitude),
+        longitude: Number(camera.longitude),
+        altitude: Number(camera.altitude)
+    };
+}
+
+function buildCameraDetailsHtml(camera) {
+    const details = getCameraDetails(camera);
+
+    return `
+        <div style="font-size:14px;font-weight:bold;margin-bottom:6px;">📷 ${escapeHtml(details.name)}</div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:5px 10px;font-size:12px;line-height:1.45;">
+            <span style="opacity:0.65;">الموقع</span><strong>${escapeHtml(details.location)}</strong>
+            <span style="opacity:0.65;">الاتجاه</span><strong>${escapeHtml(details.direction)}</strong>
+            <span style="opacity:0.65;">النوع</span><strong>${escapeHtml(details.type)}</strong>
+        </div>`;
+}
+
 // [lng, lat] zone centers used to determine path direction relative to each zone
 const HAJJ_ZONE_CENTERS = [
     { prefix: 'ARF', coords: [39.9848, 21.3546] },
@@ -3903,7 +4166,10 @@ function getPlanDirectionAtCamera(plan, camera) {
 
 function getCameraFilterKey() {
     if (!filteredData || filteredData.length === 0) return '0';
-    return `${filteredData.length}|${filteredData[0]['plan_id']}|${filteredData[filteredData.length - 1]['plan_id']}`;
+    const cameraSignature = typeof CAMERAS_DATA !== 'undefined' && CAMERAS_DATA.length
+        ? `${CAMERAS_DATA.length}|${CAMERAS_DATA[0]?.name || ''}|${CAMERAS_DATA[CAMERAS_DATA.length - 1]?.name || ''}`
+        : 'no-cameras';
+    return `${filteredData.length}|${filteredData[0]['plan_id']}|${filteredData[filteredData.length - 1]['plan_id']}|${cameraSignature}`;
 }
 
 function updateCameraExportBtnState() {
@@ -4128,7 +4394,20 @@ function renderCameras() {
             })
         });
 
-        marker.bindPopup(`<strong style="color:#333;">📷 ${camera.name}</strong><br><small style="color:#888;">جارٍ تحميل البيانات...</small>`);
+        const cameraDetailsHtml = buildCameraDetailsHtml(camera);
+        marker.bindTooltip(cameraDetailsHtml, {
+            direction: 'top',
+            sticky: true,
+            opacity: 0.96,
+            className: 'camera-detail-tooltip'
+        });
+        marker.bindPopup(
+            `<div dir="rtl" style="font-family:inherit;min-width:240px;padding:4px;">
+                ${cameraDetailsHtml}
+                <hr style="margin:6px 0;border:none;border-top:1px solid rgba(128,128,128,0.25);">
+                <small style="color:#888;">جارٍ تحميل البيانات...</small>
+            </div>`
+        );
 
         marker.on('popupopen', function () {
             const popup = this.getPopup();
@@ -4137,7 +4416,7 @@ function renderCameras() {
             if (cameraCacheBuilding) {
                 popup.setContent(
                     `<div dir="rtl" style="font-family:inherit;min-width:220px;padding:4px;">
-                        <div style="font-size:13px;font-weight:bold;">📷 ${camera.name}</div>
+                        ${cameraDetailsHtml}
                         ${SEP}
                         <div style="font-size:12px;opacity:0.6;">جارٍ تحميل الإحصائيات...</div>
                     </div>`
@@ -4150,7 +4429,7 @@ function renderCameras() {
             if (!cached) {
                 popup.setContent(
                     `<div dir="rtl" style="font-family:inherit;min-width:220px;padding:4px;">
-                        <div style="font-size:13px;font-weight:bold;">📷 ${camera.name}</div>
+                        ${cameraDetailsHtml}
                         ${SEP}
                         <div style="font-size:12px;opacity:0.6;">لا توجد رحلات مخططة لهذه الكاميرا</div>
                     </div>`
@@ -4172,7 +4451,7 @@ function renderCameras() {
             const exportBtnId = 'camExportBtn_' + camera.name.replace(/\W/g, '_');
             popup.setContent(
                 `<div dir="rtl" style="font-family:inherit;min-width:260px;padding:4px;font-size:13px;">
-                    <div style="font-size:14px;font-weight:bold;">📷 ${camera.name}</div>
+                    ${cameraDetailsHtml}
                     ${SEP}
                     <div style="display:flex;justify-content:space-around;padding:8px 0;">
                         <div style="text-align:center;">
@@ -4352,6 +4631,17 @@ function toggleCameras() {
         btn.style.opacity = showCameras ? '1' : '0.4';
     }
     debouncedRenderCameras();
+}
+
+function toggleTarwiaExitPaths() {
+    showTarwiaExitPaths = !showTarwiaExitPaths;
+    const btn = document.getElementById('exitPathsToggleBtn');
+    if (btn) {
+        btn.classList.toggle('active', showTarwiaExitPaths);
+        btn.style.opacity = showTarwiaExitPaths ? '1' : '0.4';
+    }
+    cachedMapRenderKey = null;
+    updateMap();
 }
 
 function updateMapSelectionTitle() {
@@ -4776,6 +5066,7 @@ function updateMap() {
         filteredData.length ? filteredData[0]['plan_id'] : '',
         filteredData.length ? filteredData[filteredData.length - 1]['plan_id'] : '',
         selectedPlanId, selectedEntranceName, selectedPathName, selectedDistrict,
+        showTarwiaExitPaths ? 'exit-paths-on' : 'exit-paths-off',
         Array.from(selectedServiceCompanies).sort().join(','),
         Array.from(selectedServiceCenters).sort().join(',')
     ].join('|');
@@ -4857,6 +5148,7 @@ function updateMap() {
             });
 
             geojsonsToRender.forEach(item => {
+                if ((item.type === 'tarwia_exit' || item.type === 'tarwia_exit_point') && !showTarwiaExitPaths) return;
                 const geojson = item.geojson;
                 if (geojson && geojson.coordinates) {
                     extendBoundsFromGeojson(bounds, geojson);
@@ -4865,6 +5157,7 @@ function updateMap() {
                     let color = '#3b82f6';
                     let fillColor = '#93c5fd';
                     if (item.type === 'internal') { color = '#10b981'; fillColor = '#6ee7b7'; }
+                    else if (item.type === 'tarwia_exit' || item.type === 'tarwia_exit_point') { color = '#dc2626'; fillColor = '#fecaca'; }
                     else if (item.type === 'entrance') { color = '#EBC468'; fillColor = '#fcd34d'; }
                     else if (item.type === 'start' || item.type === 'end') {
                         const tc = getTransportTypeColor(row['transport_type_name']);
@@ -4950,11 +5243,17 @@ function updateMap() {
                         if (!connectedLineLatLngsByItem.has(item)) {
                             latlngs = orientLatLngsForRoute(latlngs, row, item);
                         }
+                        if (item.type === 'tarwia_exit' && item.exitLatLng && latlngs.length >= 2) {
+                            const firstDistance = getLatLngDistance(latlngs[0], item.exitLatLng);
+                            const lastDistance = getLatLngDistance(latlngs[latlngs.length - 1], item.exitLatLng);
+                            if (firstDistance < lastDistance) latlngs = [...latlngs].reverse();
+                        }
 
                         const halo = L.polyline(latlngs, {
                             color: '#ffffff',
                             weight: 7,
                             opacity: 0.9,
+                            dashArray: item.type === 'tarwia_exit' ? '10 8' : null,
                             className: 'route-line-halo'
                         }).addTo(routeLayerGroup);
 
@@ -4962,6 +5261,7 @@ function updateMap() {
                             color: color,
                             weight: 4,
                             opacity: 0.95,
+                            dashArray: item.type === 'tarwia_exit' ? '10 8' : null,
                             className: 'route-line'
                         }).addTo(routeLayerGroup);
 
@@ -5517,15 +5817,12 @@ function renderCompletionSummaryChart(stats, chartTheme) {
     const container = document.getElementById('completionSummaryCharts');
     if (!container) return;
 
-    const planTypeSelect = document.getElementById('planTypeFilter');
     const activePlanTypes = getActivePlanTypeLabels();
     const baseForCompletion = (planTypeBaseData.length ? planTypeBaseData : rawData)
         .filter(d => matchesCompanyOwnerFilters(d['owner_company_name'], d['owner_office_number']));
     const summaryStats = buildCompletionStats(baseForCompletion);
     const rowsByLabel = new Map(Object.values(summaryStats.completionByPlanType).map(row => [row.label, row]));
-    const currentPlanTypeLabels = planTypeSelect
-        ? Array.from(planTypeSelect.options).filter(o => o.value !== 'all').map(o => o.value)
-        : Array.from(rowsByLabel.keys());
+    const currentPlanTypeLabels = getAvailablePlanTypeLabelsForCurrentContext();
     const rows = currentPlanTypeLabels
         .map(label => rowsByLabel.get(label) || { planTypeCode: normalizePlanTypeCode(label), label, planned: 0, target: 0 })
         .sort((a, b) => {
@@ -5622,15 +5919,7 @@ function renderCompletionSummaryChart(stats, chartTheme) {
                 if (!elements.length) return;
                 const row = rows[elements[0].index];
                 if (!row) return;
-                selectedPlanTypes.clear();
-                selectedPlanTypes.add(row.label);
-                syncPlanTypeSelectValue();
-                selectedPlanId = null;
-                selectedEntranceName = null;
-                selectedPathName = null;
-                selectedDistrict = null;
-                updatePlanTypeMenuState();
-                applyFilters();
+                applyPlanTypeChartSelection(row.label);
             }
         },
         plugins: [segmentPctPlugin]
@@ -5648,15 +5937,7 @@ function renderCompletionSummaryChart(stats, chartTheme) {
             '<span class="transport-legend-pct">' + formatRingPercent(row.target || 0, completionPercentTotal) + '</span>';
         item.style.cursor = 'pointer';
         item.addEventListener('click', () => {
-            selectedPlanTypes.clear();
-            selectedPlanTypes.add(row.label);
-            syncPlanTypeSelectValue();
-            selectedPlanId = null;
-            selectedEntranceName = null;
-            selectedPathName = null;
-            selectedDistrict = null;
-            updatePlanTypeMenuState();
-            applyFilters();
+            applyPlanTypeChartSelection(row.label);
         });
         legendDiv.appendChild(item);
     });

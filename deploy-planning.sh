@@ -22,9 +22,12 @@ DIST_DIR="${LOCAL_DIR}/dist"
 echo "==> Copying extra assets into dist/..."
 cp "${LOCAL_DIR}/public/app.js"          "${DIST_DIR}/app.js"
 cp "${LOCAL_DIR}/public/auth.js"         "${DIST_DIR}/auth.js" 2>/dev/null || true
+cp "${LOCAL_DIR}/public/min_minasm.js"   "${DIST_DIR}/min_minasm.js"
+cp "${LOCAL_DIR}/public/exit_points.js"  "${DIST_DIR}/exit_points.js"
 mkdir -p "${DIST_DIR}/data"
 cp "${LOCAL_DIR}/server/data/data.js"         "${DIST_DIR}/data/data.js"
 cp "${LOCAL_DIR}/server/data/assign_camps.js" "${DIST_DIR}/data/assign_camps.js"
+cp "${LOCAL_DIR}/server/data/assign_residences.js" "${DIST_DIR}/data/assign_residences.js"
 cp "${LOCAL_DIR}/server/data/"*.png           "${DIST_DIR}/data/" 2>/dev/null || true
 
 echo "==> Patching asset paths in dist/index.html..."

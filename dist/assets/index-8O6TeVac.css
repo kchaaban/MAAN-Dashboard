@@ -2225,6 +2225,15 @@ body.dark-mode #map {
     line-height: 1.7;
 }
 
+.leaflet-tooltip.camera-detail-tooltip {
+    min-width: 240px;
+    max-width: 320px;
+    padding: 0.55rem 0.65rem;
+    border-radius: 8px;
+    line-height: 1.45;
+    white-space: normal;
+}
+
 body.dark-mode .leaflet-control-zoom-in,
 body.dark-mode .leaflet-control-zoom-out,
 body.dark-mode .leaflet-control-attribution,

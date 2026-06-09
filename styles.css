@@ -2225,6 +2225,15 @@ body.dark-mode #map {
     line-height: 1.7;
 }
 
+.leaflet-tooltip.camera-detail-tooltip {
+    min-width: 240px;
+    max-width: 320px;
+    padding: 0.55rem 0.65rem;
+    border-radius: 8px;
+    line-height: 1.45;
+    white-space: normal;
+}
+
 body.dark-mode .leaflet-control-zoom-in,
 body.dark-mode .leaflet-control-zoom-out,
 body.dark-mode .leaflet-control-attribution,
@@ -3678,6 +3687,52 @@ body.light-mode .residence-assignment-ring .progress-ring-wrap span {
     gap: clamp(0.35rem, 0.75cqw, 0.8rem);
 }
 
+.top-filter-menu-bar {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(0.45rem, 0.8cqw, 0.8rem);
+    min-width: 0;
+}
+
+.top-filter-menu-group {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+    padding: 0.4rem;
+    border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--surface-soft) 78%, transparent);
+}
+
+.top-filter-menu-group .section-label {
+    padding: 0;
+    font-size: clamp(0.62rem, 0.86cqw, 0.78rem);
+}
+
+.top-filter-menu-group .plan-type-menu {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    min-width: 0;
+    overflow-x: visible;
+    padding: 0.05rem 0.02rem 0.1rem;
+}
+
+.top-filter-menu-group .plan-type-option {
+    width: auto;
+    max-width: 100%;
+    flex: 1 1 max-content;
+    min-height: 30px;
+    min-width: max-content;
+    padding: 0.28rem 0.58rem;
+    font-size: clamp(0.58rem, 0.82cqw, 0.76rem);
+    text-align: center;
+    white-space: nowrap;
+}
+
 .rings-summary-section .completion-top-card,
 .rings-summary-section .residence-top-card,
 .rings-summary-section .transport-top-card {
@@ -3729,6 +3784,10 @@ body.light-mode .residence-assignment-ring .progress-ring-wrap span {
 
 @container (max-width: 940px) {
     .rings-summary-section.plan-type-menu-section {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .top-filter-menu-bar {
         grid-template-columns: minmax(0, 1fr);
     }
 

@@ -1,6 +1,6 @@
 # Data Generation from CSV Files
 
-This script regenerates `assign_camps.js` and `assign_residences.js` from their CSV source files.
+This script regenerates browser data files from CSV, Excel, and GeoJSON source files.
 
 ## Script Location
 ```
@@ -9,12 +9,12 @@ This script regenerates `assign_camps.js` and `assign_residences.js` from their 
 
 ## Usage
 
-### Generate Both Files (Recommended)
+### Generate All Files (Recommended)
 ```bash
 cd /home/azureuser/maan-dashboard/server
-node scripts/generate-data-from-csv.mjs
+node scripts/generate-data-from-csv.mjs all
 ```
-Automatically finds and uses the latest CSV files for camps and residences.
+Automatically finds and uses the latest CSV files for camps, residences, and simulation data, and regenerates Tarwiya exit path data from GeoJSON.
 
 ### Generate Camps Only
 ```bash
@@ -29,6 +29,23 @@ node scripts/generate-data-from-csv.mjs residences
 ### Generate Both (Explicit)
 ```bash
 node scripts/generate-data-from-csv.mjs both
+```
+
+### Generate Tarwiya Exit Paths Only
+```bash
+node scripts/generate-data-from-csv.mjs exit-paths
+```
+Uses:
+```
+/server/data/MIN_MINASM.geojson
+/server/data/ExitPoints.geojson
+```
+Outputs:
+```
+/public/min_minasm.js
+/public/exit_points.js
+/dist/min_minasm.js
+/dist/exit_points.js
 ```
 
 ### Generate from Specific CSV File
@@ -49,7 +66,7 @@ The script automatically finds the **latest** file for each type.
 
 ## Output Files Generated
 
-The script updates **three locations** automatically:
+For CSV-backed modules, the script updates **three locations** automatically:
 
 ✅ `/server/data/assign_camps.js`
 ✅ `/public/data/assign_camps.js`
@@ -58,6 +75,13 @@ The script updates **three locations** automatically:
 ✅ `/server/data/assign_residences.js`
 ✅ `/public/data/assign_residences.js`
 ✅ `/dist/data/assign_residences.js`
+
+For Tarwiya exit path GeoJSON modules, the script updates the browser static roots:
+
+✅ `/public/min_minasm.js`
+✅ `/public/exit_points.js`
+✅ `/dist/min_minasm.js`
+✅ `/dist/exit_points.js`
 
 ## Current Files
 
@@ -79,7 +103,7 @@ The script updates **three locations** automatically:
 
 When you have new CSV files:
 1. Place them in `/server/data/`
-2. Run: `node scripts/generate-data-from-csv.mjs`
+2. Run: `node scripts/generate-data-from-csv.mjs all`
 3. All files will be automatically updated
 
 ## Related Scripts
