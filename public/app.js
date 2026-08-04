@@ -376,13 +376,20 @@ function getServiceCenterCountFromAssignCamps() {
 // Calculate assignment statistics from the current filters. For the Tarwiya KPI,
 // the denominator is the Tarwiya movement total: Tarwiya + Taseed Tarwiya
 // (uses company filters if selected, otherwise all companies).
+function isKpiDenominatorPlanType(row) {
+    if (selectedPlanTypes.size > 0) {
+        return selectedPlanTypes.has(row['plan_type_name']);
+    }
+    return isTarwiyaKpiTotalPlanType(row);
+}
+
 function getCampAssignmentStats() {
     const { company, owner } = getSelectedCompanyAndOwner();
     const hasCompanySelection = company.size > 0 || owner.size > 0;
 
     // Filtered rows for assignment stats (apply company/owner filters)
     const filteredRows = planTypeBaseData.filter(row => (
-        isTarwiyaKpiTotalPlanType(row)
+        isKpiDenominatorPlanType(row)
         && matchesCompanyOwnerFilters(
             row['owner_company_name'],
             row['owner_office_number'],
@@ -394,7 +401,7 @@ function getCampAssignmentStats() {
     // Total rows: apply filters if company is selected, otherwise use all
     const totalRows = hasCompanySelection
         ? filteredRows  // Use filtered rows if company/center selected
-        : planTypeBaseData.filter(row => isTarwiyaKpiTotalPlanType(row));  // Use all Tarwiya/Taseed if no selection
+        : planTypeBaseData.filter(row => isKpiDenominatorPlanType(row));  // Use selected plan types, or all Tarwiya/Taseed if no selection
 
     const stats = calculateCampAssignmentStats(filteredRows);
 
@@ -2346,6 +2353,30 @@ function getRowAnchorLatLng(row, type) {
     return getRepresentativeLatLngFromGeojson(parseGeom(geomText));
 }
 
+function getRowGeomLatLng(row, fields) {
+    for (const field of fields) {
+        const latlng = getRepresentativeLatLngFromGeojson(parseGeom(row?.[field]));
+        if (latlng) return latlng;
+    }
+    return null;
+}
+
+function getRouteResidenceAnchor(row) {
+    if (row?.['start_point_type'] === 'residence') {
+        return getRowAnchorLatLng(row, 'start');
+    }
+    if (row?.['end_point_type'] === 'residence') {
+        return getRowAnchorLatLng(row, 'end');
+    }
+    return null;
+}
+
+function getRouteDestinationAnchor(row) {
+    return getRowGeomLatLng(row, ['entrance_point_geom', 'entrance_polygon'])
+        || (row?.['start_point_type'] !== 'residence' ? getRowAnchorLatLng(row, 'start') : null)
+        || (row?.['end_point_type'] !== 'residence' ? getRowAnchorLatLng(row, 'end') : null);
+}
+
 function getLatLngDistance(a, b) {
     if (!a || !b) return Infinity;
     if (map) return map.distance(L.latLng(a[0], a[1]), L.latLng(b[0], b[1]));
@@ -2359,9 +2390,23 @@ function orientLatLngsForRoute(latlngs, row, item) {
 
     const first = latlngs[0];
     const last = latlngs[latlngs.length - 1];
+    const residenceAnchor = getRouteResidenceAnchor(row);
+    const destinationAnchor = getRouteDestinationAnchor(row);
     const startAnchor = getRowAnchorLatLng(row, 'start');
     const endAnchor = getRowAnchorLatLng(row, 'end');
     const thresholdMeters = item?.type === 'internal' ? 10 : 6;
+
+    if (residenceAnchor && destinationAnchor) {
+        const forwardScore = getLatLngDistance(first, residenceAnchor) + getLatLngDistance(last, destinationAnchor);
+        const reverseScore = getLatLngDistance(last, residenceAnchor) + getLatLngDistance(first, destinationAnchor);
+        return reverseScore + thresholdMeters < forwardScore ? [...latlngs].reverse() : latlngs;
+    }
+
+    if (residenceAnchor) {
+        return getLatLngDistance(last, residenceAnchor) + thresholdMeters < getLatLngDistance(first, residenceAnchor)
+            ? [...latlngs].reverse()
+            : latlngs;
+    }
 
     if (startAnchor && endAnchor) {
         const forwardScore = getLatLngDistance(first, startAnchor) + getLatLngDistance(last, endAnchor);
@@ -2402,8 +2447,8 @@ function orientConnectedRouteSegments(row, lineItems) {
         return segments.map(item => ({ ...item, latlngs: orientLatLngsForRoute(item.latlngs, row, item) }));
     }
 
-    const startAnchor = getRowAnchorLatLng(row, 'start');
-    const endAnchor = getRowAnchorLatLng(row, 'end');
+    const startAnchor = getRouteResidenceAnchor(row) || getRowAnchorLatLng(row, 'start');
+    const endAnchor = getRouteDestinationAnchor(row) || getRowAnchorLatLng(row, 'end');
     if (!startAnchor || !endAnchor) {
         return segments.map(item => ({ ...item, latlngs: orientLatLngsForRoute(item.latlngs, row, item) }));
     }

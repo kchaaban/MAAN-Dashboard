@@ -48,6 +48,19 @@ Outputs:
 /dist/exit_points.js
 ```
 
+### Generate Simulation Cache Only
+```bash
+node scripts/generate-data-from-csv.mjs simulation
+```
+Automatically uses the latest matching simulation CSV:
+```
+/server/data/simulation_data_view_v2_*.csv
+```
+For example:
+```
+/server/data/simulation_data_view_v2_202605241520.csv
+```
+
 ### Generate from Specific CSV File
 ```bash
 node scripts/generate-data-from-csv.mjs assign_camp_users_2026-05-21T04-24-09-163Z.csv
@@ -60,6 +73,7 @@ Place your CSV files in:
 ```
 /server/data/assign_camp_users_*.csv
 /server/data/assign_residences*.csv
+/server/data/simulation_data_view_v2_*.csv
 ```
 
 The script automatically finds the **latest** file for each type.

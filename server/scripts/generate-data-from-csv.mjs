@@ -5,6 +5,7 @@ import ExcelJS from 'exceljs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', 'data');
+const SIMULATION_CSV_PATTERN = 'simulation_data_view_v2';
 
 /**
  * Generate data modules from CSV/Excel/GeoJSON files.
@@ -30,6 +31,10 @@ function findLatestCsv(pattern) {
         return null;
     }
     return path.join(dataDir, csvFiles[0]);
+}
+
+function findLatestSimulationCsv() {
+    return findLatestCsv(SIMULATION_CSV_PATTERN);
 }
 
 async function generateFromExcel(excelPath, variableName, outputBaseName) {
@@ -241,7 +246,7 @@ async function main() {
     // Handle simulation data
     if (shouldRegenerateSimulation) {
         const simulationCsv = arg === 'simulation' || arg === 'data' || arg === 'all' || arg === undefined
-            ? findLatestCsv('simulation_data_view_v2')
+            ? findLatestSimulationCsv()
             : (arg.includes('simulation') || arg.includes('data') ? path.join(dataDir, arg) : null);
 
         if (simulationCsv) {
