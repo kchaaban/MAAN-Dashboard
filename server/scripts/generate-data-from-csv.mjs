@@ -6,6 +6,7 @@ import ExcelJS from 'exceljs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', 'data');
 const SIMULATION_CSV_PATTERN = 'simulation_data_view_v2';
+const STATIC_DATA_MODULES = ['cameras.js', 'districts.js', 'camps_gates.js', 'makaf_paths.js'];
 
 /**
  * Generate data modules from CSV/Excel/GeoJSON files.
@@ -131,6 +132,10 @@ function generateFromCsv(csvPath, variableName, outputBaseName) {
     ];
 
     outputPaths.forEach(outputPath => {
+        const dirPath = path.dirname(outputPath);
+        if (!fs.existsSync(dirPath)) {
+            fs.mkdirSync(dirPath, { recursive: true });
+        }
         fs.writeFileSync(outputPath, jsContent, 'utf-8');
         const size = fs.statSync(outputPath).size;
         console.log(`  ✓ ${path.basename(outputPath)} (${(size / 1024).toFixed(2)} KB)`);
@@ -152,6 +157,48 @@ function writeGeneratedModule(jsContent, outputPaths) {
     });
 }
 
+function syncStaticDataModules() {
+    console.log('🧩 Static Data Modules:');
+
+    const targetDirs = [
+        path.join(dataDir, '..', '..', 'public', 'data'),
+        path.join(dataDir, '..', '..', 'dist', 'data')
+    ];
+
+    targetDirs.forEach(targetDir => {
+        if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir, { recursive: true });
+        }
+    });
+
+    let copiedCount = 0;
+
+    STATIC_DATA_MODULES.forEach(fileName => {
+        const sourcePath = path.join(dataDir, fileName);
+
+        if (!fs.existsSync(sourcePath)) {
+            console.warn(`  ⚠ Missing source file: ${path.relative(process.cwd(), sourcePath)}`);
+            return;
+        }
+
+        targetDirs.forEach(targetDir => {
+            const targetPath = path.join(targetDir, fileName);
+            fs.copyFileSync(sourcePath, targetPath);
+            const size = fs.statSync(targetPath).size;
+            console.log(`  ✓ ${path.relative(process.cwd(), targetPath)} (${(size / 1024).toFixed(2)} KB)`);
+            copiedCount += 1;
+        });
+    });
+
+    if (copiedCount === 0) {
+        console.warn('  ⚠ No static data modules were copied');
+        return false;
+    }
+
+    console.log('');
+    return true;
+}
+
 function generateFromGeojson(geojsonPath, variableName, outputBaseName) {
     if (!fs.existsSync(geojsonPath)) {
         console.error(`❌ File not found: ${geojsonPath}`);
@@ -170,15 +217,39 @@ function generateFromGeojson(geojsonPath, variableName, outputBaseName) {
     return true;
 }
 
-function generateExitPaths() {
+function hasExitPathSources() {
+    const minMinaPath = path.join(dataDir, 'MIN_MINASM.geojson');
+    const exitPointsPath = path.join(dataDir, 'ExitPoints.geojson');
+    return fs.existsSync(minMinaPath) && fs.existsSync(exitPointsPath);
+}
+
+function generateExitPaths(strict = false) {
     console.log('🚪 Tarwiya Exit Paths:');
+    const minMinaPath = path.join(dataDir, 'MIN_MINASM.geojson');
+    const exitPointsPath = path.join(dataDir, 'ExitPoints.geojson');
+
+    if (!fs.existsSync(minMinaPath) || !fs.existsSync(exitPointsPath)) {
+        if (strict) {
+            if (!fs.existsSync(minMinaPath)) {
+                console.error(`❌ File not found: ${minMinaPath}`);
+            }
+            if (!fs.existsSync(exitPointsPath)) {
+                console.error(`❌ File not found: ${exitPointsPath}`);
+            }
+            return false;
+        }
+
+        console.log('  ⚠ Skipping exit paths: required GeoJSON files not found in server/data');
+        return false;
+    }
+
     const minMinaOk = generateFromGeojson(
-        path.join(dataDir, 'MIN_MINASM.geojson'),
+        minMinaPath,
         'MIN_MINASM_DATA',
         'min_minasm'
     );
     const exitPointsOk = generateFromGeojson(
-        path.join(dataDir, 'ExitPoints.geojson'),
+        exitPointsPath,
         'EXIT_POINTS_DATA',
         'exit_points'
     );
@@ -190,6 +261,8 @@ async function main() {
     const validArgs = ['all', 'both', 'residences', 'camps', 'camps-excel', 'simulation', 'data', 'exit-paths'];
 
     console.log('📦 Generating data modules from CSV/Excel/GeoJSON files...\n');
+
+    syncStaticDataModules();
 
     let success = false;
 
@@ -257,12 +330,17 @@ async function main() {
         }
     }
 
-    if (shouldRegenerateExitPaths && generateExitPaths()) {
-        success = true;
+    if (shouldRegenerateExitPaths) {
+        const strictExitPaths = arg === 'exit-paths';
+        if (generateExitPaths(strictExitPaths)) {
+            success = true;
+        } else if (!strictExitPaths && hasExitPathSources()) {
+            success = true;
+        }
     }
 
     if (!success) {
-        console.error('❌ No CSV files found or processed');
+        console.error('❌ No data files found or processed');
         process.exit(1);
     }
 }

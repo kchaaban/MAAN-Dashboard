@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3100;
 const JWT_SECRET = process.env.JWT_SECRET || 'maan-super-secret-key';
 
 app.use(cors());
