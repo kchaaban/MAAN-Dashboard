@@ -6,6 +6,7 @@ import ExcelJS from 'exceljs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', 'data');
 const SIMULATION_CSV_PATTERN = 'simulation_data_view_v2';
+const PREFERRED_SIMULATION_CSV = 'simulation_data_view_updated.csv';
 const STATIC_DATA_MODULES = ['cameras.js', 'districts.js', 'camps_gates.js', 'makaf_paths.js'];
 
 /**
@@ -35,6 +36,10 @@ function findLatestCsv(pattern) {
 }
 
 function findLatestSimulationCsv() {
+    const preferredPath = path.join(dataDir, PREFERRED_SIMULATION_CSV);
+    if (fs.existsSync(preferredPath)) {
+        return preferredPath;
+    }
     return findLatestCsv(SIMULATION_CSV_PATTERN);
 }
 
