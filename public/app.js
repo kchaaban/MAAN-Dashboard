@@ -1649,7 +1649,13 @@ function normalizePlanTypeCode(value) {
 }
 
 function getPlanTypeRingOrderIndex(row) {
-    const code = normalizePlanTypeCode(row.planTypeCode || row.code || row.label);
+    const code = normalizePlanTypeCode(
+        row.planTypeCode
+        || row.plan_type_code
+        || row.code
+        || row.plan_type_name
+        || row.label
+    );
     const orderIndex = PLAN_TYPE_RING_ORDER.indexOf(code);
     return orderIndex === -1 ? PLAN_TYPE_RING_ORDER.length : orderIndex;
 }
@@ -2390,6 +2396,16 @@ function orientLatLngsForRoute(latlngs, row, item) {
 
     const first = latlngs[0];
     const last = latlngs[latlngs.length - 1];
+    // Internal camp paths flow from the entrance into the camp.
+    if (item?.type === "internal") {
+        const entranceAnchor = getRowGeomLatLng(row, ["entrance_point_geom", "entrance_polygon"]);
+        if (entranceAnchor) {
+            return getLatLngDistance(last, entranceAnchor) < getLatLngDistance(first, entranceAnchor)
+                ? [...latlngs].reverse()
+                : latlngs;
+        }
+    }
+
     const residenceAnchor = getRouteResidenceAnchor(row);
     const destinationAnchor = getRouteDestinationAnchor(row);
     const startAnchor = getRowAnchorLatLng(row, 'start');
@@ -2670,9 +2686,13 @@ function initMap() {
     });
     const darkMap = L.layerGroup([darkBaseMap, darkRoadLabelsMap]);
 
-    const positronMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+    const lightBaseMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri'
     });
+    const lightRoadLabelsMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Labels &copy; Esri'
+    });
+    const lightMap = L.layerGroup([lightBaseMap, lightRoadLabelsMap]);
 
     const streetsMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors'
@@ -2682,18 +2702,18 @@ function initMap() {
         attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
     });
 
-    lightMapLayer = positronMap;
+    lightMapLayer = lightMap;
     darkMapLayer = darkMap;
 
     if (document.body.classList.contains('dark-mode')) {
         darkMap.addTo(map);
     } else {
-        positronMap.addTo(map);
+        lightMap.addTo(map);
     }
 
     // Layer control — custom buttons
     const baseLayers = [
-        { label: 'فاتح',        icon: 'fa-sun',       layer: positronMap },
+        { label: 'فاتح',        icon: 'fa-sun',       layer: lightMap },
         { label: 'شوارع',       icon: 'fa-road',      layer: streetsMap },
         { label: 'داكن',        icon: 'fa-moon',      layer: darkMap },
         { label: 'قمر صناعي',   icon: 'fa-satellite', layer: satelliteMap }
@@ -2716,7 +2736,7 @@ function initMap() {
                     layer.addTo(map);
                     container.querySelectorAll('.basemap-btn').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
-                    lightMapLayer = (layer === positronMap) ? positronMap : lightMapLayer;
+                    lightMapLayer = (layer === lightMap) ? lightMap : lightMapLayer;
                     darkMapLayer  = (layer === darkMap)     ? darkMap     : darkMapLayer;
                 });
             });
@@ -5189,7 +5209,12 @@ function updateMap() {
             const connectedLineSequence = orientConnectedRouteSegments(row, lineItems);
             connectedLineSequence.forEach(orientedItem => {
                 const sourceItem = geojsonsToRender.find(item => item.type === orientedItem.type && item.geojson === orientedItem.geojson);
-                if (sourceItem) connectedLineLatLngsByItem.set(sourceItem, orientedItem.latlngs);
+                if (sourceItem) {
+                    const routeLatLngs = sourceItem.type === "internal"
+                        ? orientLatLngsForRoute(orientedItem.latlngs, row, sourceItem)
+                        : orientedItem.latlngs;
+                    connectedLineLatLngsByItem.set(sourceItem, routeLatLngs);
+                }
             });
 
             geojsonsToRender.forEach(item => {
