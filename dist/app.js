@@ -130,7 +130,7 @@ function getTarwiaDirectTaseedTotal(rows) {
     }, 0);
 }
 const CHART_METRIC_DEFS = {
-    pilgrims: { label: 'الحجاج', periodTitle: 'الحجاج حسب الفترة', entranceTitle: 'الحجاج لكل مدخل', pathTitle: 'الحجاج حسب المسار', districtTitle: 'الحجاج حسب الحي' },
+    pilgrims: { label: 'الحجاج', periodTitle: 'الحجاج/الفترة', entranceTitle: 'الحجاج/مدخل', pathTitle: 'الحجاج/المسار', districtTitle: 'الحجاج حسب الحي' },
     buses: { label: 'الحافلات', periodTitle: 'الحافلات حسب الفترة', entranceTitle: 'الحافلات لكل مدخل', pathTitle: 'الحافلات حسب المسار', districtTitle: 'الحافلات حسب الحي' },
     trips: { label: 'الرحلات', periodTitle: 'الرحلات حسب الفترة', entranceTitle: 'الرحلات لكل مدخل', pathTitle: 'الرحلات حسب المسار', districtTitle: 'الرحلات حسب الحي' }
 };

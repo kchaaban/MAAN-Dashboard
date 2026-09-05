@@ -26,13 +26,32 @@ Live URL:
 
 - `http://maan.firstcity.ai/maan-dashboard/`
 
+## Deploying from a MacBook / dev machine
+
+`auto` mode detects there is no local live directory and switches to `remote`
+mode automatically, so from your Mac you can just run:
+
+```bash
+bash deploy-planning.sh
+```
+
+This builds locally (needs Node + `npm install` first) and rsyncs `dist/` over
+SSH to the production host, then restarts PM2 there.
+
+Remote target (defaults, override with env vars):
+
+- `REMOTE_HOST=ubuntu@130.110.108.187` (`maan.firstcity.ai`, OCI)
+- `REMOTE_DIR=/home/ubuntu/maan-dashboard`
+- `SSH_KEY=~/.ssh/ssh-key-2025-07-21-traffic-analysis.key`
+
 ## Deployment Modes
 
 Default mode is `auto`.
 
-- `auto`: uses local mode if local live directory exists, otherwise remote mode
-- `local`: deploy directly on current VM (no SSH key needed)
-- `remote`: deploy to remote host using SSH key
+- `auto`: uses local mode if the local live directory exists (i.e. you are on
+  the prod VM), otherwise remote mode
+- `local`: deploy directly on the current VM (no SSH key needed)
+- `remote`: deploy to the production host over SSH
 
 Examples:
 
@@ -40,11 +59,11 @@ Examples:
 # Auto-detect mode (recommended)
 bash deploy-planning.sh
 
-# Force local mode
-DEPLOY_MODE=local bash deploy-planning.sh
-
-# Force remote mode
+# Force remote mode with a different key
 DEPLOY_MODE=remote SSH_KEY=~/.ssh/your_key bash deploy-planning.sh
+
+# Force local mode (only on the VM)
+DEPLOY_MODE=local bash deploy-planning.sh
 ```
 
 ## Safe Usage Checklist

@@ -5,13 +5,16 @@ set -euo pipefail
 LOCAL_DIR="$(cd "$(dirname "$0")" && pwd)"   # repo root on this machine
 
 # Deployment mode:
-#   auto   -> use local mode on VM if LOCAL_LIVE_DIR exists, otherwise remote
-#   local  -> deploy directly to LOCAL_LIVE_DIR (no SSH)
-#   remote -> deploy via SSH/rsync to REMOTE_HOST
+#   auto   -> local mode if LOCAL_LIVE_DIR exists (i.e. running on the prod VM),
+#             otherwise remote mode (the normal case from a MacBook/dev machine)
+#   local  -> deploy directly to LOCAL_LIVE_DIR (no SSH; run this on the VM)
+#   remote -> deploy via SSH/rsync to REMOTE_HOST (run this from your MacBook)
 DEPLOY_MODE="${DEPLOY_MODE:-auto}"
 
-REMOTE_HOST="azureuser@74.162.44.10"
-REMOTE_DIR="/home/azureuser/maan-dashboard"
+# Production host: maan.firstcity.ai -> 130.110.108.187 (OCI, user "ubuntu").
+# Matches the "oci" entry in ~/.ssh/config.
+REMOTE_HOST="${REMOTE_HOST:-ubuntu@130.110.108.187}"
+REMOTE_DIR="${REMOTE_DIR:-/home/ubuntu/maan-dashboard}"
 REMOTE_DIST="${REMOTE_DIR}/dist"
 
 LOCAL_LIVE_DIR="${LOCAL_LIVE_DIR:-/home/ubuntu/maan-dashboard.bak}"
@@ -112,7 +115,21 @@ else
         "${REMOTE_HOST}:${REMOTE_DIST}/"
 
     echo "==> Restarting PM2 app '${PM2_APP}' on remote host..."
-    ssh ${SSH_OPTS} "${REMOTE_HOST}" "pm2 restart ${PM2_APP} && pm2 save"
+    # Run via a login shell so nvm / npm-global bin dirs are on PATH; fall back
+    # to common install locations if 'pm2' still isn't found on PATH.
+    REMOTE_RESTART_CMD='
+        if ! command -v pm2 >/dev/null 2>&1 && [ -s "$HOME/.nvm/nvm.sh" ]; then
+            . "$HOME/.nvm/nvm.sh"
+        fi
+        PM2_BIN="$(command -v pm2 || true)"
+        for c in "$HOME"/.nvm/versions/node/*/bin/pm2 /usr/local/bin/pm2 /usr/bin/pm2; do
+            [ -n "$PM2_BIN" ] && break
+            [ -x "$c" ] && PM2_BIN="$c"
+        done
+        [ -z "$PM2_BIN" ] && { echo "pm2 not found on remote host" >&2; exit 1; }
+        "$PM2_BIN" restart '"${PM2_APP}"' && "$PM2_BIN" save
+    '
+    ssh ${SSH_OPTS} "${REMOTE_HOST}" "bash -l -c '${REMOTE_RESTART_CMD}'"
 fi
 
 echo ""
