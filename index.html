@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RCMC Operations Platform</title>
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <!-- FontAwesome 6 -->
@@ -109,8 +109,11 @@
                     <img src="gtc-logo.jpeg" alt="GTC Logo" class="header-logo gtc-logo" title="GTC">
                 </div>
                 <div class="user-profile">
-                    <div class="avatar">م</div>
-                    <span id="userRoleLabel">المشرف</span>
+                    <div class="avatar" id="userAvatar">م</div>
+                    <span class="user-identity">
+                        <span id="userNameLabel" class="user-name"></span>
+                        <span id="userRoleLabel" class="user-scope">المشرف</span>
+                    </span>
                     <button id="logoutBtn" class="logout-btn" type="button" title="تسجيل الخروج" aria-label="تسجيل الخروج">
                         <i class="fa-solid fa-right-from-bracket"></i>
                     </button>
@@ -285,12 +288,10 @@
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
     
     <!-- Data files - loaded synchronously to ensure availability -->
-    <script src="data/data.js"></script>
-    <script src="data/assign_camps.js"></script>
-    <script src="data/assign_residences.js"></script>
+    <!-- Plans, assignments and camp gates now load from Postgres via /api/db/* in app.js.
+         The files below are GIS layers with no database equivalent. -->
     <script src="data/cameras.js?v=20260610"></script>
     <script src="data/districts.js"></script>
-    <script src="data/camps_gates.js"></script>
     <script src="data/makaf_paths.js"></script>
     <script src="min_minasm.js"></script>
     <script src="exit_points.js"></script>

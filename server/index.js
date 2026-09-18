@@ -1,33 +1,40 @@
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
+const db = require('./db');
+const auth = require('./auth');
 
 const app = express();
 const PORT = process.env.PORT || 3100;
 const JWT_SECRET = process.env.JWT_SECRET || 'maan-super-secret-key';
 
 app.use(cors());
+app.use(compression());
 app.use(express.json());
 
-// Mock Users with RBAC
-const users = {
-    'admin': { password: 'password', role: 'Administrator' },
-    'manager': { password: 'password', role: 'Operations Manager' },
-    'viewer': { password: 'password', role: 'Viewer' },
-    'komra': { password: 'FC2026', role: 'Invited User' },
-};
+app.post('/maan-dashboard/api/login', async (req, res) => {
+    // The field is still called "username" for the existing login form; database
+    // accounts are identified by email.
+    const { username, email, password } = req.body;
+    const result = await auth.authenticate(email || username, password);
 
-app.post('/maan-dashboard/api/login', (req, res) => {
-    const { username, password } = req.body;
-    const user = users[username];
-    if (user && user.password === password) {
-        const token = jwt.sign({ username, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
-        res.json({ token, role: user.role });
-    } else {
-        res.status(401).json({ error: 'Invalid credentials' });
+    if (!result.ok) {
+        return res.status(result.reason === 'database-unavailable' ? 502 : 401)
+            .json({ error: 'Invalid credentials', reason: result.reason });
     }
+
+    const token = jwt.sign(result.token, JWT_SECRET, { expiresIn: '8h' });
+    res.json({
+        token,
+        role: result.role,
+        name: result.name,
+        company: result.company,
+        center: result.center,
+    });
 });
 
 // Middleware
@@ -44,75 +51,61 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-const requireRole = (roles) => (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-        return res.status(403).json({ error: 'Access denied: insufficient permissions' });
-    }
-    next();
-};
 
-// Secure Data Endpoint
-app.get('/maan-dashboard/api/data/:filename', authenticateToken, (req, res) => {
-    const filename = req.params.filename;
+// Live datasets straight from Postgres, scoped to the caller, cached per scope
+// and served pre-gzipped.
+const isAdmin = (user) =>
+    ['system_admin', 'transport_authority'].includes(user.typeCode) ||
+    ['Administrator', 'Operations Manager'].includes(user.role);
 
-    // Only allow specific js files
-    const allowedFiles = ['data.js', 'assign_camps.js', 'assign_residences.js', 'service_companies.js'];
-    if (!allowedFiles.includes(filename)) {
-        return res.status(403).json({ error: 'File not allowed' });
+app.get('/maan-dashboard/api/db/:dataset', authenticateToken, async (req, res) => {
+    const { dataset } = req.params;
+
+    if (!db.DATASETS[dataset]) {
+        return res.status(404).json({ error: 'Unknown dataset' });
     }
 
-    // Role-Based Access Control
-    if (['assign_camps.js', 'assign_residences.js'].includes(filename)) {
-        if (!['Operations Manager', 'Administrator'].includes(req.user.role)) {
-            // For viewers, return an empty string so the frontend doesn't crash but data is hidden
-            return res.status(200).send('// Access denied to detailed assignments');
+    // The scope is signed into the token at login. A token without one predates
+    // this change; send the user back to log in rather than guessing.
+    if (!req.user.scope) {
+        return res.status(401).json({ error: 'Session predates access scoping; please sign in again' });
+    }
+    const scope = req.user.scope;
+
+    try {
+        const entry = await db.getDataset(dataset, scope);
+        res.setHeader('Content-Type', entry.contentType);
+        res.setHeader('X-Row-Count', entry.rowCount);
+        res.setHeader('X-Scope', db.scopeKey(scope));
+        res.setHeader('Cache-Control', 'no-cache');
+
+        if (req.acceptsEncodings('gzip')) {
+            res.setHeader('Content-Encoding', 'gzip');
+            return res.send(entry.gzipped);
         }
-    }
-
-    const filePath = path.join(__dirname, 'data', filename);
-    if (fs.existsSync(filePath)) {
-        // Send as Javascript
-        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-        res.sendFile(filePath);
-    } else {
-        res.status(404).json({ error: 'File not found' });
+        return res.send(zlib.gunzipSync(entry.gzipped));
+    } catch (err) {
+        console.error(`[api] dataset ${dataset} failed:`, err.message);
+        return res.status(502).json({ error: 'Database unavailable', detail: err.message });
     }
 });
 
-// Update data.js from uploaded CSV (Administrator/Operations Manager only)
-app.post(
-    '/maan-dashboard/api/update-data',
-    express.text({ limit: '150mb' }),
-    authenticateToken,
-    requireRole(['Administrator', 'Operations Manager']),
-    (req, res) => {
-        const csvText = req.body;
-        if (typeof csvText !== 'string' || csvText.trim().length === 0) {
-            return res.status(400).json({ error: 'Empty or invalid CSV body' });
-        }
-
-        const jsContent = `const CSV_DATA = \`${csvText}\`;\n`;
-
-        const writePaths = [
-            path.join(__dirname, 'data', 'data.js'),
-            path.join(__dirname, '..', 'dist', 'data', 'data.js'),
-            path.join(__dirname, '..', 'public', 'data', 'data.js'),
-        ];
-
-        try {
-            for (const filePath of writePaths) {
-                const dir = path.dirname(filePath);
-                if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-                fs.writeFileSync(filePath, jsContent, 'utf-8');
-            }
-            const sizeKb = (Buffer.byteLength(jsContent, 'utf-8') / 1024).toFixed(1);
-            res.json({ ok: true, sizeKb });
-        } catch (err) {
-            console.error('Failed to write data.js:', err.message);
-            res.status(500).json({ error: 'Failed to write data file' });
-        }
+app.post('/maan-dashboard/api/db-refresh', authenticateToken, (req, res) => {
+    if (!isAdmin(req.user)) {
+        return res.status(403).json({ error: 'Access denied: insufficient permissions' });
     }
-);
+    db.invalidate(req.query.dataset);
+    res.json({ ok: true, refreshed: req.query.dataset || 'all' });
+});
+
+app.get('/maan-dashboard/api/db-health', async (req, res) => {
+    try {
+        const { rows } = await db.pool.query('select now() as now');
+        res.json({ ok: true, now: rows[0].now });
+    } catch (err) {
+        res.status(502).json({ ok: false, error: err.message });
+    }
+});
 
 // Serve frontend static files
 const distPath = path.join(__dirname, '..', 'dist');
@@ -129,4 +122,11 @@ app.use('/maan-dashboard', (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
+
+    // Warm only the unscoped caches; per-company and per-centre scopes are small
+    // and build on demand at first request.
+    Promise.all(Object.keys(db.DATASETS).map((name) =>
+        db.getDataset(name, { kind: 'all' })
+          .catch((err) => console.error(`[warm] ${name} failed:`, err.message))
+    )).then(() => console.log('[warm] datasets ready'));
 });

@@ -1,26 +1,28 @@
+/* Base layout tokens plus a light-theme fallback. The themes themselves are
+   defined on body.light-mode / body.dark-mode further down. */
 :root {
     --top-unified-ring-size: 52px;
     --residence-ring-size: var(--top-unified-ring-size);
     --transport-ring-size: var(--top-unified-ring-size);
     color-scheme: light;
-    --bg-color: #f4f7fb;
+    --bg-color: #f6f7f8;
     --surface: #ffffff;
-    --surface-soft: #f8fafc;
+    --surface-soft: #fbfcfc;
     --sidebar-bg: #ffffff;
     --card-bg: #ffffff;
-    --text-primary: #122033;
-    --text-secondary: #64748b;
-    --text-muted: #94a3b8;
-    --accent-primary: #2563eb;
-    --accent-secondary: #14b8a6;
-    --accent-soft: #e0edff;
-    --accent-glow: rgba(37, 99, 235, 0.18);
-    --border-color: #e2e8f0;
-    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-    --shadow-md: 0 14px 36px rgba(15, 23, 42, 0.10);
-    --success: #059669;
-    --warning: #d97706;
-    --danger: #dc2626;
+    --text-primary: var(--brand-black);
+    --text-secondary: #6b635a;
+    --text-muted: var(--brand-stone);
+    --accent-primary: var(--brand-emerald);
+    --accent-secondary: var(--brand-teal);
+    --accent-soft: var(--emerald-25);
+    --accent-glow: color-mix(in srgb, var(--brand-emerald) 16%, transparent);
+    --border-color: var(--brand-cool);
+    --shadow-sm: 0 1px 2px rgba(30, 30, 30, 0.06);
+    --shadow-md: 0 12px 32px rgba(30, 30, 30, 0.10);
+    --success: var(--brand-emerald);
+    --warning: var(--brand-sand);
+    --danger: #b3261e;
     --sidebar-width: 368px;
     --right-panel-width: 420px;
 }
@@ -62,7 +64,7 @@ body.dark-mode {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Cairo', sans-serif;
+    font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif;
 }
 
 body {
@@ -1393,12 +1395,47 @@ body.dark-mode ::-webkit-scrollbar-thumb {
 .avatar {
     width: 30px;
     height: 30px;
+    flex: 0 0 auto;
     border-radius: 999px;
     background: var(--accent-soft);
     color: var(--accent-primary);
     display: grid;
     place-items: center;
-    font-weight: 800;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.user-identity {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    line-height: 1.25;
+}
+
+.user-identity .user-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.user-identity .user-name[hidden] {
+    display: none;
+}
+
+.user-identity .user-scope {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+/* Both lines truncate rather than stretching the header pill. */
+.user-identity .user-name,
+.user-identity .user-scope {
+    max-width: 22ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .metrics-row {
@@ -2043,7 +2080,7 @@ body.dark-mode ::-webkit-scrollbar-thumb {
 }
 
 .transport-legend-pct {
-    color: var(--brand-mint, #4ec9b9);
+    color: var(--brand-mint, var(--brand-green));
     font-size: clamp(0.58rem, 0.62vw, 0.72rem);
     font-weight: 800;
     font-variant-numeric: tabular-nums;
@@ -2374,7 +2411,7 @@ body.dark-mode .basemap-btn.active { background: #3b82f6 !important; color: #fff
     border-radius: 6px;
     box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
     padding: 0.16rem 0.38rem;
-    font-family: 'Cairo', sans-serif;
+    font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif;
     direction: rtl;
     display: inline-block;
     white-space: nowrap;
@@ -2736,8 +2773,8 @@ body.dark-mode .basemap-btn.active { background: #3b82f6 !important; color: #fff
     transition: box-shadow 0.22s ease, border-color 0.22s ease;
 }
 .glass:hover {
-    border-color: rgba(202,171,121,0.18);
-    box-shadow: 0 6px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(202,171,121,0.08);
+    border-color: rgba(193, 181, 143,0.18);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(193, 181, 143,0.08);
 }
 
 /* 2. KPI Cards — Restore gradient icons */
@@ -2799,7 +2836,7 @@ body.dark-mode .basemap-btn.active { background: #3b82f6 !important; color: #fff
 .sidebar-header .logo {
     background: linear-gradient(135deg, var(--brand-light), var(--brand-primary));
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(125,113,80,0.3);
+    box-shadow: 0 4px 12px rgba(127, 117, 107,0.3);
 }
 
 /* Search bars — pill style */
@@ -2811,7 +2848,7 @@ body.dark-mode .basemap-btn.active { background: #3b82f6 !important; color: #fff
 }
 .entity-table-search:focus-within {
     border-color: var(--brand-light);
-    background: rgba(202,171,121,0.06);
+    background: rgba(193, 181, 143,0.06);
 }
 
 /* Section headers */
@@ -2830,11 +2867,11 @@ body.dark-mode .basemap-btn.active { background: #3b82f6 !important; color: #fff
 }
 .entity-table-row:hover {
     background: rgba(255,255,255,0.03);
-    border-right-color: rgba(202,171,121,0.4);
+    border-right-color: rgba(193, 181, 143,0.4);
 }
 .entity-table-row.active {
     border-right-color: var(--brand-light);
-    background: rgba(202,171,121,0.08);
+    background: rgba(193, 181, 143,0.08);
 }
 
 /* Completion badge — pill style */
@@ -2843,9 +2880,9 @@ body.dark-mode .basemap-btn.active { background: #3b82f6 !important; color: #fff
     border-radius: 999px;
     font-size: 0.55rem;
     font-weight: 700;
-    background: rgba(42,157,144,0.15);
+    background: rgba(16, 116, 70,0.15);
     color: var(--brand-mint);
-    border: 1px solid rgba(42,157,144,0.2);
+    border: 1px solid rgba(16, 116, 70,0.2);
 }
 
 /* Plan list items */
@@ -2857,12 +2894,12 @@ body.dark-mode .basemap-btn.active { background: #3b82f6 !important; color: #fff
     transition: all 0.15s ease;
 }
 .plan-item:hover {
-    border-right-color: rgba(202,171,121,0.4);
+    border-right-color: rgba(193, 181, 143,0.4);
     background: rgba(255,255,255,0.03);
 }
 .plan-item.active {
     border-right-color: var(--brand-light);
-    background: rgba(202,171,121,0.08);
+    background: rgba(193, 181, 143,0.08);
 }
 
 /* 5. Top Nav — frosted glass */
@@ -2883,86 +2920,94 @@ body.dark-mode .basemap-btn.active { background: #3b82f6 !important; color: #fff
     border-color: var(--brand-light);
 }
 
-/* RCMC design guide application */
+/* RCMC brand palette — from الهوية البصرية لمشروع النقل v5.
+   Primary: Deep Teal (surfaces/chrome), Emerald (interactive/success),
+   Saudi Green (emphasis), Deep Black (dark base).
+   Secondary: Golden Sand, Stone Gray, Warm Beige, Cool Gray.
+   These are theme-independent; light/dark values live on body.light-mode
+   and body.dark-mode below. */
 :root {
-    color-scheme: dark;
-    --bg-color: #000000;
-    --surface: #181818;
-    --surface-soft: #111111;
-    --sidebar-bg: #000000;
-    --card-bg: #09090b;
-    --text-primary: #fafafa;
-    --text-secondary: #afafaf;
-    --text-muted: #71717a;
-    --accent-primary: #7d7150;
-    --accent-secondary: #2a9d90;
-    --accent-soft: rgba(125, 113, 80, 0.22);
-    --accent-glow: rgba(202, 171, 121, 0.18);
-    --border-color: #27272a;
-    --shadow-sm: 0 10px 24px rgba(0, 0, 0, 0.28);
-    --shadow-md: 0 24px 56px rgba(0, 0, 0, 0.46);
-    --success: #2a9d90;
-    --warning: #ebc468;
-    --danger: #ef4444;
-    --brand-primary: #7d7150;
-    --brand-light: #caab79;
-    --brand-secondary: #1d5751;
-    --brand-teal: #2a9d90;
-    --brand-mint: #4ec9b9;
-    --chart-1: #2a9d90;
-    --chart-2: #4ec9b9;
-    --chart-3: #ebc468;
-    --chart-4: #c25858;
-    --chart-5: #791c2a;
-    --chart-6: #7d7150;
-    --chart-cap: #1e1e20;
+    --brand-teal: #0d4d51;
+    --brand-emerald: #107446;
+    --brand-green: #63b146;
+    --brand-black: #1e1e1e;
+    --brand-sand: #83754e;
+    --brand-stone: #7f756b;
+    --brand-beige: #c1b78f;
+    --brand-cool: #e3e6e8;
+
+    /* The guide's 75/50/25% tint ladder, used for hover and subtle states. */
+    --emerald-75: color-mix(in srgb, var(--brand-emerald) 75%, transparent);
+    --emerald-50: color-mix(in srgb, var(--brand-emerald) 50%, transparent);
+    --emerald-25: color-mix(in srgb, var(--brand-emerald) 25%, transparent);
+    --green-25: color-mix(in srgb, var(--brand-green) 25%, transparent);
+
+    /* Legacy aliases, kept so existing rules keep resolving. */
+    --brand-primary: var(--brand-emerald);
+    --brand-secondary: var(--brand-teal);
+    --brand-light: var(--brand-beige);
+    --brand-mint: var(--brand-green);
+
+    --chart-1: #107446;
+    --chart-2: #63b146;
+    --chart-3: #0d4d51;
+    --chart-4: #83754e;
+    --chart-5: #c1b78f;
+    --chart-6: #7f756b;
+    --chart-cap: var(--brand-black);
     --sidebar-width: 256px;
 }
 
 body.light-mode {
     color-scheme: light;
-    --bg-color: #ffffff;
+    --bg-color: #f6f7f8;
     --surface: #ffffff;
-    --surface-soft: #fafafa;
+    --surface-soft: #fbfcfc;
     --sidebar-bg: #ffffff;
     --card-bg: #ffffff;
-    --text-primary: #09090b;
-    --text-secondary: #4a4a4f;
-    --text-muted: #71717a;
-    --accent-primary: #7d7150;
-    --accent-secondary: #2a9d90;
-    --accent-soft: rgba(202, 171, 121, 0.24);
-    --accent-glow: rgba(125, 113, 80, 0.16);
-    --border-color: #e4e4e7;
-    --shadow-sm: 0 10px 24px rgba(24, 24, 27, 0.08);
-    --shadow-md: 0 24px 56px rgba(24, 24, 27, 0.14);
+    --text-primary: var(--brand-black);
+    --text-secondary: var(--brand-stone);
+    --text-muted: #9a938b;
+    /* Emerald carries interaction; Deep Teal is the structural accent. */
+    --accent-primary: var(--brand-emerald);
+    --accent-secondary: var(--brand-teal);
+    --accent-soft: var(--emerald-25);
+    --accent-glow: color-mix(in srgb, var(--brand-emerald) 16%, transparent);
+    --border-color: var(--brand-cool);
+    --shadow-sm: 0 1px 2px rgba(30, 30, 30, 0.06);
+    --shadow-md: 0 12px 32px rgba(30, 30, 30, 0.10);
+    --success: var(--brand-emerald);
+    --warning: var(--brand-sand);
+    --danger: #b3261e;
 }
 
 body.dark-mode {
     color-scheme: dark;
-    --bg-color: #000000;
-    --surface: #181818;
-    --surface-soft: #111111;
-    --sidebar-bg: #000000;
-    --card-bg: #09090b;
-    --text-primary: #fafafa;
-    --text-secondary: #afafaf;
-    --text-muted: #71717a;
-    --accent-primary: #7d7150;
-    --accent-secondary: #2a9d90;
-    --accent-soft: rgba(125, 113, 80, 0.22);
-    --accent-glow: rgba(202, 171, 121, 0.18);
-    --border-color: #27272a;
-    --shadow-sm: 0 10px 24px rgba(0, 0, 0, 0.28);
-    --shadow-md: 0 24px 56px rgba(0, 0, 0, 0.46);
-    --success: #2a9d90;
-    --warning: #ebc468;
-    --danger: #ef4444;
+    /* Deep Black from the guide, not pure black — elevation needs somewhere to sit. */
+    --bg-color: var(--brand-black);
+    --surface: #272727;
+    --surface-soft: #222222;
+    --sidebar-bg: #1a1a1a;
+    --card-bg: #242424;
+    --text-primary: #f5f6f6;
+    --text-secondary: #b6b0a8;
+    --text-muted: #988c80;
+    /* Saudi Green reads on a dark base where Emerald goes muddy. */
+    --accent-primary: var(--brand-green);
+    --accent-secondary: #1a6f74;
+    --accent-soft: var(--green-25);
+    --accent-glow: color-mix(in srgb, var(--brand-green) 20%, transparent);
+    --border-color: #363636;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 16px 40px rgba(0, 0, 0, 0.5);
+    --success: var(--brand-green);
+    --warning: var(--brand-beige);
+    --danger: #f2766b;
 }
 
 *,
 .map-static-label span {
-    font-family: 'Inter', 'IBM Plex Sans Arabic', sans-serif;
+    font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif;
     letter-spacing: 0;
 }
 
@@ -2973,8 +3018,8 @@ body {
 
 body {
     background:
-        linear-gradient(90deg, rgba(125, 113, 80, 0.08), transparent 26%),
-        radial-gradient(circle at 12% 0%, rgba(42, 157, 144, 0.08), transparent 24%),
+        linear-gradient(90deg, rgba(127, 117, 107, 0.08), transparent 26%),
+        radial-gradient(circle at 12% 0%, rgba(16, 116, 70, 0.08), transparent 24%),
         var(--bg-color);
 }
 
@@ -3103,9 +3148,9 @@ select,
 .plan-item.active,
 .entity-table-row.active,
 .completion-plan-ring.active {
-    background: rgba(125, 113, 80, 0.18);
+    background: rgba(127, 117, 107, 0.18);
     border-color: var(--brand-light);
-    box-shadow: inset 0 0 0 1px rgba(202, 171, 121, 0.35);
+    box-shadow: inset 0 0 0 1px rgba(193, 181, 143, 0.35);
 }
 
 .plan-company,
@@ -3158,7 +3203,7 @@ body.light-mode .kpi-card {
 }
 
 .completion-badge {
-    background: rgba(42, 157, 144, 0.16);
+    background: rgba(16, 116, 70, 0.16);
     color: var(--success);
     border-radius: 8px;
 }
@@ -3245,8 +3290,8 @@ body.dark-mode .residence-assignment-ring span {
 
 body.dark-mode #residenceAssignmentCharts .progress-ring-wrap span,
 body.dark-mode .residence-assignment-ring .progress-ring-wrap span {
-    color: #4ec9b9 !important;
-    -webkit-text-fill-color: #4ec9b9 !important;
+    color: var(--brand-green) !important;
+    -webkit-text-fill-color: var(--brand-green) !important;
 }
 
 /* Light mode: residence ring text should be dark for contrast */
@@ -3328,9 +3373,9 @@ body.light-mode .residence-assignment-ring .progress-ring-wrap span {
 /* === Interface quality pass: clearer surfaces, rings, and interaction states === */
 :root {
     --top-unified-ring-size: 64px;
-    --focus-ring: 0 0 0 3px color-mix(in srgb, var(--brand-mint, #4ec9b9) 24%, transparent);
-    --surface-lift: color-mix(in srgb, var(--card-bg) 92%, var(--brand-secondary, #1d5751) 8%);
-    --surface-hairline: color-mix(in srgb, var(--border-color) 72%, var(--brand-mint, #4ec9b9) 28%);
+    --focus-ring: 0 0 0 3px color-mix(in srgb, var(--brand-mint, var(--brand-green)) 24%, transparent);
+    --surface-lift: color-mix(in srgb, var(--card-bg) 92%, var(--brand-secondary, var(--brand-teal)) 8%);
+    --surface-hairline: color-mix(in srgb, var(--border-color) 72%, var(--brand-mint, var(--brand-green)) 28%);
 }
 
 button,
@@ -3385,7 +3430,7 @@ body.light-mode .map-status {
 .top-nav {
     min-height: 66px;
     background:
-        linear-gradient(135deg, color-mix(in srgb, var(--card-bg) 90%, var(--brand-teal, #2a9d90) 10%), var(--card-bg));
+        linear-gradient(135deg, color-mix(in srgb, var(--card-bg) 90%, var(--brand-teal, var(--brand-emerald)) 10%), var(--card-bg));
 }
 
 .user-profile,
@@ -3455,10 +3500,10 @@ body.light-mode .map-status {
 
 .kpi-card:has(.pilgrims-icon) { --kpi-accent: #2f80ed; }
 .kpi-card:has(.buses-icon) { --kpi-accent: #8b5cf6; }
-.kpi-card:has(.plans-icon) { --kpi-accent: #2a9d90; }
-.kpi-card:has(.trips-icon) { --kpi-accent: #ebc468; }
-.kpi-card:has(.residence-icon) { --kpi-accent: #c25858; }
-.kpi-card:has(.camp-icon) { --kpi-accent: #4ec9b9; }
+.kpi-card:has(.plans-icon) { --kpi-accent: var(--brand-emerald); }
+.kpi-card:has(.trips-icon) { --kpi-accent: var(--brand-beige); }
+.kpi-card:has(.residence-icon) { --kpi-accent: var(--danger); }
+.kpi-card:has(.camp-icon) { --kpi-accent: var(--brand-green); }
 .kpi-card:has(.service-center-icon) { --kpi-accent: #60a5fa; }
 
 .kpi-icon {
@@ -3467,7 +3512,7 @@ body.light-mode .map-status {
     border-radius: clamp(6px, 4cqw, 8px) !important;
     background: var(--kpi-accent, var(--brand-mint)) !important;
     box-shadow:
-        0 10px 22px color-mix(in srgb, var(--kpi-accent, #4ec9b9) 32%, transparent),
+        0 10px 22px color-mix(in srgb, var(--kpi-accent, var(--brand-green)) 32%, transparent),
         inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
 }
 
@@ -3497,8 +3542,8 @@ body.light-mode .map-status {
     padding: 0.65rem 0.7rem 0.7rem;
     background:
         linear-gradient(145deg, color-mix(in srgb, var(--surface-lift) 94%, transparent), var(--card-bg)),
-        radial-gradient(circle at 18% 18%, rgba(78, 201, 185, 0.16), transparent 34%),
-        radial-gradient(circle at 86% 18%, rgba(235, 196, 104, 0.12), transparent 30%) !important;
+        radial-gradient(circle at 18% 18%, rgba(99, 182, 76, 0.16), transparent 34%),
+        radial-gradient(circle at 86% 18%, rgba(131, 117, 78, 0.12), transparent 30%) !important;
     border-color: var(--surface-hairline) !important;
 }
 
@@ -3507,7 +3552,7 @@ body.light-mode .rings-summary-section .residence-top-card,
 body.light-mode .rings-summary-section .transport-top-card {
     background:
         linear-gradient(145deg, #ffffff, #f7fafc),
-        radial-gradient(circle at 18% 18%, rgba(42, 157, 144, 0.12), transparent 34%) !important;
+        radial-gradient(circle at 18% 18%, rgba(16, 116, 70, 0.12), transparent 34%) !important;
 }
 
 .ring-group-title {
@@ -3555,7 +3600,7 @@ body.light-mode .rings-summary-section .transport-top-card {
 .progress-ring-wrap span,
 .transport-ring-container span {
     z-index: 2;
-    color: var(--brand-mint, #4ec9b9) !important;
+    color: var(--brand-mint, var(--brand-green)) !important;
     font-size: 0.76rem;
     text-shadow: 0 1px 10px rgba(0, 0, 0, 0.38);
 }
@@ -3588,8 +3633,8 @@ body.light-mode .residence-assignment-ring .progress-ring-wrap span {
 .transport-ring-item:hover,
 .transport-ring-item:focus-visible,
 .transport-ring-item.active {
-    background: color-mix(in srgb, var(--brand-mint, #4ec9b9) 11%, transparent);
-    border-color: color-mix(in srgb, var(--brand-mint, #4ec9b9) 52%, transparent);
+    background: color-mix(in srgb, var(--brand-mint, var(--brand-green)) 11%, transparent);
+    border-color: color-mix(in srgb, var(--brand-mint, var(--brand-green)) 52%, transparent);
     box-shadow: var(--focus-ring);
 }
 
@@ -3602,7 +3647,7 @@ body.light-mode .residence-assignment-ring .progress-ring-wrap span {
 }
 
 .entity-table thead th {
-    background: color-mix(in srgb, var(--surface) 84%, var(--brand-secondary, #1d5751) 8%);
+    background: color-mix(in srgb, var(--surface) 84%, var(--brand-secondary, var(--brand-teal)) 8%);
     color: var(--text-primary);
 }
 
@@ -3611,12 +3656,12 @@ body.light-mode .residence-assignment-ring .progress-ring-wrap span {
 }
 
 .entity-table-row:hover {
-    background: color-mix(in srgb, var(--brand-mint, #4ec9b9) 9%, transparent);
+    background: color-mix(in srgb, var(--brand-mint, var(--brand-green)) 9%, transparent);
 }
 
 .entity-table-row.active,
 .plan-item.active {
-    background: color-mix(in srgb, var(--brand-light, #caab79) 16%, transparent);
+    background: color-mix(in srgb, var(--brand-light, var(--brand-beige)) 16%, transparent);
     border-color: var(--brand-light, var(--accent-primary));
 }
 
@@ -3631,12 +3676,12 @@ body.light-mode .residence-assignment-ring .progress-ring-wrap span {
 
 .chart-metric-tab.active {
     color: var(--text-primary);
-    background: color-mix(in srgb, var(--brand-mint, #4ec9b9) 14%, transparent);
-    border-color: color-mix(in srgb, var(--brand-mint, #4ec9b9) 56%, transparent);
+    background: color-mix(in srgb, var(--brand-mint, var(--brand-green)) 14%, transparent);
+    border-color: color-mix(in srgb, var(--brand-mint, var(--brand-green)) 56%, transparent);
 }
 
 .map-container-card {
-    border-color: color-mix(in srgb, var(--border-color) 70%, var(--brand-teal, #2a9d90) 30%);
+    border-color: color-mix(in srgb, var(--border-color) 70%, var(--brand-teal, var(--brand-emerald)) 30%);
 }
 
 .map-overlay-card {
@@ -3944,7 +3989,7 @@ body.mobile-sidebar-open .mobile-sidebar-backdrop { display: block; }
     }
     .top-nav-actions { flex: 1; min-width: 0; }
     .header-logos { display: none; }
-    .user-profile span#userRoleLabel { display: none; }
+    .user-profile .user-identity { display: none; }
 
     /* ── KPI cards: 2-column grid ── */
     .kpi-cards {

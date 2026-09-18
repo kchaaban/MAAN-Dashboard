@@ -9,12 +9,6 @@
     "preview": "vite preview",
     "generate-data": "node server/scripts/generate-data-from-csv.mjs"
   },
-  "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "recharts": "^2.13.0",
-    "xlsx": "^0.18.5"
-  },
   "devDependencies": {
     "vite": "^5.4.10"
   }

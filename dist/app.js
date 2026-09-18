@@ -151,6 +151,11 @@ const AUTH_TOKEN_STORAGE_KEY = 'maan-dashboard-auth-token';
 const AUTH_ROLE_STORAGE_KEY = 'maan-dashboard-auth-role';
 const THEME_STORAGE_KEY = 'dashboard-theme';
 const PLAN_TYPE_RING_ORDER = ['tarwia', 'direct_taseed', 'taseed_tarwia', 'efada', 'nafra'];
+
+// Which end of an "internal" path the entrance sits at. تروية and افاضة depart
+// through their entrance, so their path starts there. تصعيد تروية travels Mina ->
+// Arafat and arrives at the Arafat entrance, so its path must end there instead.
+const PLAN_TYPES_ARRIVING_AT_ENTRANCE = new Set(['taseed_tarwia']);
 const TRANSPORT_TYPE_MENU_OPTIONS = ['ترددي', 'تقليدي رد', 'تقليدي ردين', 'قطار'];
 const DISTRICT_COLOR_PALETTE = [
     "#2A9D90",
@@ -489,11 +494,38 @@ function showDashboard(role = '') {
     document.body.classList.add('authenticated');
     const loginScreen = document.getElementById('loginScreen');
     const dashboardApp = document.getElementById('dashboardApp');
-    const roleLabel = document.getElementById('userRoleLabel');
 
     if (loginScreen) loginScreen.hidden = true;
     if (dashboardApp) dashboardApp.hidden = false;
-    if (roleLabel) roleLabel.textContent = role || 'المشرف';
+    renderUserIdentity(role);
+}
+
+function renderUserIdentity(role = '') {
+    const name = localStorage.getItem('maan_name') || '';
+    const company = localStorage.getItem('maan_company') || '';
+    const center = localStorage.getItem('maan_center') || '';
+    const roleLabel = role || localStorage.getItem('maan_role') || 'المشرف';
+
+    // The centre is the more specific of the two, so it wins the visible line;
+    // the tooltip carries the full company / centre pair.
+    const scopeParts = [roleLabel, center || company].filter(Boolean);
+    const fullParts = [roleLabel, company, center].filter(Boolean);
+
+    const nameEl = document.getElementById('userNameLabel');
+    if (nameEl) {
+        nameEl.textContent = name;
+        nameEl.hidden = !name;
+    }
+
+    const scopeEl = document.getElementById('userRoleLabel');
+    if (scopeEl) scopeEl.textContent = scopeParts.join(' · ');
+
+    const email = localStorage.getItem('maan_email') || '';
+    const profile = document.querySelector('.user-profile');
+    if (profile) profile.title = [name, email, ...fullParts].filter(Boolean).join(' · ');
+
+    const avatar = document.getElementById('userAvatar');
+    if (avatar) avatar.textContent = (name || roleLabel).trim().charAt(0) || 'م';
 }
 
 function logout() {
@@ -539,11 +571,73 @@ async function handleLoginSubmit(event) {
     }
 }
 
+const DB_DATASETS = [
+    { name: 'plans', global: 'CSV_DATA', format: 'text' },
+    { name: 'assign-camps', global: 'ASSIGN_CAMPS_DATA', format: 'text' },
+    { name: 'assign-residences', global: 'ASSIGN_RESIDENCES_DATA', format: 'text' },
+    { name: 'camps-gates', global: 'CAMPS_GATES_DATA', format: 'json' },
+];
+
+function returnToLogin() {
+    localStorage.removeItem('maan_token');
+    localStorage.removeItem('maan_role');
+    removePersistentValue(AUTH_TOKEN_STORAGE_KEY);
+    removePersistentValue(AUTH_ROLE_STORAGE_KEY);
+    window.location.reload();
+}
+
+async function loadDatasetsFromDatabase() {
+    // auth.js is the live bootstrap and stores the token as 'maan_token'; the key
+    // below belongs to app.js's own login form, which is the fallback path.
+    const token = localStorage.getItem('maan_token') || getPersistentValue(AUTH_TOKEN_STORAGE_KEY);
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+    const results = await Promise.all(DB_DATASETS.map(async (dataset) => {
+        try {
+            const response = await fetch(`/maan-dashboard/api/db/${dataset.name}`, { headers });
+            // The server scopes rows to the signed-in user rather than denying
+            // access, so a 401/403 here always means the session is bad.
+            if (response.status === 401 || response.status === 403) {
+                return { ...dataset, unauthorized: true };
+            }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            window[dataset.global] = dataset.format === 'json'
+                ? await response.json()
+                : await response.text();
+            return { ...dataset, rows: response.headers.get('X-Row-Count') };
+        } catch (error) {
+            console.error(`Failed to load "${dataset.name}" from database:`, error.message);
+            return { ...dataset, failed: true };
+        }
+    }));
+
+    if (results.some((r) => r.unauthorized)) {
+        console.warn('Session expired or invalid; returning to login.');
+        returnToLogin();
+        return false;
+    }
+
+    if (results.find((r) => r.name === 'plans').failed) {
+        alert('تعذر الاتصال بقاعدة البيانات. يرجى المحاولة لاحقاً.');
+        return false;
+    }
+
+    const loaded = results.filter((r) => !r.failed);
+    console.log('Loaded from database:', loaded.map((r) => `${r.name} (${r.rows} rows)`).join(', '));
+    window.PLANS_CSV_SOURCE = 'database';
+
+    return true;
+}
+
 let dashboardInitialized = false;
 
 async function initializeDashboardApp() {
     if (dashboardInitialized) return;
     dashboardInitialized = true;
+    // auth.js boots the dashboard without going through showDashboard(), so the
+    // header identity has to be filled in here too.
+    renderUserIdentity();
     initResizablePanels();
     initPanelVisibilityControls();
     initEntityTableColumnAutosize();
@@ -551,18 +645,12 @@ async function initializeDashboardApp() {
     initTheme();
     initMap();
 
-    // Restore cached CSV data if available (persistent across page refreshes)
-    try {
-        const cachedData = await getCachedPlansCsv();
-        if (cachedData && cachedData.csvText) {
-            window.CSV_DATA = cachedData.csvText;
-            console.log('Restored cached CSV data from:', cachedData.source || 'unknown');
-            // Store the source to indicate this is not the default data.js
-            window.PLANS_CSV_SOURCE = cachedData.source || 'cached upload';
-        }
-    } catch (error) {
-        console.warn('Could not restore cached CSV data:', error);
-        // Continue with default data.js CSV
+    const plansLoaded = await loadDatasetsFromDatabase();
+    if (!plansLoaded) {
+        // Either the session expired (a reload to the login screen is already in
+        // flight) or the database is unreachable. Either way there is nothing to render.
+        dashboardInitialized = false;
+        return;
     }
 
     setupEventListeners();
@@ -647,7 +735,7 @@ const barValueLabelPlugin = {
         ctx.fillStyle = color;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        ctx.font = `800 ${fontSize}px Inter, IBM Plex Sans Arabic, sans-serif`;
+        ctx.font = `700 ${fontSize}px 'IBM Plex Sans Arabic', system-ui, sans-serif`;
 
         chart.data.datasets.forEach((dataset, datasetIndex) => {
             const meta = chart.getDatasetMeta(datasetIndex);
@@ -761,7 +849,7 @@ async function openChartElementInNewPage(element) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${title}</title>
   <style>
-    body { margin: 0; font-family: Inter, IBM Plex Sans Arabic, sans-serif; background: ${popupTheme.bodyBg}; color: ${popupTheme.text}; }
+    body { margin: 0; font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif; background: ${popupTheme.bodyBg}; color: ${popupTheme.text}; }
     .wrap { min-height: 100vh; display: flex; flex-direction: column; gap: 10px; padding: 18px; box-sizing: border-box; }
     h1 { margin: 0; font-size: 20px; font-weight: 800; }
     .panel { flex: 1; border-radius: 12px; background: ${popupTheme.panelBg}; border: 1px solid ${popupTheme.border}; box-shadow: ${popupTheme.shadow}; padding: 14px; display: grid; place-items: center; }
@@ -1016,7 +1104,7 @@ function applyTheme(theme) {
     const chartDefaults = getThemeColors();
     if (window.Chart) {
         Chart.defaults.color = chartDefaults.title;
-        Chart.defaults.font.family = "Inter, IBM Plex Sans Arabic, sans-serif";
+        Chart.defaults.font.family = "'IBM Plex Sans Arabic', system-ui, sans-serif";
         Chart.defaults.plugins.legend.labels.color = chartDefaults.title;
         Chart.defaults.plugins.tooltip.titleColor = chartDefaults.title;
         Chart.defaults.plugins.tooltip.bodyColor = chartDefaults.text;
@@ -1052,101 +1140,6 @@ function getThemeColors() {
         grid: document.body.classList.contains('dark-mode') ? 'rgba(148, 163, 184, 0.14)' : 'rgba(100, 116, 139, 0.18)',
         border: styles.getPropertyValue('--border-color').trim() || '#e2e8f0'
     };
-}
-
-const PLANS_CSV_DB_NAME = 'transport-dashboard-cache';
-const PLANS_CSV_STORE_NAME = 'plansCsv';
-const PLANS_CSV_CACHE_KEY = 'latest-upload';
-const PLANS_CSV_SOURCE_STORAGE_KEY = 'dashboard-active-plans-csv-source';
-
-function openPlansCsvDb() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(PLANS_CSV_DB_NAME, 1);
-        request.onupgradeneeded = () => {
-            request.result.createObjectStore(PLANS_CSV_STORE_NAME);
-        };
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-    });
-}
-
-async function getCachedPlansCsv() {
-    const db = await openPlansCsvDb();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(PLANS_CSV_STORE_NAME, 'readonly');
-        const request = tx.objectStore(PLANS_CSV_STORE_NAME).get(PLANS_CSV_CACHE_KEY);
-        request.onsuccess = () => resolve(request.result || null);
-        request.onerror = () => reject(request.error);
-        tx.oncomplete = () => db.close();
-        tx.onerror = () => db.close();
-    });
-}
-
-async function cachePlansCsv(csvText, source) {
-    const db = await openPlansCsvDb();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(PLANS_CSV_STORE_NAME, 'readwrite');
-        const payload = { csvText, source, savedAt: new Date().toISOString() };
-        const request = tx.objectStore(PLANS_CSV_STORE_NAME).put(payload, PLANS_CSV_CACHE_KEY);
-        request.onerror = () => reject(request.error);
-        tx.oncomplete = () => {
-            localStorage.setItem(PLANS_CSV_SOURCE_STORAGE_KEY, source || 'uploaded CSV');
-            db.close();
-            resolve();
-        };
-        tx.onerror = () => {
-            const error = tx.error || request.error;
-            db.close();
-            reject(error);
-        };
-    });
-}
-
-async function persistCsvToDisk(csvText) {
-    const token = getPersistentValue(AUTH_TOKEN_STORAGE_KEY);
-    if (!token) return;
-    try {
-        const res = await fetch('/maan-dashboard/api/update-data', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'text/plain; charset=utf-8',
-                'Authorization': `Bearer ${token}`
-            },
-            body: csvText
-        });
-        if (res.ok) {
-            const { sizeKb } = await res.json();
-            console.log(`CSV persisted to disk (${sizeKb} KB)`);
-        } else {
-            console.warn('Server rejected CSV persist:', res.status);
-        }
-    } catch (err) {
-        console.warn('Could not persist CSV to disk (server may be offline):', err.message);
-    }
-}
-
-async function clearPlansCsvCache() {
-    localStorage.removeItem(PLANS_CSV_SOURCE_STORAGE_KEY);
-
-    try {
-        const db = await openPlansCsvDb();
-        await new Promise((resolve, reject) => {
-            const tx = db.transaction(PLANS_CSV_STORE_NAME, 'readwrite');
-            const request = tx.objectStore(PLANS_CSV_STORE_NAME).delete(PLANS_CSV_CACHE_KEY);
-            request.onerror = () => reject(request.error);
-            tx.oncomplete = () => {
-                db.close();
-                resolve();
-            };
-            tx.onerror = () => {
-                const error = tx.error || request.error;
-                db.close();
-                reject(error);
-            };
-        });
-    } catch (error) {
-        console.warn('Could not clear plans CSV cache:', error);
-    }
 }
 
 function debounce(fn, delay = 180) {
@@ -1663,7 +1656,7 @@ function getPlanTypeRingOrderIndex(row) {
 // Load CSV Data
 function loadData() {
     if (typeof CSV_DATA === 'undefined') {
-        alert("CSV_DATA is not defined. Ensure data.js is loaded.");
+        alert("تعذر تحميل بيانات الخطط من قاعدة البيانات.");
         return;
     }
 
@@ -1676,7 +1669,7 @@ function loadData() {
     const loadId = ++plansCsvLoadSequence;
     parsePlansCsv(CSV_DATA, {
         loadId,
-        source: typeof PLANS_CSV_SOURCE !== 'undefined' ? PLANS_CSV_SOURCE : 'data.js'
+        source: typeof PLANS_CSV_SOURCE !== 'undefined' ? PLANS_CSV_SOURCE : 'database'
     });
 
 }
@@ -1698,100 +1691,6 @@ const NUMERIC_COLUMNS = new Set([
     'number_of_late_haj', 'number_of_early_haj',
     'owner_office_number'
 ]);
-
-function validateCsvStructure(csvText) {
-    try {
-        const lines = csvText.split('\n').filter(line => line.trim());
-        if (!lines[0]) return { valid: false, error: 'الملف فارغ' };
-
-        // Parse CSV header line properly (handle quoted fields)
-        const headers = [];
-        let current = '';
-        let inQuotes = false;
-        for (let char of lines[0]) {
-            if (char === '"') inQuotes = !inQuotes;
-            else if (char === ',' && !inQuotes) {
-                headers.push(current.trim().replace(/^"(.*)"$/, '$1'));
-                current = '';
-                continue;
-            }
-            current += char;
-        }
-        headers.push(current.trim().replace(/^"(.*)"$/, '$1'));
-
-        // Check if file has minimum 2 lines
-        if (lines.length < 2) {
-            return { valid: false, error: 'الملف يحتوي على رأس الأعمدة فقط بدون بيانات' };
-        }
-
-        // Check all required columns are present (order does not matter)
-        const headerSet = new Set(headers);
-        const missingColumns = REQUIRED_CSV_COLUMNS.filter(col => !headerSet.has(col));
-        if (missingColumns.length > 0) {
-            return {
-                valid: false,
-                error: `أعمدة مفقودة: ${missingColumns.join(', ')}`
-            };
-        }
-
-        // Validate data types for first few rows
-        const dataLines = lines.slice(1, Math.min(6, lines.length));
-        for (let rowIdx = 0; rowIdx < dataLines.length; rowIdx++) {
-            const row = [];
-            let current = '';
-            let inQuotes = false;
-            for (let char of dataLines[rowIdx]) {
-                if (char === '"') inQuotes = !inQuotes;
-                else if (char === ',' && !inQuotes) {
-                    row.push(current.trim().replace(/^"(.*)"$/, '$1'));
-                    current = '';
-                    continue;
-                }
-                current += char;
-            }
-            row.push(current.trim().replace(/^"(.*)"$/, '$1'));
-
-            if (row.length !== headers.length) {
-                return {
-                    valid: false,
-                    error: `الصف ${rowIdx + 2}: عدد الأعمدة (${row.length}) لا يطابق عدد الأعمدة في رأس الجدول (${headers.length})`
-                };
-            }
-
-            // Check numeric columns
-            for (let colIdx = 0; colIdx < headers.length; colIdx++) {
-                const colName = headers[colIdx];
-                const value = row[colIdx];
-                if (NUMERIC_COLUMNS.has(colName) && value && isNaN(value)) {
-                    return {
-                        valid: false,
-                        error: `الصف ${rowIdx + 2}، العمود "${colName}": القيمة "${value}" ليست رقمية`
-                    };
-                }
-            }
-        }
-
-        return { valid: true };
-    } catch (e) {
-        return { valid: false, error: 'خطأ في قراءة الملف: ' + e.message };
-    }
-}
-
-function loadDataFromUpload(filename) {
-    if (typeof CSV_DATA === 'undefined') {
-        alert("CSV_DATA is not defined.");
-        return;
-    }
-
-    loadAssignCampTotals();
-    loadResidenceAssignments();
-
-    const loadId = ++plansCsvLoadSequence;
-    parsePlansCsv(CSV_DATA, {
-        loadId,
-        source: filename
-    });
-}
 
 function applyPlansRows(rows, source = '') {
     rawData = normalizePlanRows(rows);
@@ -1880,176 +1779,6 @@ function showNotification(message, type = 'info') {
         notification.style.animation = 'slideOut 0.3s ease';
         setTimeout(() => notification.remove(), 300);
     }, 3000);
-}
-
-let uploadProgressDialog = null;
-function showUploadProgress(filename) {
-    const backdrop = document.createElement('div');
-    backdrop.id = 'uploadProgressBackdrop';
-    backdrop.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0,0,0,0.6);
-        z-index: 9998;
-    `;
-
-    const dialog = document.createElement('div');
-    dialog.id = 'uploadProgressDialog';
-    dialog.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: #1e1e22;
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 12px;
-        padding: 28px 32px;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.8);
-        z-index: 9999;
-        min-width: 380px;
-        backdrop-filter: blur(12px);
-    `;
-
-    dialog.innerHTML = `
-        <div style="text-align: center;">
-            <div style="margin-bottom: 20px;">
-                <i class="fa-solid fa-upload" style="font-size: 40px; color: #caab79;"></i>
-            </div>
-            <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #fff;">جاري تحميل الملف</h3>
-            <p style="margin: 0 0 20px 0; font-size: 13px; color: #999; word-break: break-all;">${filename}</p>
-
-            <div style="margin-bottom: 16px;">
-                <div style="
-                    background: rgba(255,255,255,0.05);
-                    border-radius: 8px;
-                    height: 8px;
-                    overflow: hidden;
-                    margin-bottom: 8px;
-                ">
-                    <div id="uploadProgressBar" style="
-                        height: 100%;
-                        width: 0%;
-                        background: linear-gradient(90deg, #caab79, #d4b896);
-                        transition: width 0.3s ease;
-                    "></div>
-                </div>
-                <p id="uploadProgressText" style="margin: 0; font-size: 12px; color: #aaa;">جاري القراءة...</p>
-            </div>
-
-            <div id="uploadSteps" style="text-align: right; margin: 16px 0;">
-                <div id="step1" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 8px; color: #aaa; font-size: 13px;">
-                    <span>جاري قراءة الملف</span>
-                    <i class="fa-solid fa-spinner fa-spin" style="color: #caab79;"></i>
-                </div>
-                <div id="step2" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 8px; color: #aaa; font-size: 13px;">
-                    <span>جاري تحليل البيانات</span>
-                    <i class="fa-solid fa-circle" style="color: #555; font-size: 8px;"></i>
-                </div>
-                <div id="step3" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 8px; color: #aaa; font-size: 13px;">
-                    <span>جاري تحديث لوحة المعلومات</span>
-                    <i class="fa-solid fa-circle" style="color: #555; font-size: 8px;"></i>
-                </div>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(backdrop);
-    document.body.appendChild(dialog);
-    uploadProgressDialog = { backdrop, dialog };
-    return dialog;
-}
-
-function updateUploadProgress(step, percent, message) {
-    if (!uploadProgressDialog) return;
-
-    const bar = document.getElementById('uploadProgressBar');
-    const text = document.getElementById('uploadProgressText');
-    if (bar) bar.style.width = percent + '%';
-    if (text) text.textContent = message;
-
-    if (step) {
-        const steps = ['step1', 'step2', 'step3'];
-        steps.forEach((s, i) => {
-            const el = document.getElementById(s);
-            if (!el) return;
-            const icon = el.querySelector('i');
-            if (i < step) {
-                el.style.color = '#10b981';
-                icon.className = 'fa-solid fa-check';
-                icon.style.color = '#10b981';
-            } else if (i === step) {
-                el.style.color = '#caab79';
-                icon.className = 'fa-solid fa-spinner fa-spin';
-                icon.style.color = '#caab79';
-            } else {
-                el.style.color = '#aaa';
-                icon.className = 'fa-solid fa-circle';
-                icon.style.color = '#555';
-            }
-        });
-    }
-}
-
-function showUploadError(errorMessage) {
-    if (!uploadProgressDialog) return;
-
-    const dialog = uploadProgressDialog.dialog;
-    const backdrop = uploadProgressDialog.backdrop;
-
-    // Clear previous content
-    dialog.innerHTML = `
-        <div style="text-align: center;">
-            <div style="margin-bottom: 20px;">
-                <i class="fa-solid fa-circle-exclamation" style="font-size: 40px; color: #ef4444;"></i>
-            </div>
-            <h3 style="margin: 0 0 12px 0; font-size: 18px; color: #fff;">خطأ في استيراد البيانات</h3>
-            <div style="
-                background: rgba(239, 68, 68, 0.1);
-                border: 1px solid rgba(239, 68, 68, 0.3);
-                border-radius: 8px;
-                padding: 12px 16px;
-                margin: 16px 0;
-                text-align: right;
-            ">
-                <p style="margin: 0; font-size: 13px; color: #fca5a5; line-height: 1.5;">
-                    ${errorMessage}
-                </p>
-            </div>
-            <p style="margin: 0; font-size: 12px; color: #999; margin-top: 16px;">
-                تأكد من أن الملف يحتوي على جميع الأعمدة المطلوبة ومطابق للبنية الصحيحة.
-            </p>
-            <button id="closeErrorBtn" style="
-                margin-top: 20px;
-                padding: 8px 20px;
-                background: #ef4444;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                cursor: pointer;
-                font-size: 13px;
-                font-weight: 600;
-            ">إغلاق</button>
-        </div>
-    `;
-
-    document.getElementById('closeErrorBtn')?.addEventListener('click', hideUploadProgress);
-}
-
-function hideUploadProgress() {
-    if (!uploadProgressDialog) return;
-    uploadProgressDialog.backdrop.style.opacity = '0';
-    uploadProgressDialog.dialog.style.opacity = '0';
-    uploadProgressDialog.dialog.style.transform = 'translate(-50%, -50%) scale(0.95)';
-    uploadProgressDialog.backdrop.style.transition = 'opacity 0.2s ease';
-    uploadProgressDialog.dialog.style.transition = 'all 0.2s ease';
-    setTimeout(() => {
-        uploadProgressDialog.backdrop?.remove();
-        uploadProgressDialog.dialog?.remove();
-        uploadProgressDialog = null;
-    }, 200);
 }
 
 function resetSelections() {
@@ -2396,13 +2125,16 @@ function orientLatLngsForRoute(latlngs, row, item) {
 
     const first = latlngs[0];
     const last = latlngs[latlngs.length - 1];
-    // Internal camp paths flow from the entrance into the camp.
+    // Internal camp paths flow from the entrance into the camp, except for plan
+    // types that arrive at their entrance rather than leaving through it.
     if (item?.type === "internal") {
         const entranceAnchor = getRowGeomLatLng(row, ["entrance_point_geom", "entrance_polygon"]);
         if (entranceAnchor) {
-            return getLatLngDistance(last, entranceAnchor) < getLatLngDistance(first, entranceAnchor)
-                ? [...latlngs].reverse()
-                : latlngs;
+            const planTypeCode = normalizePlanTypeCode(row['plan_type_code'] || row['plan_type_name']);
+            const entranceIsNearerLast =
+                getLatLngDistance(last, entranceAnchor) < getLatLngDistance(first, entranceAnchor);
+            const entranceBelongsAtEnd = PLAN_TYPES_ARRIVING_AT_ENTRANCE.has(planTypeCode);
+            return entranceIsNearerLast === entranceBelongsAtEnd ? latlngs : [...latlngs].reverse();
         }
     }
 
@@ -3283,95 +3015,13 @@ function setupEventListeners() {
         });
     }
 
-    // CSV File Loader
-    const csvFileInput = document.createElement('input');
-    csvFileInput.type = 'file';
-    csvFileInput.accept = '.csv';
-    csvFileInput.style.display = 'none';
-    csvFileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
 
-            reader.onloadstart = function () {
-                showUploadProgress(file.name);
-                updateUploadProgress(0, 5, 'جاري قراءة الملف...');
-            };
-
-            reader.onprogress = function (event) {
-                if (event.lengthComputable) {
-                    const percentComplete = Math.round((event.loaded / event.total) * 30) + 5;
-                    const sizeMsg = `${(event.loaded / 1024 / 1024).toFixed(1)} MB / ${(event.total / 1024 / 1024).toFixed(1)} MB`;
-                    updateUploadProgress(0, percentComplete, sizeMsg);
-                }
-            };
-
-            reader.onload = async (event) => {
-                updateUploadProgress(0, 35, 'انتظر...');
-                window.CSV_DATA = event.target.result;
-                console.log('CSV file loaded:', file.name, 'Size:', CSV_DATA.length);
-
-                updateUploadProgress(1, 50, 'جاري التحقق من بنية البيانات...');
-
-                // Validate CSV structure
-                const validation = validateCsvStructure(CSV_DATA);
-                if (!validation.valid) {
-                    console.warn('CSV validation error:', validation.error);
-                    showUploadError(validation.error);
-                    return;
-                }
-
-                try {
-                    await cachePlansCsv(CSV_DATA, file.name);
-                    console.log('CSV data cached for persistence');
-                    persistCsvToDisk(CSV_DATA).catch(() => {});
-                } catch (cacheError) {
-                    console.warn('Failed to cache CSV data:', cacheError);
-                }
-
-                updateUploadProgress(2, 75, 'جاري تحديث لوحة المعلومات...');
-                setTimeout(() => {
-                    loadDataFromUpload(file.name);
-                    updateUploadProgress(3, 100, 'تم التحميل بنجاح!');
-                    setTimeout(() => hideUploadProgress(), 500);
-                }, 100);
-            };
-
-            reader.onerror = function () {
-                hideUploadProgress();
-                showNotification('خطأ في قراءة الملف', 'error');
-                console.error('File read error:', reader.error);
-            };
-
-            reader.readAsText(file);
-        }
-    });
-    document.body.appendChild(csvFileInput);
-
-    // Add CSV loader button
     const topNavActions = document.querySelector('.top-nav-actions');
     if (topNavActions) {
-        const csvBtn = document.createElement('button');
-        csvBtn.id = 'csvLoaderBtn';
-        csvBtn.className = 'theme-toggle-btn';
-        csvBtn.type = 'button';
-        csvBtn.title = 'تحميل ملف CSV';
-        csvBtn.setAttribute('aria-label', 'تحميل ملف CSV');
-        csvBtn.innerHTML = '<i class="fa-solid fa-upload"></i>';
-        csvBtn.style.marginRight = '15px';
-        csvBtn.addEventListener('click', () => {
-            console.log('CSV button clicked');
-            csvFileInput.click();
-        });
-        // Insert before theme button
-        const themeBtn = topNavActions.querySelector('.theme-toggle-btn');
-        if (themeBtn) {
-            themeBtn.parentNode.insertBefore(csvBtn, themeBtn);
-        } else {
-            topNavActions.appendChild(csvBtn);
-        }
-        console.log('CSV loader button added');
-
+        // Toolbar buttons are positioned relative to the theme toggle. Captured by
+        // id and captured once, because the buttons inserted below also carry the
+        // .theme-toggle-btn class and would otherwise shadow it.
+        const toolbarAnchor = topNavActions.querySelector('#themeToggleBtn') || topNavActions.lastElementChild;
         // Add clear filters button
         const clearFiltersBtn = document.createElement('button');
         clearFiltersBtn.id = 'clearFiltersBtn';
@@ -3382,7 +3032,7 @@ function setupEventListeners() {
         clearFiltersBtn.innerHTML = '<i class="fa-solid fa-filter-circle-xmark"></i>';
         clearFiltersBtn.style.marginRight = '4px';
         clearFiltersBtn.addEventListener('click', clearAllFilters);
-        csvBtn.parentNode.insertBefore(clearFiltersBtn, csvBtn);
+        toolbarAnchor.parentNode.insertBefore(clearFiltersBtn, toolbarAnchor);
 
         // Add camera stats export button
         const cameraExportBtn = document.createElement('button');
@@ -3394,7 +3044,7 @@ function setupEventListeners() {
         cameraExportBtn.innerHTML = '<i class="fa-solid fa-file-csv"></i>';
         cameraExportBtn.style.marginRight = '4px';
         cameraExportBtn.addEventListener('click', exportCameraStatsToCSV);
-        csvBtn.parentNode.insertBefore(cameraExportBtn, csvBtn);
+        toolbarAnchor.parentNode.insertBefore(cameraExportBtn, toolbarAnchor);
 
         // Add Cameras toggle button
         const camerasBtn = document.createElement('button');
@@ -3408,7 +3058,7 @@ function setupEventListeners() {
         camerasBtn.style.opacity = '1';
         camerasBtn.addEventListener('click', toggleCameras);
         // Insert before export button (so order is: ... | camera-toggle | export | csv)
-        csvBtn.parentNode.insertBefore(camerasBtn, cameraExportBtn);
+        toolbarAnchor.parentNode.insertBefore(camerasBtn, cameraExportBtn);
 
         const exitPathsBtn = document.createElement('button');
         exitPathsBtn.id = 'exitPathsToggleBtn';
@@ -3420,7 +3070,7 @@ function setupEventListeners() {
         exitPathsBtn.style.marginRight = '4px';
         exitPathsBtn.style.opacity = showTarwiaExitPaths ? '1' : '0.4';
         exitPathsBtn.addEventListener('click', toggleTarwiaExitPaths);
-        csvBtn.parentNode.insertBefore(exitPathsBtn, camerasBtn);
+        toolbarAnchor.parentNode.insertBefore(exitPathsBtn, camerasBtn);
 
         console.log('Cameras toggle button added');
     } else {
@@ -5017,7 +4667,7 @@ const angledXAxisLabelsPlugin = {
         ctx.fillStyle = color;
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.font = `700 ${fontSize}px Inter, IBM Plex Sans Arabic, sans-serif`;
+        ctx.font = `700 ${fontSize}px 'IBM Plex Sans Arabic', system-ui, sans-serif`;
 
         labels.forEach((label, index) => {
             const x = xScale.getPixelForTick(index);
@@ -5445,8 +5095,8 @@ function updateCharts(stats = getDashboardStats()) {
                 labels: periodLabels,
                 datasets: [{
                     data: periodValues,
-                    backgroundColor: 'rgba(42, 157, 144, 0.82)',
-                    borderColor: 'rgba(42, 157, 144, 1)',
+                    backgroundColor: 'rgba(16, 116, 70, 0.82)',
+                    borderColor: 'rgba(16, 116, 70, 1)',
                     borderWidth: 1,
                     borderRadius: 4
                 }]
@@ -5474,7 +5124,7 @@ function updateCharts(stats = getDashboardStats()) {
                             maxRotation: 0,
                             minRotation: 0,
                             padding: 8,
-                            font: { family: 'Inter, IBM Plex Sans Arabic, sans-serif', size: 11, weight: '700' }
+                            font: { family: "'IBM Plex Sans Arabic', system-ui, sans-serif", size: 11, weight: '700' }
                         },
                         grid: { display: false }
                     },
@@ -5502,10 +5152,10 @@ function updateCharts(stats = getDashboardStats()) {
     const transEntries = transportLabels.map(label => [label, stats.transportCounts[label] || 0]);
     const totalTransportBuses = Object.values(stats.transportCounts).reduce((sum, value) => sum + value, 0);
     const transportSegmentColors = [
-        "rgba(42, 157, 144, 0.92)",
-        "rgba(78, 201, 185, 0.92)",
-        "rgba(235, 196, 104, 0.92)",
-        "rgba(194, 88, 88, 0.92)"
+        "rgba(16, 116, 70, 0.92)",
+        "rgba(99, 182, 76, 0.92)",
+        "rgba(131, 117, 78, 0.92)",
+        "rgba(13, 77, 81, 0.92)"
     ];
 
     const transportContainer = document.getElementById("transportCharts");
@@ -5618,11 +5268,11 @@ function updateCharts(stats = getDashboardStats()) {
     const periodsArray = Array.from(entranceMetricStats.allPeriodsForEntrance).sort((a, b) => Number(a) - Number(b));
 
     const colors = [
-        'rgba(42, 157, 144, 0.72)',
-        'rgba(78, 201, 185, 0.72)',
-        'rgba(235, 196, 104, 0.72)',
+        'rgba(16, 116, 70, 0.72)',
+        'rgba(99, 182, 76, 0.72)',
+        'rgba(131, 117, 78, 0.72)',
         'rgba(121, 28, 42, 0.72)',
-        'rgba(194, 88, 88, 0.72)'
+        'rgba(13, 77, 81, 0.72)'
     ];
 
     const entranceDatasets = periodsArray.map((period, index) => {
@@ -5714,8 +5364,8 @@ function updateCharts(stats = getDashboardStats()) {
                 labels: pathLabels,
                 datasets: [{
                     data: pathValues,
-                    backgroundColor: 'rgba(78, 201, 185, 0.82)',
-                    borderColor: 'rgba(78, 201, 185, 1)',
+                    backgroundColor: 'rgba(99, 182, 76, 0.82)',
+                    borderColor: 'rgba(99, 182, 76, 1)',
                     borderWidth: 1,
                     borderRadius: 4
                 }]
@@ -5783,13 +5433,13 @@ function updateCharts(stats = getDashboardStats()) {
             datasets: [{
                 data: distValues,
                 backgroundColor: [
-                    'rgba(125, 113, 80, 0.72)',
+                    'rgba(127, 117, 107, 0.72)',
                     'rgba(29, 87, 81, 0.72)',
-                    'rgba(42, 157, 144, 0.72)',
+                    'rgba(16, 116, 70, 0.72)',
                     'rgba(121, 28, 42, 0.72)',
-                    'rgba(78, 201, 185, 0.72)',
-                    'rgba(235, 196, 104, 0.72)',
-                    'rgba(194, 88, 88, 0.72)'
+                    'rgba(99, 182, 76, 0.72)',
+                    'rgba(131, 117, 78, 0.72)',
+                    'rgba(13, 77, 81, 0.72)'
                 ],
                 borderWidth: 0
             }]
@@ -5815,7 +5465,7 @@ function updateCharts(stats = getDashboardStats()) {
                         color: chartTheme.title,
                         boxWidth: 8,
                         padding: 8,
-                        font: { size: 9, family: 'Inter, IBM Plex Sans Arabic, sans-serif', weight: '600' },
+                        font: { size: 9, family: "'IBM Plex Sans Arabic', system-ui, sans-serif", weight: '600' },
                         generateLabels: (chart) => {
                             const data = chart.data;
                             if (data.labels.length && data.datasets.length) {
@@ -5901,10 +5551,10 @@ function renderCompletionSummaryChart(stats, chartTheme) {
         });
 
     const planTypeColors = [
-        'rgba(42, 157, 144, 0.92)',
-        'rgba(78, 201, 185, 0.92)',
-        'rgba(235, 196, 104, 0.92)',
-        'rgba(194, 88, 88, 0.92)',
+        'rgba(16, 116, 70, 0.92)',
+        'rgba(99, 182, 76, 0.92)',
+        'rgba(131, 117, 78, 0.92)',
+        'rgba(13, 77, 81, 0.92)',
         'rgba(99, 155, 232, 0.92)',
         'rgba(168, 85, 247, 0.92)'
     ];
@@ -6021,9 +5671,9 @@ function renderResidenceAssignmentChart(chartTheme) {
 
     // Residence type segments for combined ring
     const residenceDefs = [
-        { label: 'تروية', filterKey: 'tarwiyah', value: mix.tarwiyahOnly, color: 'rgba(78, 201, 185, 0.92)' },
-        { label: 'تصعيد مباشر', filterKey: 'direct', value: mix.directTaseedOnly, color: 'rgba(42, 157, 144, 0.92)' },
-        { label: 'مختلط', filterKey: 'mixed', value: mix.mixed, color: 'rgba(235, 196, 104, 0.92)' }
+        { label: 'تروية', filterKey: 'tarwiyah', value: mix.tarwiyahOnly, color: 'rgba(99, 182, 76, 0.92)' },
+        { label: 'تصعيد مباشر', filterKey: 'direct', value: mix.directTaseedOnly, color: 'rgba(16, 116, 70, 0.92)' },
+        { label: 'مختلط', filterKey: 'mixed', value: mix.mixed, color: 'rgba(131, 117, 78, 0.92)' }
     ];
     const totalResidences = mix.total;
 
@@ -6170,8 +5820,8 @@ function updatePlanList() {
                 <button class="plan-service-center-btn" data-company="${company}" data-center="${centerNum}" style="
                     width: 100%;
                     padding: 6px 10px;
-                    background: linear-gradient(135deg, rgba(202,171,121,0.15), rgba(202,171,121,0.08));
-                    border: 1px solid rgba(202,171,121,0.2);
+                    background: linear-gradient(135deg, rgba(193, 181, 143,0.15), rgba(193, 181, 143,0.08));
+                    border: 1px solid rgba(193, 181, 143,0.2);
                     border-radius: 6px;
                     color: #caab79;
                     font-size: 12px;
@@ -6208,13 +5858,13 @@ function updatePlanList() {
             });
 
             centerBtn.addEventListener('mouseover', () => {
-                centerBtn.style.background = 'linear-gradient(135deg, rgba(202,171,121,0.25), rgba(202,171,121,0.15))';
-                centerBtn.style.borderColor = 'rgba(202,171,121,0.4)';
+                centerBtn.style.background = 'linear-gradient(135deg, rgba(193, 181, 143,0.25), rgba(193, 181, 143,0.15))';
+                centerBtn.style.borderColor = 'rgba(193, 181, 143,0.4)';
             });
 
             centerBtn.addEventListener('mouseout', () => {
-                centerBtn.style.background = 'linear-gradient(135deg, rgba(202,171,121,0.15), rgba(202,171,121,0.08))';
-                centerBtn.style.borderColor = 'rgba(202,171,121,0.2)';
+                centerBtn.style.background = 'linear-gradient(135deg, rgba(193, 181, 143,0.15), rgba(193, 181, 143,0.08))';
+                centerBtn.style.borderColor = 'rgba(193, 181, 143,0.2)';
             });
         }
 

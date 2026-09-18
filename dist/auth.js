@@ -488,7 +488,7 @@ function createLoginHtml() {
                             <h2>تسجيل الدخول</h2>
                             <p class="login-subtitle">الرجاء إدخال اسم المستخدم وكلمة المرور للوصول إلى لوحة المتابعة.</p>
                             <form id="loginForm">
-                                <input class="login-input" type="text" id="username" placeholder="اسم المستخدم" autocomplete="username" required>
+                                <input class="login-input" type="text" id="username" placeholder="البريد الإلكتروني" autocomplete="email" required>
                                 <input class="login-input" type="password" id="password" placeholder="كلمة المرور" autocomplete="current-password" required>
                                 <button class="login-button" type="submit">الدخول</button>
                                 <div id="loginError">بيانات الدخول غير صحيحة</div>
@@ -527,9 +527,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.ok) {
                 const data = await res.json();
                 localStorage.setItem('maan_token', data.token);
-                localStorage.setItem('maan_role', data.role);
+                localStorage.setItem('maan_role', data.role || '');
+                localStorage.setItem('maan_name', data.name || '');
+                localStorage.setItem('maan_email', data.email || '');
+                localStorage.setItem('maan_company', data.company || '');
+                localStorage.setItem('maan_center', data.center || '');
                 document.getElementById('loginModal').style.display = 'none';
-                loadSecureDataAndStart(data.token);
+                loadSecureDataAndStart();
             } else {
                 errorDiv.style.display = 'block';
             }
@@ -542,57 +546,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const token = localStorage.getItem('maan_token');
     if (token) {
         document.getElementById('loginModal').style.display = 'none';
-        loadSecureDataAndStart(token);
+        loadSecureDataAndStart();
     }
 
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
         logoutBtn.addEventListener('click', () => {
-            localStorage.removeItem('maan_token');
-            localStorage.removeItem('maan_role');
+            ['maan_token', 'maan_role', 'maan_name', 'maan_email', 'maan_company', 'maan_center']
+                .forEach(key => localStorage.removeItem(key));
             window.location.reload();
         });
     }
 });
 
-function loadSecureDataAndStart(token) {
-    // Wait for CSV_DATA to be defined (data.js is large, might take time)
-    const maxWaitTime = 30000; // 30 seconds
-    const startTime = Date.now();
+function loadSecureDataAndStart() {
+    // The plan datasets are fetched from the database by initializeDashboardApp,
+    // so there is no bundled data.js global left to wait for here.
+    const container = document.querySelector('.dashboard-container');
+    if (container) {
+        container.style.display = 'flex';
+    }
 
-    const checkDataAndLoad = () => {
-        console.log('Checking for CSV_DATA...', typeof window.CSV_DATA, Date.now() - startTime + 'ms');
-        if (typeof CSV_DATA !== 'undefined') {
-            console.log('✓ CSV_DATA found, size:', CSV_DATA.length);
-            // Data is loaded, show dashboard and app
-            const container = document.querySelector('.dashboard-container');
-            if (container) {
-                container.style.display = 'flex';
-            }
-
-            // Load app.js
-            const appScript = document.createElement('script');
-            appScript.src = 'app.js';
-            appScript.onload = () => {
-                console.log('app.js loaded, calling initializeDashboardApp');
-                // DOMContentLoaded won't fire since page is already loaded
-                // So we call the init function directly
-                if (typeof initializeDashboardApp === 'function') {
-                    initializeDashboardApp();
-                }
-            };
-            appScript.onerror = () => {
-                alert('تعذر تحميل التطبيق. يرجى تحديث الصفحة.');
-            };
-            document.body.appendChild(appScript);
-        } else if (Date.now() - startTime < maxWaitTime) {
-            // Data not ready yet, wait a bit more
-            setTimeout(checkDataAndLoad, 100);
-        } else {
-            // Timeout waiting for data
-            alert('فشل تحميل بيانات التطبيق. يرجى تحديث الصفحة.');
+    const appScript = document.createElement('script');
+    appScript.src = 'app.js';
+    appScript.onload = () => {
+        // DOMContentLoaded won't fire since the page is already loaded,
+        // so call the init function directly.
+        if (typeof initializeDashboardApp === 'function') {
+            initializeDashboardApp();
         }
     };
-
-    checkDataAndLoad();
+    appScript.onerror = () => {
+        alert('تعذر تحميل التطبيق. يرجى تحديث الصفحة.');
+    };
+    document.body.appendChild(appScript);
 }
