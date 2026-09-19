@@ -123,33 +123,16 @@
             <div class="main-body">
                 <div class="main-left-col">
 
-                <section class="plan-type-menu-section rings-summary-section glass" aria-label="اكتمال المراحل والمساكن">
-                <div class="top-filter-menu-bar" aria-label="فلاتر أنواع الخطط والنقل">
-                    <div class="top-filter-menu-group">
-                        <span class="section-label"><i class="fa-solid fa-route"></i> نوع الخطة</span>
-                        <div id="planTypeMenu" class="plan-type-menu" role="tablist" aria-label="نوع الخطة"></div>
-                    </div>
-                    <div class="top-filter-menu-group">
-                        <span class="section-label"><i class="fa-solid fa-bus-simple"></i> نمط النقل</span>
-                        <div id="transportTypeMenu" class="plan-type-menu" role="tablist" aria-label="نمط النقل"></div>
-                    </div>
-                </div>
-                <select id="planTypeFilter" class="visually-hidden" aria-label="المرحلة">
-                    <option value="all">الكل</option>
-                </select>
-                <div class="chart-card completion-top-card">
-                    <h3 class="ring-group-title">أنواع الخطط</h3>
-                    <div id="completionSummaryCharts" class="progress-rings-strip"></div>
-                </div>
-                <div class="chart-card residence-top-card">
-                    <h3 class="ring-group-title">المساكن</h3>
-                    <div id="residenceAssignmentCharts" class="progress-rings-strip"></div>
-                </div>
-                <div class="chart-card transport-top-card" title="توزيع الحافلات حسب نمط النقل" aria-label="توزيع الحافلات حسب نمط النقل">
-                    <h3 class="ring-group-title">أنماط النقل</h3>
-                    <div id="transportCharts" class="transport-rings-grid"></div>
-                </div>
-            </section>
+                <!-- Each bar is both the distribution and the filter for its
+                     dimension; the old chip rows showed the same taxonomy twice. -->
+                <section class="filter-bars-section glass" aria-label="التوزيع والفلاتر">
+                    <select id="planTypeFilter" class="visually-hidden" aria-label="المرحلة">
+                        <option value="all">الكل</option>
+                    </select>
+                    <div id="completionSummaryCharts"></div>
+                    <div id="transportCharts"></div>
+                    <div id="residenceAssignmentCharts"></div>
+                </section>
 
             <!-- KPIs -->
             <div class="metrics-row">
@@ -239,22 +222,22 @@
                 <!-- Operational Side Panel (Period, Entrance, Path) - Now DOM 2 (Left visual in RTL) -->
                 <div class="side-panel right-charts-panel">
                     <div class="chart-card glass">
-                        <h3><i class="fa-solid fa-chart-column"></i> <span id="periodChartTitle">الحجاج/الفترة</span></h3>
+                        <h3><i class="fa-solid fa-chart-column"></i> <span id="periodChartTitle">الرحلات/الفترة</span></h3>
                         <div class="chart-metric-tabs" role="tablist" aria-label="مقياس رسم الفترة">
-                            <button class="chart-metric-tab active" type="button" role="tab" aria-selected="true" data-chart-target="period" data-chart-metric="pilgrims">الحجاج</button>
+                            <button class="chart-metric-tab active" type="button" role="tab" aria-selected="true" data-chart-target="period" data-chart-metric="trips">الرحلات</button>
                             <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="period" data-chart-metric="buses">الحافلات</button>
-                            <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="period" data-chart-metric="trips">الرحلات</button>
+                            <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="period" data-chart-metric="pilgrims">الحجاج</button>
                         </div>
                         <div class="chart-container">
                             <div id="periodChart" class="plotly-chart"></div>
                         </div>
                     </div>
                     <div class="chart-card glass">
-                        <h3><i class="fa-solid fa-chart-bar"></i> <span id="entranceChartTitle">الحجاج/مدخل</span></h3>
+                        <h3><i class="fa-solid fa-chart-bar"></i> <span id="entranceChartTitle">الرحلات/مدخل</span></h3>
                         <div class="chart-metric-tabs" role="tablist" aria-label="مقياس رسم المدخل">
-                            <button class="chart-metric-tab active" type="button" role="tab" aria-selected="true" data-chart-target="entrance" data-chart-metric="pilgrims">الحجاج</button>
+                            <button class="chart-metric-tab active" type="button" role="tab" aria-selected="true" data-chart-target="entrance" data-chart-metric="trips">الرحلات</button>
                             <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="entrance" data-chart-metric="buses">الحافلات</button>
-                            <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="entrance" data-chart-metric="trips">الرحلات</button>
+                            <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="entrance" data-chart-metric="pilgrims">الحجاج</button>
                         </div>
                         <div class="chart-container entrance-chart-container">
                             <div id="entranceFloatingLegend" class="chart-floating-legend" aria-hidden="true"></div>
@@ -262,11 +245,11 @@
                         </div>
                     </div>
                     <div class="chart-card glass">
-                        <h3><i class="fa-solid fa-chart-line"></i> <span id="pathChartTitle">الحجاج/المسار</span></h3>
+                        <h3><i class="fa-solid fa-chart-line"></i> <span id="pathChartTitle">الرحلات/المسار</span></h3>
                         <div class="chart-metric-tabs" role="tablist" aria-label="مقياس رسم المسار">
-                            <button class="chart-metric-tab active" type="button" role="tab" aria-selected="true" data-chart-target="path" data-chart-metric="pilgrims">الحجاج</button>
+                            <button class="chart-metric-tab active" type="button" role="tab" aria-selected="true" data-chart-target="path" data-chart-metric="trips">الرحلات</button>
                             <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="path" data-chart-metric="buses">الحافلات</button>
-                            <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="path" data-chart-metric="trips">الرحلات</button>
+                            <button class="chart-metric-tab" type="button" role="tab" aria-selected="false" data-chart-target="path" data-chart-metric="pilgrims">الحجاج</button>
                         </div>
                         <div class="chart-container">
                             <div id="pathChart" class="plotly-chart"></div>

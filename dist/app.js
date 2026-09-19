@@ -26,12 +26,9 @@ let cachedMapRenderKey = null;
 let districtChartTheme = null;
 let chartUpdateTimerId = null;
 let periodChartInstance = null;
-let transportChartInstances = [];
 let entranceChartInstance = null;
 let pathChartInstance = null;
 let districtChartInstance = null;
-let residenceAssignmentChartInstances = [];
-let completionSummaryChartInstances = [];
 let geojsonLookup = {};
 let selectedPlanId = null;
 let selectedEntranceName = null;
@@ -57,9 +54,9 @@ let companyDD = null;
 let centerDD = null;
 let campDD = null;
 const selectedChartMetrics = {
-    period: 'pilgrims',
-    entrance: 'pilgrims',
-    path: 'pilgrims',
+    period: 'trips',
+    entrance: 'trips',
+    path: 'trips',
     district: 'pilgrims'
 };
 const entityTableState = {
@@ -117,18 +114,119 @@ const segmentPctPlugin = {
     }
 };
 
+// Chart fills come from the themed --chart-* tokens rather than literals, so the
+// ramp changes with the theme and stays validated against each surface.
+// One control per dimension: the distribution IS the filter. This replaces the
+// old chip-row + donut pair, which showed the same taxonomy twice in two visual
+// languages where only one was clickable. A stacked bar also compares four
+// similar-sized categories far better than a donut, and long Arabic labels sit
+// inline instead of colliding with the ring.
+// Segments may carry their own `pct` (e.g. completion against a target) when
+// the share of the bar total is not the meaningful number; `equalWidth` then
+// stops widths from implying a proportion that does not exist.
+function renderSegmentedFilter(containerId, { title, segments, selected, onSelect, equalWidth = false }) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const total = segments.reduce((sum, seg) => sum + (Number(seg.amount) || 0), 0);
+    container.replaceChildren();
+    container.classList.add('filter-bar');
+
+    const head = document.createElement('div');
+    head.className = 'filter-bar-head';
+
+    const titleEl = document.createElement('span');
+    titleEl.className = 'filter-bar-title';
+    titleEl.textContent = title;
+    head.appendChild(titleEl);
+
+    const reset = document.createElement('button');
+    reset.type = 'button';
+    reset.className = 'filter-bar-reset';
+    reset.innerHTML = 'الكل <i class="fa-solid fa-xmark"></i>';
+    reset.hidden = selected === null || selected === undefined;
+    reset.addEventListener('click', () => onSelect(null));
+    head.appendChild(reset);
+    container.appendChild(head);
+
+    const track = document.createElement('div');
+    track.className = 'filter-bar-track';
+    track.setAttribute('role', 'tablist');
+    track.setAttribute('aria-label', title);
+
+    segments.forEach((seg) => {
+        const amount = Number(seg.amount) || 0;
+        const share = total > 0 ? amount / total : 0;
+        const percent = Number.isFinite(seg.pct) ? Math.round(seg.pct) : Math.round(share * 100);
+        const isSelected = selected === seg.value;
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'filter-seg' + (isSelected ? ' selected' : '') + (amount === 0 ? ' empty' : '');
+        btn.setAttribute('role', 'tab');
+        btn.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+        // Empty categories keep a fixed slot so the taxonomy stays visible, but
+        // selecting one would only blank the dashboard, so they are inert. Once a
+        // segment is selected the others read 0% only because of that selection,
+        // so they stay clickable to allow switching. The rest share the
+        // remaining width in proportion to their value.
+        if (amount === 0) {
+            btn.style.flex = '0 0 auto';
+            if (selected === null || selected === undefined) {
+                btn.disabled = true;
+                btn.setAttribute('aria-disabled', 'true');
+            }
+        } else {
+            btn.style.flex = equalWidth ? '1 1 0' : `${share} 1 0`;
+            btn.style.background = seg.color;
+            // The ramp runs from near-white to deep green, so no single theme
+            // colour reads on every step — pick ink per segment from its fill.
+            btn.style.color = inkForFill(seg.color);
+        }
+        btn.title = seg.tooltip || `${seg.label} — ${percent}% (${amount.toLocaleString('ar-EG')})`;
+        btn.innerHTML =
+            `<span class="filter-seg-label">${escapeHtml(seg.label)}</span>` +
+            `<span class="filter-seg-pct">${percent}%</span>`;
+        btn.addEventListener('click', () => onSelect(isSelected ? null : seg.value));
+        track.appendChild(btn);
+    });
+
+    container.appendChild(track);
+}
+
+// Black or white text, whichever contrasts more with a hex fill (WCAG luminance).
+function inkForFill(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+    if (!m) return '';
+    const [r, g, b] = [0, 2, 4].map(i => {
+        const c = parseInt(m[1].slice(i, i + 2), 16) / 255;
+        return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    });
+    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return lum > 0.179 ? '#1e1e1e' : '#ffffff';
+}
+
+function chartRamp(count) {
+    const styles = getComputedStyle(document.body);
+    const steps = [1, 2, 3, 4, 5]
+        .map(i => styles.getPropertyValue(`--chart-${i}`).trim())
+        .filter(Boolean);
+    if (!steps.length) return [];
+    if (count >= steps.length) return steps.slice(0, count);
+    // Spread the chosen steps across the ramp so a 3-series chart uses the light,
+    // middle and dark ends rather than three neighbours.
+    const spread = [];
+    for (let i = 0; i < count; i++) {
+        spread.push(steps[Math.round(i * (steps.length - 1) / Math.max(count - 1, 1))]);
+    }
+    return spread;
+}
+
 function formatRingPercent(value, total) {
     if (!total || !value) return '0%';
     return Math.round((value / total) * 100) + '%';
 }
 
-function getTarwiaDirectTaseedTotal(rows) {
-    return rows.reduce((sum, row) => {
-        const code = normalizePlanTypeCode(row.planTypeCode || row.plan_type_code || row.code || row.label);
-        if (code !== 'tarwia' && code !== 'direct_taseed') return sum;
-        return sum + (row.target || 0);
-    }, 0);
-}
 const CHART_METRIC_DEFS = {
     pilgrims: { label: 'الحجاج', periodTitle: 'الحجاج/الفترة', entranceTitle: 'الحجاج/مدخل', pathTitle: 'الحجاج/المسار', districtTitle: 'الحجاج حسب الحي' },
     buses: { label: 'الحافلات', periodTitle: 'الحافلات حسب الفترة', entranceTitle: 'الحافلات لكل مدخل', pathTitle: 'الحافلات حسب المسار', districtTitle: 'الحافلات حسب الحي' },
@@ -413,10 +511,17 @@ function getCampAssignmentStats() {
     // Get denominator from assign_camps.js instead of from CSV
     const assignCampsServiceCenterCount = getServiceCenterCountFromAssignCamps();
 
+    // The KPI denominator is the assignment target for the plan types in play,
+    // not their planned pilgrims — otherwise selecting a phase reads X/X. With no
+    // phase selected the rows are Tarwiya + direct Taseed, whose targets sum to
+    // the total pilgrims (every pilgrim does exactly one of the two).
+    const targetPilgrims = Object.values(buildCompletionStats(totalRows).completionByPlanType)
+        .reduce((sum, row) => sum + (row.target || 0), 0);
+
     return {
         ...stats,
         serviceCenterCount: assignCampsServiceCenterCount,  // Changed: now from assign_camps.js
-        totalPilgrims: calculateKpiTotalPilgrims(totalRows)
+        totalPilgrims: targetPilgrims || calculateKpiTotalPilgrims(totalRows)
     };
 }
 
@@ -586,11 +691,32 @@ function returnToLogin() {
     window.location.reload();
 }
 
-async function loadDatasetsFromDatabase() {
-    // auth.js is the live bootstrap and stores the token as 'maan_token'; the key
-    // below belongs to app.js's own login form, which is the fallback path.
+// auth.js is the live bootstrap and stores the token as 'maan_token'; the key
+// below belongs to app.js's own login form, which is the fallback path.
+function authHeaders(extra = {}) {
     const token = localStorage.getItem('maan_token') || getPersistentValue(AUTH_TOKEN_STORAGE_KEY);
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    return token ? { Authorization: `Bearer ${token}`, ...extra } : { ...extra };
+}
+
+// What this user may edit, as told by the server. Defaults to read-only so a
+// failed lookup hides the controls rather than showing ones that will 403.
+let dbPermissions = { isAdmin: false, editable: {} };
+
+function editablePlanFields() {
+    return dbPermissions.editable && dbPermissions.editable.plans;
+}
+
+async function loadPermissions() {
+    try {
+        const response = await fetch('/maan-dashboard/api/db-permissions', { headers: authHeaders() });
+        if (response.ok) dbPermissions = await response.json();
+    } catch (error) {
+        console.warn('Could not load edit permissions; staying read-only:', error.message);
+    }
+}
+
+async function loadDatasetsFromDatabase() {
+    const headers = authHeaders();
 
     const results = await Promise.all(DB_DATASETS.map(async (dataset) => {
         try {
@@ -645,7 +771,7 @@ async function initializeDashboardApp() {
     initTheme();
     initMap();
 
-    const plansLoaded = await loadDatasetsFromDatabase();
+    const [plansLoaded] = await Promise.all([loadDatasetsFromDatabase(), loadPermissions()]);
     if (!plansLoaded) {
         // Either the session expired (a reload to the login screen is already in
         // flight) or the database is unreachable. Either way there is nothing to render.
@@ -2533,8 +2659,6 @@ function populateFilters() {
     selectedPlanTypes = new Set(Array.from(selectedPlanTypes).filter(type => planTypes.includes(type)));
     syncPlanTypeSelectValue();
 
-    renderPlanTypeMenu();
-    renderTransportTypeMenu();
     populateTopNavDropdowns();
 }
 
@@ -2809,122 +2933,7 @@ function applyPlanTypeChartSelection(planTypeLabel) {
     selectedEntranceName = null;
     selectedPathName = null;
     selectedDistrict = null;
-    updatePlanTypeMenuState();
     applyFilters();
-}
-
-function renderPlanTypeMenu() {
-    const select = document.getElementById('planTypeFilter');
-    const menu = document.getElementById('planTypeMenu');
-    if (!select || !menu) return;
-
-    const fragment = document.createDocumentFragment();
-    const options = [
-        { value: 'all', textContent: select.querySelector('option[value="all"]')?.textContent || 'الكل' },
-        ...getAvailablePlanTypeLabelsForCurrentContext().map(label => ({ value: label, textContent: label }))
-    ];
-
-    options.forEach(option => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'plan-type-option';
-        button.textContent = option.textContent;
-        button.dataset.value = option.value;
-        button.setAttribute('role', 'tab');
-        const isActive = option.value !== 'all' ? selectedPlanTypes.has(option.value) : selectedPlanTypes.size === 0;
-        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
-
-        if (isActive) button.classList.add('active');
-
-        button.addEventListener('click', (e) => {
-            e.preventDefault();
-
-            if (option.value === 'all') {
-                selectedPlanTypes.clear();
-            } else {
-                const wasSelected = selectedPlanTypes.size === 1 && selectedPlanTypes.has(option.value);
-                selectedPlanTypes.clear();
-                if (!wasSelected) selectedPlanTypes.add(option.value);
-            }
-
-            syncPlanTypeSelectValue();
-            selectedPlanId = null;
-            selectedEntranceName = null;
-            selectedPathName = null;
-            selectedDistrict = null;
-            updatePlanTypeMenuState();
-            applyFilters();
-        });
-
-        fragment.appendChild(button);
-    });
-
-    menu.replaceChildren(fragment);
-}
-
-function updatePlanTypeMenuState() {
-    const select = document.getElementById('planTypeFilter');
-    const menu = document.getElementById('planTypeMenu');
-    if (!select || !menu) return;
-
-    menu.querySelectorAll('.plan-type-option').forEach(button => {
-        const value = button.dataset.value;
-        const isActive = value !== 'all' ? selectedPlanTypes.has(value) : selectedPlanTypes.size === 0;
-        button.classList.toggle('active', isActive);
-        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
-    });
-}
-
-function renderTransportTypeMenu() {
-    const select = document.getElementById('transportFilter');
-    const menu = document.getElementById('transportTypeMenu');
-    if (!select || !menu) return;
-
-    const fragment = document.createDocumentFragment();
-    const options = [
-        { value: 'all', textContent: select.querySelector('option[value="all"]')?.textContent || 'الكل' },
-        ...TRANSPORT_TYPE_MENU_OPTIONS.map(label => ({ value: label, textContent: label }))
-    ];
-
-    options.forEach(option => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'plan-type-option transport-type-option';
-        button.textContent = option.textContent;
-        button.dataset.value = option.value;
-        button.setAttribute('role', 'tab');
-
-        const isActive = select.value === option.value || (option.value === 'all' && select.value === 'all');
-        button.classList.toggle('active', isActive);
-        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
-
-        button.addEventListener('click', (e) => {
-            e.preventDefault();
-            select.value = select.value === option.value && option.value !== 'all' ? 'all' : option.value;
-            selectedPlanId = null;
-            selectedEntranceName = null;
-            selectedPathName = null;
-            selectedDistrict = null;
-            updateTransportTypeMenuState();
-            applyFilters();
-        });
-
-        fragment.appendChild(button);
-    });
-
-    menu.replaceChildren(fragment);
-}
-
-function updateTransportTypeMenuState() {
-    const select = document.getElementById('transportFilter');
-    const menu = document.getElementById('transportTypeMenu');
-    if (!select || !menu) return;
-
-    menu.querySelectorAll('.transport-type-option').forEach(button => {
-        const isActive = select.value === button.dataset.value;
-        button.classList.toggle('active', isActive);
-        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
-    });
 }
 
 // Event Listeners for Filters
@@ -2957,10 +2966,9 @@ function setupEventListeners() {
             }
 
             if (id === 'planTypeFilter') {
-                // Skip - plan type selection is now handled by buttons in renderPlanTypeMenu
+                // Skip - plan type selection is handled by the segmented filter bar
                 return;
             }
-            if (id === 'transportFilter') updateTransportTypeMenuState();
             applyFilters();
         });
     });
@@ -3153,8 +3161,6 @@ function applyFilters() {
         d['owner_office_number']
     ));
 
-    renderPlanTypeMenu();
-    renderTransportTypeMenu();
     scheduleDashboardUpdate();
 }
 function ensureCompanyMetricsEntry(map, company) {
@@ -4044,7 +4050,6 @@ function clearAllFilters() {
     populateCenterDropdown();
     populateCampDropdown();
     updateSidebarClearBtn();
-    renderPlanTypeMenu();
     applyFilters();
 }
 
@@ -4694,11 +4699,18 @@ function updateKPIs(stats) {
     const residenceStats = getResidenceAssignmentStats();
     const totalResidences = getTotalResidencesFromRawData();
 
+    // With no phase selected, summing every phase would count each pilgrim once
+    // per phase; count them through Tarwiya + direct Taseed instead, which every
+    // pilgrim passes through exactly once.
+    const plannedPilgrims = getActivePlanTypeLabels().size
+        ? totalPilgrims
+        : calculateKpiTotalPilgrims(filteredData.filter(isTarwiyaKpiTotalPlanType));
+
     // Animate numbers
     const pilgrimsElement = document.getElementById('kpiPilgrims');
-    pilgrimsElement.textContent = `${totalPilgrims.toLocaleString()}/${campStats.totalPilgrims.toLocaleString()}`;
-    pilgrimsElement.previousElementSibling.textContent = 'الحجاج (مخطط/إجمالي)';
-    pilgrimsElement.title = 'الحجاج المخططون حسب نوع الخطة المحدد / إجمالي تروية وتصعيد تروية';
+    pilgrimsElement.textContent = `${plannedPilgrims.toLocaleString()}/${campStats.totalPilgrims.toLocaleString()}`;
+    pilgrimsElement.previousElementSibling.textContent = 'الحجاج (مخطط/مستهدف)';
+    pilgrimsElement.title = 'الحجاج المخططون حسب نوع الخطة المحدد / المستهدفون من تخصيصات المخيمات';
     document.getElementById('kpiBuses').textContent = totalBuses.toLocaleString();
     document.getElementById('kpiPlans').textContent = totalPlans.toLocaleString();
     document.getElementById('kpiTrips').textContent = totalTrips.toLocaleString();
@@ -4798,8 +4810,9 @@ function updateMap() {
     const showDetailedMapLabels = Boolean(selectedPlanId || serviceEntitySelectionActive) || filteredData.length <= MAP_DETAIL_LABEL_LIMIT;
 
     if (mapStatus) {
-        mapStatus.hidden = true;
-        mapStatus.textContent = '';
+        const noMatches = filteredData.length === 0 && rawData.length > 0;
+        mapStatus.hidden = !noMatches;
+        mapStatus.textContent = noMatches ? 'لا توجد خطط مطابقة للفلاتر الحالية' : '';
     }
 
     let selectedDistrictBounds = null;
@@ -5143,126 +5156,31 @@ function updateCharts(stats = getDashboardStats()) {
         });
     }
 
+    // أنماط النقل — share of buses per mode, doubling as the transport filter.
     const transportFilter = document.getElementById("transportFilter");
     const transportLabels = transportFilter
-        ? Array.from(transportFilter.options)
-            .filter(option => option.value !== "all")
-            .map(option => option.value)
+        ? Array.from(transportFilter.options).filter(o => o.value !== "all").map(o => o.value)
         : Object.keys(stats.transportCounts);
-    const transEntries = transportLabels.map(label => [label, stats.transportCounts[label] || 0]);
-    const totalTransportBuses = Object.values(stats.transportCounts).reduce((sum, value) => sum + value, 0);
-    const transportSegmentColors = [
-        "rgba(16, 116, 70, 0.92)",
-        "rgba(99, 182, 76, 0.92)",
-        "rgba(131, 117, 78, 0.92)",
-        "rgba(13, 77, 81, 0.92)"
-    ];
-
-    const transportContainer = document.getElementById("transportCharts");
-    const segmentValues = transEntries.map(([, v]) => totalTransportBuses > 0 ? (v || 0) : 0);
-    const canReuseTransport = transportChartInstances.length === 1 &&
-        transportContainer?.querySelector('canvas');
-
-    if (canReuseTransport) {
-        const chart = transportChartInstances[0];
-        chart.data.datasets[0].data = segmentValues;
-        chart.update('none');
-        // Update legend active state
-        const legendItems = transportContainer.querySelectorAll('.transport-legend-item');
-        legendItems.forEach((item, i) => {
-            const label = transEntries[i]?.[0];
-            const value = transEntries[i]?.[1] || 0;
-            const isActive = transportFilter && transportFilter.value === label;
-            item.classList.toggle('active', isActive);
-            const pctEl = item.querySelector('.transport-legend-pct');
-            if (pctEl) pctEl.textContent = formatRingPercent(value, totalTransportBuses);
-        });
-    } else {
-        transportChartInstances.forEach(chart => chart.destroy());
-        transportChartInstances = [];
-        if (transportContainer) {
-            transportContainer.replaceChildren();
-            const outerWrap = document.createElement('div');
-            outerWrap.className = 'transport-outer-wrap';
-            transportContainer.appendChild(outerWrap);
-
-            const ringWrap = document.createElement('div');
-            ringWrap.className = 'transport-combined-ring';
-            const canvas = document.createElement('canvas');
-            ringWrap.appendChild(canvas);
-            outerWrap.appendChild(ringWrap);
-
-            const legendWrap = document.createElement('div');
-            legendWrap.className = 'transport-combined-legend';
-            outerWrap.appendChild(legendWrap);
-
-            const ctxTrans = canvas.getContext('2d');
-            const combinedChart = new Chart(ctxTrans, {
-                type: 'doughnut',
-                data: {
-                    labels: transEntries.map(([l]) => l),
-                    datasets: [{
-                        data: segmentValues,
-                        backgroundColor: transportSegmentColors.slice(0, transEntries.length),
-                        borderWidth: 0,
-                        borderRadius: 6,
-                        spacing: 2,
-                        hoverOffset: 4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    cutout: '62%',
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            rtl: true,
-                            textDirection: 'rtl',
-                            callbacks: {
-                                label: ctx => {
-                                    const pct = totalTransportBuses > 0 ? Math.round((ctx.raw / totalTransportBuses) * 100) : 0;
-                                    return ctx.label + ': ' + Number(ctx.raw || 0).toLocaleString() + ' (' + pct + '%)';
-                                }
-                            }
-                        },
-                        segmentPct: { display: false }
-                    },
-                    onClick: (e, elements) => {
-                        if (!transportFilter || !elements.length) return;
-                        const idx = elements[0].index;
-                        const clickedLabel = transEntries[idx]?.[0];
-                        if (!clickedLabel) return;
-                        transportFilter.value = transportFilter.value === clickedLabel ? 'all' : clickedLabel;
-                        selectedPlanId = null;
-                        applyFilters();
-                    }
-                },
-                plugins: [segmentPctPlugin]
-            });
-            transportChartInstances.push(combinedChart);
-
-            transEntries.forEach(([label, value], i) => {
-                const item = document.createElement('div');
-                item.className = 'transport-legend-item';
-                const isActive = transportFilter && transportFilter.value === label;
-                item.classList.toggle('active', isActive);
-                item.setAttribute('title', label + ' - ' + Number(value || 0).toLocaleString());
-                item.innerHTML =
-                    '<span class="transport-legend-dot" style="background:' + transportSegmentColors[i % transportSegmentColors.length] + '"></span>' +
-                    '<span class="transport-legend-label">' + label + '</span>' +
-                    '<span class="transport-legend-pct">' + formatRingPercent(value, totalTransportBuses) + '</span>';
-                item.style.cursor = 'pointer';
-                item.addEventListener('click', () => {
-                    if (!transportFilter) return;
-                    transportFilter.value = transportFilter.value === label ? 'all' : label;
-                    selectedPlanId = null;
-                    applyFilters();
-                });
-                legendWrap.appendChild(item);
-            });
-        }
-    }
+    const transportRamp = chartRamp(Math.max(transportLabels.length, 1));
+    renderSegmentedFilter('transportCharts', {
+        title: 'نمط النقل',
+        segments: transportLabels.map((label, i) => ({
+            value: label,
+            label,
+            amount: stats.transportCounts[label] || 0,
+            color: transportRamp[i % transportRamp.length],
+        })),
+        selected: transportFilter && transportFilter.value !== 'all' ? transportFilter.value : null,
+        onSelect: (value) => {
+            if (!transportFilter) return;
+            transportFilter.value = value || 'all';
+            selectedPlanId = null;
+            selectedEntranceName = null;
+            selectedPathName = null;
+            selectedDistrict = null;
+            applyFilters();
+        },
+    });
 
     const entranceLabels = Object.keys(entranceMetricStats.entranceCounts).sort();
     const periodsArray = Array.from(entranceMetricStats.allPeriodsForEntrance).sort((a, b) => Number(a) - Number(b));
@@ -5534,252 +5452,233 @@ function handleDistrictSelection(label) {
 }
 
 function renderCompletionSummaryChart(stats, chartTheme) {
-    const container = document.getElementById('completionSummaryCharts');
-    if (!container) return;
-
-    const activePlanTypes = getActivePlanTypeLabels();
     const baseForCompletion = (planTypeBaseData.length ? planTypeBaseData : rawData)
         .filter(d => matchesCompanyOwnerFilters(d['owner_company_name'], d['owner_office_number']));
     const summaryStats = buildCompletionStats(baseForCompletion);
     const rowsByLabel = new Map(Object.values(summaryStats.completionByPlanType).map(row => [row.label, row]));
-    const currentPlanTypeLabels = getAvailablePlanTypeLabelsForCurrentContext();
-    const rows = currentPlanTypeLabels
+    const labels = getAvailablePlanTypeLabelsForCurrentContext();
+    const rows = labels
         .map(label => rowsByLabel.get(label) || { planTypeCode: normalizePlanTypeCode(label), label, planned: 0, target: 0 })
-        .sort((a, b) => {
-            const orderDiff = getPlanTypeRingOrderIndex(a) - getPlanTypeRingOrderIndex(b);
-            return orderDiff || b.target - a.target;
-        });
+        .sort((a, b) => getPlanTypeRingOrderIndex(a) - getPlanTypeRingOrderIndex(b) || b.target - a.target);
 
-    const planTypeColors = [
-        'rgba(16, 116, 70, 0.92)',
-        'rgba(99, 182, 76, 0.92)',
-        'rgba(131, 117, 78, 0.92)',
-        'rgba(13, 77, 81, 0.92)',
-        'rgba(99, 155, 232, 0.92)',
-        'rgba(168, 85, 247, 0.92)'
-    ];
-    const totalTarget = rows.reduce((s, r) => s + (r.target || 0), 0);
-    const completionPercentTotal = getTarwiaDirectTaseedTotal(rows) || totalTarget;
-    const segmentValues = rows.map(r => totalTarget > 0 ? (r.target || 0) : 0);
-
-    const canReuse = completionSummaryChartInstances.length === 1 && container.children.length === 1;
-
-    if (canReuse) {
-        const chart = completionSummaryChartInstances[0];
-        if (chart) {
-            chart.data.datasets[0].data = segmentValues;
-            chart.data.datasets[0].percentageTotal = completionPercentTotal;
-            chart.update('none');
-        }
-        container.querySelectorAll('.completion-legend-item').forEach((item, i) => {
-            const value = rows[i]?.target || 0;
-            item.classList.toggle('active', activePlanTypes.has(rows[i]?.label));
-            const pctEl = item.querySelector('.transport-legend-pct');
-            if (pctEl) pctEl.textContent = formatRingPercent(value, completionPercentTotal);
-        });
-        return;
-    }
-
-    completionSummaryChartInstances.forEach(c => c.destroy());
-    completionSummaryChartInstances = [];
-    container.replaceChildren();
-
-    const wrap = document.createElement('div');
-    wrap.className = 'completion-combined-wrap';
-
-    const ringDiv = document.createElement('div');
-    ringDiv.className = 'transport-combined-ring';
-    const canvas = document.createElement('canvas');
-    ringDiv.appendChild(canvas);
-    wrap.appendChild(ringDiv);
-
-    const legendDiv = document.createElement('div');
-    legendDiv.className = 'transport-combined-legend';
-    wrap.appendChild(legendDiv);
-    container.appendChild(wrap);
-
-    const chart = new Chart(canvas.getContext('2d'), {
-        type: 'doughnut',
-        data: {
-            labels: rows.map(r => r.label),
-            datasets: [{
-                data: segmentValues,
-                percentageTotal: completionPercentTotal,
-                backgroundColor: planTypeColors.slice(0, rows.length),
-                borderWidth: 0,
-                borderRadius: 6,
-                spacing: 2,
-                hoverOffset: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            cutout: '62%',
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    rtl: true,
-                    textDirection: 'rtl',
-                    callbacks: {
-                        label: ctx => {
-                            const row = rows[ctx.dataIndex];
-                            const pct = completionPercentTotal > 0 ? Math.round((ctx.raw / completionPercentTotal) * 100) : 0;
-                            const completePct = row.target > 0 ? Math.round((row.planned / row.target) * 1000) / 10 : 0;
-                            return [
-                                ctx.label + ': ' + Number(ctx.raw || 0).toLocaleString() + ' (' + pct + '%)',
-                                'الاكتمال: ' + clampCompletionPercentage(completePct) + '%'
-                            ];
-                        }
-                    }
-                },
-                segmentPct: { display: false }
-            },
-            onClick: (e, elements) => {
-                if (!elements.length) return;
-                const row = rows[elements[0].index];
-                if (!row) return;
-                applyPlanTypeChartSelection(row.label);
-            }
-        },
-        plugins: [segmentPctPlugin]
-    });
-    completionSummaryChartInstances.push(chart);
-
-    rows.forEach((row, i) => {
-        const item = document.createElement('div');
-        item.className = 'transport-legend-item completion-legend-item';
-        item.classList.toggle('active', activePlanTypes.has(row.label));
-        item.setAttribute('title', row.label);
-        item.innerHTML =
-            '<span class="transport-legend-dot" style="background:' + planTypeColors[i % planTypeColors.length] + '"></span>' +
-            '<span class="transport-legend-label">' + row.label + '</span>' +
-            '<span class="transport-legend-pct">' + formatRingPercent(row.target || 0, completionPercentTotal) + '</span>';
-        item.style.cursor = 'pointer';
-        item.addEventListener('click', () => {
-            applyPlanTypeChartSelection(row.label);
-        });
-        legendDiv.appendChild(item);
-    });
-}
-
-function renderResidenceAssignmentChart(chartTheme) {
-    const container = document.getElementById('residenceAssignmentCharts');
-    if (!container) return;
-
-    const mix = getResidenceMixStats();
-
-    // Residence type segments for combined ring
-    const residenceDefs = [
-        { label: 'تروية', filterKey: 'tarwiyah', value: mix.tarwiyahOnly, color: 'rgba(99, 182, 76, 0.92)' },
-        { label: 'تصعيد مباشر', filterKey: 'direct', value: mix.directTaseedOnly, color: 'rgba(16, 116, 70, 0.92)' },
-        { label: 'مختلط', filterKey: 'mixed', value: mix.mixed, color: 'rgba(131, 117, 78, 0.92)' }
-    ];
-    const totalResidences = mix.total;
-
-    const canReuse = residenceAssignmentChartInstances.length === 1 && container.children.length === 1;
-
-    if (canReuse) {
-        const combinedChart = residenceAssignmentChartInstances[0];
-        if (combinedChart) { combinedChart.data.datasets[0].data = residenceDefs.map(d => totalResidences > 0 ? (d.value || 0) : 0); combinedChart.update('none'); }
-        container.querySelectorAll('.residence-legend-item').forEach((item, i) => {
-            item.classList.toggle('active', selectedResidenceMixFilter === residenceDefs[i]?.filterKey);
-            const pctEl = item.querySelector('.transport-legend-pct');
-            if (pctEl) pctEl.textContent = formatRingPercent(residenceDefs[i]?.value || 0, totalResidences);
-        });
-        return;
-    }
-
-    residenceAssignmentChartInstances.forEach(chart => chart.destroy());
-    residenceAssignmentChartInstances = [];
-    container.replaceChildren();
-
-    // ── Combined residence types ring ──
-    const combinedWrap = document.createElement('div');
-    combinedWrap.className = 'residence-combined-wrap';
-
-    const ringWrap = document.createElement('div');
-    ringWrap.className = 'transport-combined-ring';
-    const combinedCanvas = document.createElement('canvas');
-    ringWrap.appendChild(combinedCanvas);
-    combinedWrap.appendChild(ringWrap);
-
-    const legendWrap = document.createElement('div');
-    legendWrap.className = 'transport-combined-legend';
-    combinedWrap.appendChild(legendWrap);
-    container.appendChild(combinedWrap);
-
-    const segmentValues = residenceDefs.map(d => totalResidences > 0 ? (d.value || 0) : 0);
-    const combinedChart = new Chart(combinedCanvas.getContext('2d'), {
-        type: 'doughnut',
-        data: {
-            labels: residenceDefs.map(d => d.label),
-            datasets: [{
-                data: segmentValues,
-                backgroundColor: residenceDefs.map(d => d.color),
-                borderWidth: 0,
-                borderRadius: 6,
-                spacing: 2,
-                hoverOffset: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            cutout: '62%',
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    rtl: true,
-                    textDirection: 'rtl',
-                    callbacks: {
-                        label: ctx => {
-                            const pct = totalResidences > 0 ? Math.round((ctx.raw / totalResidences) * 100) : 0;
-                            return ctx.label + ': ' + Number(ctx.raw || 0).toLocaleString() + ' (' + pct + '%)';
-                        }
-                    }
-                },
-                segmentPct: { display: false }
-            },
-            onClick: (e, elements) => {
-                if (!elements.length) return;
-                const clickedKey = residenceDefs[elements[0].index]?.filterKey;
-                if (!clickedKey) return;
-                selectedResidenceMixFilter = selectedResidenceMixFilter === clickedKey ? 'all' : clickedKey;
-                selectedPlanId = null;
-                selectedEntranceName = null;
-                selectedPathName = null;
-                selectedDistrict = null;
-                applyFilters();
-            }
-        },
-        plugins: [segmentPctPlugin]
-    });
-    residenceAssignmentChartInstances.push(combinedChart);
-
-    residenceDefs.forEach((def, i) => {
-        const item = document.createElement('div');
-        item.className = 'transport-legend-item residence-legend-item';
-        item.classList.toggle('active', selectedResidenceMixFilter === def.filterKey);
-        item.setAttribute('title', def.label);
-        item.innerHTML =
-            '<span class="transport-legend-dot" style="background:' + def.color + '"></span>' +
-            '<span class="transport-legend-label">' + def.label + '</span>' +
-            '<span class="transport-legend-pct">' + formatRingPercent(def.value || 0, totalResidences) + '</span>';
-        item.style.cursor = 'pointer';
-        item.addEventListener('click', () => {
-            selectedResidenceMixFilter = selectedResidenceMixFilter === def.filterKey ? 'all' : def.filterKey;
+    const ramp = chartRamp(Math.max(rows.length, 1));
+    // Every pilgrim moves in every phase, so the target is the same figure for
+    // each plan type and a share of the total would read as a flat 25/25/25/25.
+    // Each segment instead reports its planned pilgrims against that target.
+    renderSegmentedFilter('completionSummaryCharts', {
+        title: 'نوع الخطة',
+        equalWidth: true,
+        segments: rows.map((row, i) => {
+            const planned = row.planned || 0;
+            const target = row.target || 0;
+            const pct = target > 0 ? Math.min(planned / target, 1) * 100 : 0;
+            return {
+                value: row.label,
+                label: row.label,
+                amount: planned,
+                pct,
+                tooltip: `${row.label} — مخطط ${planned.toLocaleString('ar-EG')} من ${target.toLocaleString('ar-EG')} حاج (${Math.round(pct)}%)`,
+                color: ramp[i % ramp.length],
+            };
+        }),
+        selected: selectedPlanTypes.size === 1 ? [...selectedPlanTypes][0] : null,
+        onSelect: (value) => {
+            selectedPlanTypes.clear();
+            if (value) selectedPlanTypes.add(value);
+            syncPlanTypeSelectValue();
             selectedPlanId = null;
             selectedEntranceName = null;
             selectedPathName = null;
             selectedDistrict = null;
             applyFilters();
-        });
-        legendWrap.appendChild(item);
+        },
+    });
+}
+
+function renderResidenceAssignmentChart(chartTheme) {
+    const mix = getResidenceMixStats();
+    const ramp = chartRamp(3);
+    const segments = [
+        { value: 'tarwiyah', label: 'تروية', amount: mix.tarwiyahOnly, color: ramp[0] },
+        { value: 'direct', label: 'تصعيد مباشر', amount: mix.directTaseedOnly, color: ramp[1] },
+        { value: 'mixed', label: 'مختلط', amount: mix.mixed, color: ramp[2] },
+    ];
+
+    renderSegmentedFilter('residenceAssignmentCharts', {
+        title: 'المساكن',
+        segments,
+        selected: selectedResidenceMixFilter === 'all' ? null : selectedResidenceMixFilter,
+        onSelect: (value) => {
+            selectedResidenceMixFilter = value || 'all';
+            selectedPlanId = null;
+            applyFilters();
+        },
     });
 }
 
 let selectedTripServiceCenter = null;
+
+function removePlanLocally(planId) {
+    for (let i = rawData.length - 1; i >= 0; i--) {
+        if (rawData[i]['plan_id'] === planId) rawData.splice(i, 1);
+    }
+}
+
+function closePlanEditor() {
+    document.getElementById('planEditorBackdrop')?.remove();
+}
+
+// The CSV carries display names, not the foreign keys, so the current value of a
+// dropdown has to be matched back to an option.
+function currentOptionValue(field, plan) {
+    const options = dbPermissions.options || {};
+    if (field.name === 'transport_type_id') {
+        const match = (options.transport_types || [])
+            .find(t => t.name === plan['transport_type_name']);
+        return match ? match.id : '';
+    }
+    if (field.name === 'timing_id') {
+        const start = String(plan['timing_start_at'] || '').slice(0, 5);
+        const end = String(plan['timing_end_at'] || '').slice(0, 5);
+        const match = (options.timings || []).find(t =>
+            t.plan_type_code === plan['plan_type_code'] && t.start_at === start && t.end_at === end);
+        return match ? match.id : '';
+    }
+    if (field.name === 'get_parking' || field.name === 'set_parking') {
+        const prefix = field.name === 'get_parking' ? 'get' : 'set';
+        const name = plan[`${prefix}_parking_name`];
+        const source = plan[`${prefix}_type_parking`];
+        const match = (options.parking || []).find(o => o.name === name && o.source === source);
+        return match ? match.value : '';
+    }
+    return '';
+}
+
+// Timings belong to a plan type, so only offer the ones valid for this plan.
+function optionsForField(field, plan) {
+    const options = dbPermissions.options || {};
+    if (field.options === 'transport_types') {
+        return (options.transport_types || []).map(t => ({ value: t.id, label: t.name }));
+    }
+    if (field.options === 'timings') {
+        return (options.timings || [])
+            .filter(t => !plan['plan_type_code'] || t.plan_type_code === plan['plan_type_code'])
+            .map(t => ({ value: t.id, label: t.label }));
+    }
+    if (field.options === 'parking') {
+        return (options.parking || []).map(o => ({ value: o.value, label: o.name }));
+    }
+    return [];
+}
+
+function planEditorFieldHtml(field, plan) {
+    if (field.type === 'number') {
+        return `
+            <label class="plan-editor-field">
+                <span>${escapeHtml(field.label)}</span>
+                <input type="number" min="0" step="1" name="${field.name}"
+                       value="${Number(plan[field.name]) || 0}" required>
+            </label>`;
+    }
+    const selected = currentOptionValue(field, plan);
+    const choices = optionsForField(field, plan);
+    return `
+        <label class="plan-editor-field wide">
+            <span>${escapeHtml(field.label)}</span>
+            <select name="${field.name}">
+                <option value="">—</option>
+                ${choices.map(c => `
+                    <option value="${escapeHtml(c.value)}" ${c.value === selected ? 'selected' : ''}>
+                        ${escapeHtml(c.label)}
+                    </option>`).join('')}
+            </select>
+        </label>`;
+}
+
+function openPlanEditor(plan) {
+    const fields = editablePlanFields();
+    if (!fields || !fields.length) return;
+    closePlanEditor();
+
+    const backdrop = document.createElement('div');
+    backdrop.id = 'planEditorBackdrop';
+    backdrop.className = 'plan-editor-backdrop';
+    backdrop.innerHTML = `
+        <div class="plan-editor" role="dialog" aria-modal="true" aria-labelledby="planEditorTitle">
+            <h3 id="planEditorTitle">تعديل الخطة</h3>
+            <p class="plan-editor-sub">${escapeHtml(plan['owner_company_name'] || '')} — ${escapeHtml(plan['camp_label'] || '')}</p>
+            <form id="planEditorForm">
+                ${fields.map(field => planEditorFieldHtml(field, plan)).join('')}
+                <p class="plan-editor-error" id="planEditorError" hidden></p>
+                <div class="plan-editor-actions">
+                    <button type="button" class="plan-editor-btn ghost" id="planEditorCancel">إلغاء</button>
+                    <button type="submit" class="plan-editor-btn primary" id="planEditorSave">حفظ</button>
+                </div>
+            </form>
+        </div>`;
+
+    document.body.appendChild(backdrop);
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closePlanEditor(); });
+    document.getElementById('planEditorCancel').addEventListener('click', closePlanEditor);
+    backdrop.querySelector('input, select')?.focus();
+
+    document.getElementById('planEditorForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const saveBtn = document.getElementById('planEditorSave');
+        const errorEl = document.getElementById('planEditorError');
+        const form = new FormData(e.target);
+
+        const patch = {};
+        fields.forEach(field => {
+            const raw = form.get(field.name);
+            if (field.type === 'number') patch[field.name] = Number(raw);
+            else patch[field.name] = raw ?? '';
+        });
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'جاري الحفظ...';
+        try {
+            const response = await fetch(`/maan-dashboard/api/db/plans/${plan['plan_id']}`, {
+                method: 'PATCH',
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify(patch),
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error((payload.rejected || [payload.error]).join('، '));
+
+            closePlanEditor();
+            // Dropdowns change display names the CSV carries, so refetch rather
+            // than trying to reconcile ids back to labels locally.
+            await loadDatasetsFromDatabase();
+            loadData();
+        } catch (error) {
+            errorEl.textContent = `تعذر الحفظ: ${error.message}`;
+            errorEl.hidden = false;
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'حفظ';
+        }
+    });
+}
+
+async function deletePlan(plan) {
+    const label = `${plan['owner_company_name'] || ''} — ${plan['camp_label'] || ''}`;
+    if (!confirm(`حذف هذه الخطة نهائياً؟\n${label}\n\nلا يمكن التراجع عن هذا الإجراء.`)) return;
+
+    try {
+        const response = await fetch(`/maan-dashboard/api/db/plans/${plan['plan_id']}`, {
+            method: 'DELETE',
+            headers: authHeaders(),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+
+        removePlanLocally(plan['plan_id']);
+        if (selectedPlanId === plan['plan_id']) selectedPlanId = null;
+        applyFilters();
+    } catch (error) {
+        alert(`تعذر حذف الخطة: ${error.message}`);
+    }
+}
 
 function updatePlanList() {
     const listEl = document.getElementById('planList');
@@ -5833,16 +5732,35 @@ function updatePlanList() {
                 </button>
             </div>
             ` : ''}
+            ${editablePlanFields() ? `
+            <div class="plan-actions">
+                <button type="button" class="plan-action-btn plan-edit-btn" title="تعديل الخطة" aria-label="تعديل الخطة">
+                    <i class="fa-solid fa-pen-to-square"></i> تعديل
+                </button>
+                <button type="button" class="plan-action-btn plan-delete-btn" title="حذف الخطة" aria-label="حذف الخطة">
+                    <i class="fa-solid fa-trash-can"></i> حذف
+                </button>
+            </div>
+            ` : ''}
         `;
 
         div.addEventListener('click', (e) => {
-            if (e.target.classList.contains('plan-service-center-btn')) {
+            if (e.target.closest('.plan-service-center-btn, .plan-action-btn')) {
                 e.stopPropagation();
                 return;
             }
             selectedPlanId = (selectedPlanId === plan['plan_id']) ? null : plan['plan_id'];
             selectedTripServiceCenter = null;
             applyFilters();
+        });
+
+        div.querySelector('.plan-edit-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openPlanEditor(plan);
+        });
+        div.querySelector('.plan-delete-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deletePlan(plan);
         });
 
         const centerBtn = div.querySelector('.plan-service-center-btn');
