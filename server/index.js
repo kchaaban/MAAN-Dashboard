@@ -7,6 +7,7 @@ const path = require('path');
 const zlib = require('zlib');
 const db = require('./db');
 const auth = require('./auth');
+const writes = require('./writes');
 
 const app = express();
 const PORT = process.env.PORT || 3100;
@@ -96,6 +97,72 @@ app.post('/maan-dashboard/api/db-refresh', authenticateToken, (req, res) => {
     }
     db.invalidate(req.query.dataset);
     res.json({ ok: true, refreshed: req.query.dataset || 'all' });
+});
+
+// Edit endpoint. Permission and ownership are enforced in writes.js from the
+// signed token; nothing about who the caller is comes from the request body.
+app.patch('/maan-dashboard/api/db/:resource/:id', authenticateToken, async (req, res) => {
+    if (!req.user.scope) {
+        return res.status(401).json({ error: 'Session predates access scoping; please sign in again' });
+    }
+
+    try {
+        const result = await writes.updateRow({
+            resource: req.params.resource,
+            id: req.params.id,
+            patch: req.body,
+            user: req.user,
+        });
+
+        if (!result.ok) {
+            return res.status(result.status).json({ error: result.error, rejected: result.rejected });
+        }
+        return res.json({ ok: true, row: result.row, before: result.before });
+    } catch (err) {
+        console.error(`[api] edit ${req.params.resource}/${req.params.id} failed:`, err.message);
+        return res.status(502).json({ error: 'Update failed', detail: err.message });
+    }
+});
+
+app.delete('/maan-dashboard/api/db/:resource/:id', authenticateToken, async (req, res) => {
+    if (!req.user.scope) {
+        return res.status(401).json({ error: 'Session predates access scoping; please sign in again' });
+    }
+
+    try {
+        const result = await writes.deleteRow({
+            resource: req.params.resource,
+            id: req.params.id,
+            user: req.user,
+        });
+
+        if (!result.ok) return res.status(result.status).json({ error: result.error });
+        return res.json({ ok: true, id: result.id });
+    } catch (err) {
+        console.error(`[api] delete ${req.params.resource}/${req.params.id} failed:`, err.message);
+        return res.status(502).json({ error: 'Delete failed', detail: err.message });
+    }
+});
+
+// What the signed-in user may edit, plus the field descriptors and dropdown
+// contents the editor renders from, so the UI never hardcodes the field list.
+app.get('/maan-dashboard/api/db-permissions', authenticateToken, async (req, res) => {
+    const resources = Object.keys(writes.RESOURCES).filter((r) => writes.mayEdit(req.user, r));
+    const editable = resources.reduce((acc, resource) => {
+        acc[resource] = writes.fieldsFor(resource);
+        return acc;
+    }, {});
+
+    let options = {};
+    if (resources.length) {
+        try {
+            options = await writes.getEditOptions();
+        } catch (err) {
+            console.error('[api] edit options failed:', err.message);
+        }
+    }
+
+    res.json({ isAdmin: writes.isAdmin(req.user), scope: req.user.scope, editable, options });
 });
 
 app.get('/maan-dashboard/api/db-health', async (req, res) => {

@@ -20,6 +20,23 @@ const pool = new Pool({
 
 pool.on('error', (err) => console.error('[db] idle client error:', err.message));
 
+// A second pool for the edit endpoints. Kept deliberately separate and small so
+// that read traffic — the overwhelming majority — can never issue a write, and
+// so a runaway write path cannot starve the read pool.
+const writePool = new Pool({
+    host: process.env.PGHOST || '127.0.0.1',
+    port: Number(process.env.PGPORT) || 5431,
+    database: process.env.PGDATABASE || 'transport',
+    user: process.env.PGW_USER,
+    password: process.env.PGW_PASSWORD,
+    max: 2,
+    idleTimeoutMillis: 10000,
+    connectionTimeoutMillis: 10000,
+    statement_timeout: 15000,
+});
+
+writePool.on('error', (err) => console.error('[db:write] idle client error:', err.message));
+
 // A scope is {kind: 'all' | 'company' | 'center' | 'none', id?}. It always comes
 // from the signed token, never from the request, so `id` is never user input.
 function scopeKey(scope) {
@@ -327,4 +344,4 @@ function invalidate(name) {
     }
 }
 
-module.exports = { pool, getDataset, invalidate, DATASETS, scopeKey };
+module.exports = { pool, writePool, getDataset, invalidate, DATASETS, scopeKey };
