@@ -3551,59 +3551,6 @@ body.light-mode .map-static-label span {
     }
 }
 
-/* Residence ring readability fix */
-.rings-summary-section .residence-top-card,
-.rings-summary-section .residence-top-card .progress-ring-item,
-.rings-summary-section .residence-top-card .progress-ring-item strong,
-.rings-summary-section .residence-top-card .residence-assignment-ring strong,
-#residenceAssignmentCharts,
-#residenceAssignmentCharts strong {
-    color: var(--text-primary) !important;
-}
-
-.rings-summary-section .residence-top-card .progress-ring-wrap span,
-#residenceAssignmentCharts .progress-ring-wrap span {
-    color: var(--brand-mint) !important;
-    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.42);
-}
-
-/* Hard override: residence ring labels must stay readable on dark ring cards */
-body.dark-mode #residenceAssignmentCharts,
-body.dark-mode #residenceAssignmentCharts *,
-body.dark-mode .residence-top-card,
-body.dark-mode .residence-top-card *,
-body.dark-mode .residence-assignment-ring,
-body.dark-mode .residence-assignment-ring strong,
-body.dark-mode .residence-assignment-ring span {
-    color: #fafafa !important;
-    -webkit-text-fill-color: #fafafa !important;
-}
-
-body.dark-mode #residenceAssignmentCharts .progress-ring-wrap span,
-body.dark-mode .residence-assignment-ring .progress-ring-wrap span {
-    color: var(--brand-green) !important;
-    -webkit-text-fill-color: var(--brand-green) !important;
-}
-
-/* Light mode: residence ring text should be dark for contrast */
-body.light-mode #residenceAssignmentCharts,
-body.light-mode #residenceAssignmentCharts *,
-body.light-mode .residence-top-card,
-body.light-mode .residence-top-card *,
-body.light-mode .residence-assignment-ring,
-body.light-mode .residence-assignment-ring strong,
-body.light-mode .residence-assignment-ring span {
-    color: #0f172a !important;
-    -webkit-text-fill-color: #0f172a !important;
-}
-
-body.light-mode #residenceAssignmentCharts .progress-ring-wrap span,
-body.light-mode .residence-assignment-ring .progress-ring-wrap span {
-    color: #15803d !important;
-    -webkit-text-fill-color: #15803d !important;
-    text-shadow: 0 1px 3px rgba(255, 255, 255, 0.8) !important;
-}
-
 /* Notification animations */
 @keyframes slideIn {
     from {
