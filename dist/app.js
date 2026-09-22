@@ -4727,6 +4727,33 @@ function focusDistrictOnMap(districtName) {
     return true;
 }
 
+// View-mode residences are drawn as a home, not a dot. The glyph is sized by a
+// CSS custom property rather than by rebuilding the markers, so zooming stays
+// cheap — the same approach the map labels use.
+const RESIDENCE_ICON_MIN = 9;
+const RESIDENCE_ICON_MAX = 20;
+
+function residenceHouseIcon() {
+    // Zero-size anchor: the span centres itself on the point with a transform,
+    // so CSS can resize it at any zoom without the anchor drifting.
+    return L.divIcon({
+        className: '',
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+        html: '<span class="residence-pin fa-solid fa-house" aria-hidden="true"></span>',
+    });
+}
+
+function updateResidenceIconScale() {
+    if (!map) return;
+    const container = map.getContainer();
+    if (!container) return;
+    const zoom = map.getZoom();
+    // ~9px out at city scale, ~20px in at street scale.
+    const size = Math.max(RESIDENCE_ICON_MIN, Math.min(RESIDENCE_ICON_MAX, 9 + (zoom - 12) * 1.6));
+    container.style.setProperty('--residence-icon-size', `${size.toFixed(1)}px`);
+}
+
 function updateMapLabelScale() {
     if (!map) return;
     const container = map.getContainer();
@@ -4846,6 +4873,8 @@ function initMap() {
     });
 
     map.on('zoomend', updateMapLabelScale);
+    map.on('zoomend', updateResidenceIconScale);
+    updateResidenceIconScale();
 }
 
 // Populate Filter Dropdowns
@@ -4889,6 +4918,9 @@ function populateTopNavDropdowns() {
         .sort((a, b) => a.name.localeCompare(b.name, 'ar'))
         .map(c => ({ value: c.key, label: c.name }));
     companyDD.setOptions(companyOpts);
+    // The buttons are the visible filter; repaint them whenever the catalogue is
+    // rebuilt (i.e. whenever a new dataset lands).
+    renderOwnerButtons();
     companyDD.setValue(selectedServiceCompanies.size === 1 ? Array.from(selectedServiceCompanies)[0] : '');
     populateCenterDropdown();
 }
@@ -5037,10 +5069,211 @@ function buildSearchableDropdown(inputId, listId, hiddenSelectId, onSelect, clea
 function updateSidebarClearBtn() {
     const btn = document.getElementById('sidebarClearFiltersBtn');
     if (!btn) return;
-    const active = (companyDD && companyDD.getValue()) ||
-                   (centerDD && centerDD.getValue()) ||
+    const active = selectedServiceCompanies.size > 0 ||
+                   selectedServiceCenters.size > 0 ||
                    selectedCampLabel;
     btn.hidden = !active;
+}
+
+// ── Owner filter buttons (view mode) ───────────────────────────────────────
+// Companies and centres are picked from buttons rather than dropdowns. The bar
+// on each button is that owner's share of pilgrims relative to the largest —
+// not a completeness figure, because completeness has no variance here: the
+// importer generates plans from the assignment, so planned ÷ assigned is 100%
+// for every centre that has been imported. Share of pilgrims is what actually
+// distinguishes one owner from another, and it makes the panel a size ranking.
+
+let centerButtonFilterText = '';
+
+function ownerShareBar(value, max) {
+    const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
+    // A sliver for a non-zero value, so "tiny" never reads as "none".
+    return value > 0 ? Math.max(3, pct) : 0;
+}
+
+function formatPilgrims(n) {
+    const v = Number(n) || 0;
+    if (v >= 1000) return `${Math.round(v / 1000).toLocaleString()}\u00a0ألف`;
+    return v.toLocaleString();
+}
+
+function renderOwnerButtons() {
+    renderCompanyButtons();
+    renderCenterButtons();
+    updateSidebarClearBtn();
+}
+
+function renderCompanyButtons() {
+    const host = document.getElementById('companyButtons');
+    if (!host) return;
+
+    const totals = collectAssignmentMetrics(rawData).companyMetrics;
+    const planned = collectPlannedMetrics(rawData).companyMetrics;
+    const items = serviceCompaniesCatalog.map((c) => {
+        const t = totals.get(c.key);
+        const p = planned.get(c.key);
+        const pilgrims = (t && t.totalPilgrims) || 0;
+        return {
+            key: c.key,
+            label: c.name,
+            pilgrims,
+            hasPlans: Boolean(p && p.plannedPilgrims > 0),
+        };
+    }).sort((a, b) => b.pilgrims - a.pilgrims || a.label.localeCompare(b.label, 'ar'));
+
+    const max = items.reduce((m, i) => Math.max(m, i.pilgrims), 0);
+
+    // Progressive disclosure: once a company is chosen the list collapses to it,
+    // handing the panel's height to the centres, and then to the trips. Three
+    // full lists would not fit a 300px column and the trips lost every time.
+    const chosen = selectedServiceCompanies.size > 0;
+    const shown = chosen ? items.filter((i) => selectedServiceCompanies.has(i.key)) : items;
+    setOwnerGroupCollapsed('companyGroup', chosen, () => selectCompanyFilter(null));
+
+    const count = document.getElementById('companyCount');
+    if (count) count.textContent = chosen ? '' : items.length.toLocaleString();
+
+    host.innerHTML = shown.map((i) => {
+        const on = selectedServiceCompanies.has(i.key);
+        const fill = ownerShareBar(i.pilgrims, max);
+        const note = i.hasPlans ? formatPilgrims(i.pilgrims) : 'لا توجد خطط';
+        return `
+            <button type="button" class="owner-btn${on ? ' is-active' : ''}${i.hasPlans ? '' : ' is-empty'}"
+                    data-key="${escapeHtml(i.key)}" aria-pressed="${on ? 'true' : 'false'}"
+                    title="${escapeHtml(i.label)} — ${escapeHtml(note)}">
+                <span class="owner-btn-fill" style="inline-size:${fill.toFixed(1)}%"></span>
+                <span class="owner-btn-name">${escapeHtml(i.label)}</span>
+                <span class="owner-btn-value">${escapeHtml(note)}</span>
+            </button>`;
+    }).join('');
+
+    host.querySelectorAll('.owner-btn').forEach((btn) => {
+        btn.addEventListener('click', () => selectCompanyFilter(btn.dataset.key));
+    });
+}
+
+function renderCenterButtons() {
+    const group = document.getElementById('centerGroup');
+    const host = document.getElementById('centerButtons');
+    if (!group || !host) return;
+
+    // Nothing to show until a company narrows the 724 centres down.
+    if (!selectedServiceCompanies.size) {
+        group.hidden = true;
+        host.innerHTML = '';
+        return;
+    }
+    group.hidden = false;
+
+    // buildServiceCenterRows already restricts itself to the selected company.
+    const all = buildServiceCenterRows(rawData);
+    const term = centerButtonFilterText.trim().toLowerCase();
+    const items = (term
+        ? all.filter((r) => `${r.centerNumber} ${r.label}`.toLowerCase().includes(term))
+        : all
+    ).sort((a, b) => b.totalPilgrims - a.totalPilgrims
+        || String(a.centerNumber).localeCompare(String(b.centerNumber), 'ar'));
+
+    const max = items.reduce((m, i) => Math.max(m, i.totalPilgrims || 0), 0);
+
+    const chosen = selectedServiceCenters.size > 0;
+    const shown = chosen ? items.filter((i) => selectedServiceCenters.has(i.centerKey)) : items;
+    setOwnerGroupCollapsed('centerGroup', chosen, () => selectCenterFilter(null));
+
+    const count = document.getElementById('centerCount');
+    if (count) {
+        count.textContent = chosen
+            ? ''
+            : `${items.length.toLocaleString()}${term ? ` / ${all.length.toLocaleString()}` : ''}`;
+    }
+
+    // A search box only earns its place once the list is long, and never once a
+    // centre has been chosen.
+    const wrap = document.getElementById('centerFilterWrap');
+    if (wrap) wrap.hidden = chosen || (all.length <= 25 && !term);
+
+    if (!shown.length) {
+        host.innerHTML = '<div class="owner-empty">لا توجد مراكز مطابقة</div>';
+        return;
+    }
+
+    host.innerHTML = shown.map((i) => {
+        const on = selectedServiceCenters.has(i.centerKey);
+        const fill = ownerShareBar(i.totalPilgrims || 0, max);
+        const name = i.centerNumber ? `${i.centerNumber} — ${i.label}` : i.label;
+        return `
+            <button type="button" class="owner-btn${on ? ' is-active' : ''}"
+                    data-key="${escapeHtml(i.centerKey)}" aria-pressed="${on ? 'true' : 'false'}"
+                    title="${escapeHtml(name)} — ${escapeHtml(formatPilgrims(i.totalPilgrims || 0))}">
+                <span class="owner-btn-fill" style="inline-size:${fill.toFixed(1)}%"></span>
+                <span class="owner-btn-name">${escapeHtml(name)}</span>
+                <span class="owner-btn-value">${escapeHtml(formatPilgrims(i.totalPilgrims || 0))}</span>
+            </button>`;
+    }).join('');
+
+    host.querySelectorAll('.owner-btn').forEach((btn) => {
+        btn.addEventListener('click', () => selectCenterFilter(btn.dataset.key));
+    });
+}
+
+// Marks a group collapsed and gives it a "تغيير" control to reopen the list.
+function setOwnerGroupCollapsed(groupId, collapsed, onReopen) {
+    const group = document.getElementById(groupId);
+    if (!group) return;
+    group.classList.toggle('is-collapsed', collapsed);
+
+    let btn = group.querySelector('.owner-group-change');
+    if (!collapsed) { if (btn) btn.remove(); return; }
+    if (!btn) {
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'owner-group-change';
+        btn.innerHTML = '<i class="fa-solid fa-rotate-left" aria-hidden="true"></i> تغيير';
+        group.querySelector('.owner-group-title')?.append(btn);
+    }
+    btn.onclick = onReopen;
+}
+
+// Clicking the active button clears it, so a click is always reversible.
+// A null key clears outright, which is what the "تغيير" control sends.
+function selectCompanyFilter(key) {
+    const wasOn = key === null || selectedServiceCompanies.has(key);
+    selectedServiceCompanies.clear();
+    selectedServiceCenters.clear();
+    selectedCampLabel = '';
+    centerButtonFilterText = '';
+    const filterInput = document.getElementById('centerButtonFilter');
+    if (filterInput) filterInput.value = '';
+    if (!wasOn) selectedServiceCompanies.add(key);
+    selectedPlanId = null;
+    renderOwnerButtons();
+    syncPlanListSection();
+    applyFilters();
+}
+
+function selectCenterFilter(key) {
+    const wasOn = key === null || selectedServiceCenters.has(key);
+    selectedServiceCenters.clear();
+    selectedCampLabel = '';
+    if (!wasOn) selectedServiceCenters.add(key);
+    selectedPlanId = null;
+    renderOwnerButtons();
+    syncPlanListSection();
+    applyFilters();
+}
+
+// The recent-plans list is only meaningful once a centre is chosen.
+function syncPlanListSection() {
+    const section = document.getElementById('planListSection');
+    if (section) section.hidden = selectedServiceCenters.size === 0;
+}
+
+function initOwnerButtons() {
+    document.getElementById('centerButtonFilter')?.addEventListener('input', debounce((e) => {
+        centerButtonFilterText = e.target.value || '';
+        renderCenterButtons();
+    }, 180));
+    syncPlanListSection();
 }
 
 function setupTopNavDropdownEvents() {
@@ -5171,6 +5404,7 @@ function setupMobileMenu() {
 function setupEventListeners() {
     setupMobileMenu();
     setupTopNavDropdownEvents();
+    initOwnerButtons();
     const filters = ['periodFilter', 'transportFilter', 'planTypeFilter', 'districtFilter'];
     filters.forEach(id => {
         document.getElementById(id).addEventListener('change', () => {
@@ -6269,9 +6503,13 @@ function clearAllFilters() {
     selectedServiceCompanies.clear();
     selectedServiceCenters.clear();
     selectedCampLabel = '';
+    centerButtonFilterText = '';
+    const centerFilterInput = document.getElementById('centerButtonFilter');
+    if (centerFilterInput) centerFilterInput.value = '';
     populateCenterDropdown();
     populateCampDropdown();
-    updateSidebarClearBtn();
+    renderOwnerButtons();
+    syncPlanListSection();
     applyFilters();
 }
 
@@ -7180,14 +7418,8 @@ function updateMap() {
                     if (geojson.type === 'Point') {
                         let coord = geojson.coordinates;
                         if (item.isResidence) {
-                            const marker = L.circleMarker([coord[1], coord[0]], {
-                                radius: 7,
-                                fillColor: '#ffffff',
-                                color: '#0ea5e9',
-                                weight: 3,
-                                opacity: 1,
-                                fillOpacity: 1,
-                                className: 'residence-circle-marker'
+                            const marker = L.marker([coord[1], coord[0]], {
+                                icon: residenceHouseIcon(),
                             }).addTo(routeLayerGroup);
                             bindPopupToLayer(marker, row, item);
                             if (showDetailedMapLabels) {
@@ -7217,14 +7449,8 @@ function updateMap() {
                             latlngs.forEach(ll => { sumLat += ll[0]; sumLng += ll[1]; });
                             let center = [sumLat / latlngs.length, sumLng / latlngs.length];
 
-                            const marker = L.circleMarker(center, {
-                                radius: 7,
-                                fillColor: '#ffffff',
-                                color: '#0ea5e9',
-                                weight: 3,
-                                opacity: 1,
-                                fillOpacity: 1,
-                                className: 'residence-circle-marker'
+                            const marker = L.marker(center, {
+                                icon: residenceHouseIcon(),
                             }).addTo(routeLayerGroup);
                             bindPopupToLayer(marker, row, item);
                             if (showDetailedMapLabels) {

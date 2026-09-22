@@ -30,6 +30,16 @@
             </div>
 
             <div class="visually-hidden" aria-hidden="true">
+                <!-- Retained as the filter API the buttons drive; no longer shown. -->
+                <input type="text" id="companySearch" autocomplete="off">
+                <ul id="companyDropdownList" hidden></ul>
+                <button id="companyClearBtn" type="button" hidden></button>
+                <input type="text" id="centerSearch" autocomplete="off">
+                <ul id="centerDropdownList" hidden></ul>
+                <button id="centerClearBtn" type="button" hidden></button>
+                <input type="text" id="campSearch" autocomplete="off">
+                <ul id="campDropdownList" hidden></ul>
+                <button id="campClearBtn" type="button" hidden></button>
                 <tbody id="serviceCompaniesTableBody"></tbody>
                 <tbody id="serviceCentersTableBody"></tbody>
                 <select id="companyDropdown"></select>
@@ -57,30 +67,38 @@
                         <i class="fa-solid fa-xmark"></i>
                     </button>
                 </div>
-                <div class="sidebar-searchable-wrap">
-                    <i class="fa-solid fa-building sidebar-select-icon"></i>
-                    <input type="text" class="sidebar-select" id="companySearch" placeholder="شركات الخدمة" autocomplete="off" aria-label="شركة الخدمة">
-                    <button id="companyClearBtn" class="sidebar-input-clear-btn" type="button" title="مسح" aria-label="مسح الشركة" hidden><i class="fa-solid fa-xmark"></i></button>
-                    <ul class="sidebar-dropdown-list" id="companyDropdownList" hidden></ul>
+
+                <!-- Companies as buttons. The bar length is the company's share of
+                     pilgrims, so the panel doubles as a sense of who is large. -->
+                <div class="owner-group" id="companyGroup">
+                    <h4 class="owner-group-title">
+                        <i class="fa-solid fa-building" aria-hidden="true"></i>
+                        <span>شركات الخدمة</span>
+                        <span class="owner-group-count" id="companyCount"></span>
+                    </h4>
+                    <div class="owner-buttons" id="companyButtons"></div>
                 </div>
-                <div class="sidebar-searchable-wrap">
-                    <i class="fa-solid fa-sitemap sidebar-select-icon"></i>
-                    <input type="text" class="sidebar-select" id="centerSearch" placeholder="مراكز الخدمة" autocomplete="off" aria-label="مركز الخدمة">
-                    <button id="centerClearBtn" class="sidebar-input-clear-btn" type="button" title="مسح" aria-label="مسح المركز" hidden><i class="fa-solid fa-xmark"></i></button>
-                    <ul class="sidebar-dropdown-list" id="centerDropdownList" hidden></ul>
-                </div>
-                <div class="sidebar-searchable-wrap">
-                    <i class="fa-solid fa-campground sidebar-select-icon"></i>
-                    <input type="text" class="sidebar-select" id="campSearch" placeholder="المخيمات" autocomplete="off" aria-label="المخيم">
-                    <button id="campClearBtn" class="sidebar-input-clear-btn" type="button" title="مسح" aria-label="مسح المخيم" hidden><i class="fa-solid fa-xmark"></i></button>
-                    <ul class="sidebar-dropdown-list" id="campDropdownList" hidden></ul>
+
+                <!-- Centres appear only once a company is chosen: there are 724 of
+                     them, and one company alone has 176. -->
+                <div class="owner-group" id="centerGroup" hidden>
+                    <h4 class="owner-group-title">
+                        <i class="fa-solid fa-sitemap" aria-hidden="true"></i>
+                        <span>مراكز الخدمة</span>
+                        <span class="owner-group-count" id="centerCount"></span>
+                    </h4>
+                    <div class="owner-search" id="centerFilterWrap" hidden>
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                        <input type="search" id="centerButtonFilter" placeholder="بحث في المراكز…" autocomplete="off" aria-label="بحث في مراكز الخدمة">
+                    </div>
+                    <div class="owner-buttons" id="centerButtons"></div>
                 </div>
             </div>
 
             <!-- Edit mode: replaces the filters + recent plans with the data nav -->
             <nav class="entity-nav" id="entityNav" aria-label="البيانات المرجعية" hidden></nav>
 
-            <div class="plan-list-section">
+            <div class="plan-list-section" id="planListSection" hidden>
                 <h3><i class="fa-solid fa-clock-rotate-left"></i> الخطط الأخيرة</h3>
                 <div class="plan-list" id="planList">
                     <!-- Populated by JS -->

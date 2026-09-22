@@ -1,5 +1,5 @@
 {
- "extracted_at": "2026-09-21T20:04:56.601Z",
+ "extracted_at": "2026-09-22T12:33:44.267Z",
  "database": "transport",
  "tables": [
   "assign_camps",
@@ -400,6 +400,14 @@
    "column_name": "area",
    "ordinal_position": 12,
    "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_warehouses",
+   "column_name": "transport_company_id",
+   "ordinal_position": 13,
+   "type": "uuid",
    "nullable": true,
    "column_default": null
   },
@@ -4656,6 +4664,20 @@
    "def": "PRIMARY KEY (id)"
   },
   {
+   "conname": "bus_warehouses_transport_company_id_fkey",
+   "contype": "f",
+   "table_name": "bus_warehouses",
+   "columns": [
+    "transport_company_id"
+   ],
+   "ref_table": "transport_companies",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (transport_company_id) REFERENCES transport_companies(id) ON DELETE SET NULL"
+  },
+  {
    "conname": "bus_warehouses_pkey",
    "contype": "p",
    "table_name": "bus_warehouses",
@@ -5796,14 +5818,14 @@
  "counts": {
   "assign_camps": 1136,
   "assign_residences": 4296,
-  "bus_stops": 12,
-  "bus_warehouses": 54,
+  "bus_stops": 9,
+  "bus_warehouses": 51,
   "cache": 0,
   "cache_locks": 0,
   "camps": 1333,
   "countries": 104,
   "drop_off_areas": 14,
-  "entrances": 29,
+  "entrances": 26,
   "failed_jobs": 1,
   "general_points": 4,
   "import_jobs": 54,
@@ -5814,7 +5836,7 @@
   "model_has_permissions": 0,
   "model_has_roles": 15566,
   "organizers": 541,
-  "parking": 45,
+  "parking": 42,
   "password_reset_tokens": 1,
   "paths": 4974,
   "periods": 4,
@@ -5834,7 +5856,7 @@
   "sessions": 12,
   "spatial_ref_sys": 8500,
   "timing": 18,
-  "transport_companies": 89,
+  "transport_companies": 88,
   "transport_companies_bak": 614,
   "transport_company_user_bak": 0,
   "transport_types": 4,

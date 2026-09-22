@@ -120,11 +120,11 @@ footer { margin-top: 44px; color: var(--muted); font-size: .82rem; border-top: 1
   <p class="lede">Entity-relationship map of the <code>transport</code> Postgres database behind the planning platform — read straight from <code>information_schema</code> and <code>pg_constraint</code>, so it shows the schema as it is, not as documented.</p>
   <div class="facts">
     <div class="fact"><b>46</b><span>tables</span></div>
-    <div class="fact"><b>554</b><span>columns</span></div>
-    <div class="fact"><b>46</b><span>foreign keys</span></div>
+    <div class="fact"><b>555</b><span>columns</span></div>
+    <div class="fact"><b>47</b><span>foreign keys</span></div>
     <div class="fact"><b>7</b><span>views</span></div>
-    <div class="fact"><b>46,444</b><span>rows</span></div>
-    <div class="fact src"><b>2026-09-21 20:04 UTC</b><span>extracted from live DB</span></div>
+    <div class="fact"><b>46,431</b><span>rows</span></div>
+    <div class="fact src"><b>2026-09-22 12:33 UTC</b><span>extracted from live DB</span></div>
   </div>
   <nav class="toc" aria-label="Sections">
     <a href="#diagram">Diagram</a><a href="#mechanism">Plan endpoints</a><a href="#d-planning">Planning</a><a href="#d-places">Places</a><a href="#d-org">Organisation</a><a href="#d-alloc">Allocation</a><a href="#d-framework">Framework</a><a href="#views">Views</a><a href="#notes">Notes</a>
@@ -254,6 +254,7 @@ erDiagram
     bus_warehouses {
         uuid id PK
         varchar name
+        uuid transport_company_id FK
         omitted columns_10 "see table below"
     }
     general_points {
@@ -349,6 +350,7 @@ erDiagram
     residences |o--o{ assign_residences : "residence_id"
     service_centers |o--o{ assign_residences : "service_center_id"
     users |o--o{ assign_residences : "created_by"
+    transport_companies |o--o{ bus_warehouses : "transport_company_id"
     drop_off_areas |o--o{ camps : "drop_off_area_id"
     entrances |o--o{ camps : "entrance_id"
     platforms |o--o{ camps : "platform_id"
@@ -385,8 +387,8 @@ erDiagram
   <figcaption>Foreign-key graph of the planning, places, organisation and allocation tables. <code>plans</code> is the hub: it references service_centers (owner), users (creator), plan_types, timing, transport_types, entrances, paths, residences and plan_desires. <code>camps</code> references <code>paths</code> four times, one per path role.</figcaption>
 </figure>
 <div class="reading">
-  <div><b>Cardinality.</b> All 46 foreign keys are many-to-one; there are no join tables in the domain — the Laravel RBAC tables are the only ones.</div>
-  <div><b>On delete.</b> 36 of 46 keys are <code>set null</code>; <code>cascade</code> (10) is used only where the child is meaningless without the parent (timing and round_trips → plan_types, plan_logs → plans, mashaers_trips → service_centers, users → types, RBAC pivots).</div>
+  <div><b>Cardinality.</b> All 47 foreign keys are many-to-one; there are no join tables in the domain — the Laravel RBAC tables are the only ones.</div>
+  <div><b>On delete.</b> 37 of 47 keys are <code>set null</code>; <code>cascade</code> (10) is used only where the child is meaningless without the parent (timing and round_trips → plan_types, plan_logs → plans, mashaers_trips → service_centers, users → types, RBAC pivots).</div>
   <div><b>Identity.</b> Every domain table uses a <code>uuid</code> primary key. Unique constraints exist only on countries, roles, permissions, transport_types.code and transport_companies.name.</div>
 </div>
 
@@ -556,7 +558,7 @@ erDiagram
 <article class="table-card" id="t-entrances">
   <header>
     <h4><code>entrances</code></h4>
-    <span class="rows" title="row count at extraction">29 rows</span>
+    <span class="rows" title="row count at extraction">26 rows</span>
   </header>
   <div class="pills"></div>
   <div class="scroll"><table><tbody><tr><td class="col">id<span class="badge pk">PK</span></td><td class="type">uuid</td><td class="refcell"></td></tr><tr><td class="col">name</td><td class="type">varchar</td><td class="refcell"></td></tr><tr><td class="col">created_at</td><td class="type">timestamp<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">updated_at</td><td class="type">timestamp<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">shape_area</td><td class="type">double<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">shape_length</td><td class="type">double<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">gis_data_type</td><td class="type">varchar<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">platform_id<span class="badge fk">FK</span></td><td class="type">uuid<span class="null" title="nullable">?</span></td><td class="refcell"><span class="ref">→ <a href="#t-platforms">platforms</a>.id<span class="ondel"> · set null</span></span></td></tr><tr><td class="col">gis</td><td class="type">geometry<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">longitude</td><td class="type">double<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">latitude</td><td class="type">double<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">asm_code</td><td class="type">varchar<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">objectid</td><td class="type">integer<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">capacity</td><td class="type">integer<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr></tbody></table></div>
@@ -592,7 +594,7 @@ erDiagram
 <article class="table-card" id="t-bus_stops">
   <header>
     <h4><code>bus_stops</code></h4>
-    <span class="rows" title="row count at extraction">12 rows</span>
+    <span class="rows" title="row count at extraction">9 rows</span>
   </header>
   <div class="pills"></div>
   <div class="scroll"><table><tbody><tr><td class="col">id<span class="badge pk">PK</span></td><td class="type">uuid</td><td class="refcell"></td></tr><tr><td class="col">name</td><td class="type">varchar</td><td class="refcell"></td></tr><tr><td class="col">created_at</td><td class="type">timestamp<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">updated_at</td><td class="type">timestamp<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">shape_area</td><td class="type">double<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">shape_length</td><td class="type">double<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">gis_data_type</td><td class="type">varchar<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">gis</td><td class="type">geometry<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">objectid</td><td class="type">integer<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">area</td><td class="type">varchar<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr></tbody></table></div>
@@ -601,7 +603,7 @@ erDiagram
 <article class="table-card" id="t-parking">
   <header>
     <h4><code>parking</code></h4>
-    <span class="rows" title="row count at extraction">45 rows</span>
+    <span class="rows" title="row count at extraction">42 rows</span>
   </header>
   <div class="pills"></div>
   <div class="scroll"><table><tbody><tr><td class="col">id<span class="badge pk">PK</span></td><td class="type">uuid</td><td class="refcell"></td></tr><tr><td class="col">name</td><td class="type">varchar</td><td class="refcell"></td></tr><tr><td class="col">created_at</td><td class="type">timestamp<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">updated_at</td><td class="type">timestamp<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">shape_area</td><td class="type">double<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">shape_length</td><td class="type">double<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">gis_data_type</td><td class="type">varchar<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">capacity</td><td class="type">integer<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">gis</td><td class="type">geometry<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">area</td><td class="type">varchar<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">street</td><td class="type">varchar<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">objectid</td><td class="type">integer<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr></tbody></table></div>
@@ -610,10 +612,10 @@ erDiagram
 <article class="table-card" id="t-bus_warehouses">
   <header>
     <h4><code>bus_warehouses</code></h4>
-    <span class="rows" title="row count at extraction">54 rows</span>
+    <span class="rows" title="row count at extraction">51 rows</span>
   </header>
   <div class="pills"></div>
-  <div class="scroll"><table><tbody><tr><td class="col">id<span class="badge pk">PK</span></td><td class="type">uuid</td><td class="refcell"></td></tr><tr><td class="col">name</td><td class="type">varchar</td><td class="refcell"></td></tr><tr><td class="col">created_at</td><td class="type">timestamp<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">updated_at</td><td class="type">timestamp<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">shape_area</td><td class="type">double<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">shape_length</td><td class="type">double<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">gis_data_type</td><td class="type">varchar<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">gis</td><td class="type">geometry<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">capacity</td><td class="type">integer<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">objectid</td><td class="type">integer<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">city</td><td class="type">varchar<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">area</td><td class="type">varchar<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr></tbody></table></div>
+  <div class="scroll"><table><tbody><tr><td class="col">id<span class="badge pk">PK</span></td><td class="type">uuid</td><td class="refcell"></td></tr><tr><td class="col">name</td><td class="type">varchar</td><td class="refcell"></td></tr><tr><td class="col">created_at</td><td class="type">timestamp<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">updated_at</td><td class="type">timestamp<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">shape_area</td><td class="type">double<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">shape_length</td><td class="type">double<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">gis_data_type</td><td class="type">varchar<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">gis</td><td class="type">geometry<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">capacity</td><td class="type">integer<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">objectid</td><td class="type">integer<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">city</td><td class="type">varchar<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">area</td><td class="type">varchar<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">transport_company_id<span class="badge fk">FK</span></td><td class="type">uuid<span class="null" title="nullable">?</span></td><td class="refcell"><span class="ref">→ <a href="#t-transport_companies">transport_companies</a>.id<span class="ondel"> · set null</span></span></td></tr></tbody></table></div>
   
 </article>
 <article class="table-card" id="t-general_points">
@@ -691,11 +693,11 @@ erDiagram
 <article class="table-card" id="t-transport_companies">
   <header>
     <h4><code>transport_companies</code></h4>
-    <span class="rows" title="row count at extraction">89 rows</span>
+    <span class="rows" title="row count at extraction">88 rows</span>
   </header>
   <div class="pills"></div>
   <div class="scroll"><table><tbody><tr><td class="col">id<span class="badge pk">PK</span></td><td class="type">uuid</td><td class="refcell"></td></tr><tr><td class="col">name<span class="badge uk">UQ</span></td><td class="type">varchar</td><td class="refcell"></td></tr><tr><td class="col">created_at</td><td class="type">timestamp<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr><tr><td class="col">updated_at</td><td class="type">timestamp<span class="null" title="nullable">?</span></td><td class="refcell"></td></tr></tbody></table></div>
-  
+  <div class="incoming"><span class="incoming-label">Referenced by</span> <a href="#t-bus_warehouses"><code>bus_warehouses.transport_company_id</code></a></div>
 </article>
 <article class="table-card" id="t-transport_types">
   <header>
@@ -1046,6 +1048,6 @@ erDiagram
   <div class="note"><h4>Shared residences</h4><p>A <code>residences</code> row is referenced by plans of up to 13 different service centres — one building housing several companies’ pilgrims — so start-point uniqueness is not per centre.</p></div>
 </div>
 
-<footer>Generated from the live <code>transport</code> database (2026-09-21 20:04 UTC) via the read-only <code>ro_user</code>; row counts are exact at that moment. Regenerate with <code>npm run erd</code> in <code>server/</code> — nothing here is hand-maintained.</footer>
+<footer>Generated from the live <code>transport</code> database (2026-09-22 12:33 UTC) via the read-only <code>ro_user</code>; row counts are exact at that moment. Regenerate with <code>npm run erd</code> in <code>server/</code> — nothing here is hand-maintained.</footer>
 </div>
 <script>setTimeout(function () {  var pending = document.querySelectorAll("pre.mermaid");  if (!pending.length || window.mermaid) return;  var el = document.createElement("script");  el.src = "https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js";  el.onload = function () {    var dark = document.documentElement.getAttribute("data-theme") === "dark" ||      (document.documentElement.getAttribute("data-theme") !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);    window.mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "neutral", securityLevel: "loose" });    window.mermaid.run({ nodes: document.querySelectorAll("pre.mermaid") });  };  document.head.appendChild(el);}, 2500);</script>
