@@ -807,4 +807,8 @@ async function commit({ files, user }) {
     }
 }
 
-module.exports = { analyze, commit, mayImport, normalizeInputs, resolve };
+module.exports = {
+    analyze, commit, mayImport, normalizeInputs, resolve,
+    // Shared with entity-io.js, so both importers read CSV the same way.
+    parseCsv, rowsToObjects,
+};

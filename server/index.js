@@ -9,6 +9,7 @@ const db = require('./db');
 const auth = require('./auth');
 const writes = require('./writes');
 const plansImport = require('./plans-import');
+const entityIo = require('./entity-io');
 
 const app = express();
 const PORT = process.env.PORT || 3100;
@@ -175,6 +176,48 @@ app.get('/maan-dashboard/api/entities/:resource', authenticateToken, async (req,
     }
 });
 
+// ── Bulk export / import of reference data ─────────────────────────────────
+// Export is open to any admin; import is system_admin only, and always runs
+// analyze first so the caller sees what a commit would change.
+
+app.get('/maan-dashboard/api/entities/:resource/export', authenticateToken, async (req, res) => {
+    try {
+        const result = await entityIo.exportCsv({ resource: req.params.resource, user: req.user });
+        if (!result.ok) return res.status(result.status).json({ error: result.error });
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+        res.setHeader('X-Row-Count', result.rowCount);
+        return res.send(result.csv);
+    } catch (err) {
+        console.error(`[api] export ${req.params.resource} failed:`, err.message);
+        return res.status(502).json({ error: 'Export failed', detail: err.message });
+    }
+});
+
+// The CSV arrives as a raw body, not wrapped in JSON: the paths export is 22MB
+// of GeoJSON, and JSON-escaping every quote in it would push the upload past any
+// sane body limit for no gain.
+const csvBody = express.text({ type: ['text/csv', 'text/plain'], limit: process.env.CSV_BODY_LIMIT || '64mb' });
+
+for (const [step, run] of [['analyze', entityIo.analyzeImport], ['commit', entityIo.commitImport]]) {
+    app.post(`/maan-dashboard/api/entities/:resource/import/${step}`, authenticateToken, csvBody, async (req, res) => {
+        try {
+            const csv = typeof req.body === 'string' ? req.body : (req.body && req.body.csv);
+            const result = await run({
+                resource: req.params.resource, csv, user: req.user,
+            });
+            if (!result.ok) {
+                return res.status(result.status || 400).json({ error: result.error, report: result.report });
+            }
+            return res.json(result);
+        } catch (err) {
+            console.error(`[api] import ${step} ${req.params.resource} failed:`, err.message);
+            return res.status(502).json({ error: 'Import failed', detail: err.message });
+        }
+    });
+}
+
 app.get('/maan-dashboard/api/entities/:resource/:id', authenticateToken, async (req, res) => {
     try {
         const result = await writes.readRow({
@@ -224,7 +267,11 @@ app.get('/maan-dashboard/api/db-permissions', authenticateToken, async (req, res
         }
     }
 
-    res.json({ isAdmin: writes.isAdmin(req.user), scope: req.user.scope, editable, viewable, options });
+    res.json({
+        isAdmin: writes.isAdmin(req.user), scope: req.user.scope,
+        editable, viewable, options,
+        ...entityIo.capabilitiesFor(req.user),
+    });
 });
 
 // Service-centre plan import. `analyze` previews what would be written;

@@ -735,6 +735,8 @@ async function loadPermissions() {
     } catch (error) {
         console.warn('Could not load edit permissions; staying read-only:', error.message);
     }
+    // Permissions may land after the workspace has already rendered its header.
+    if (typeof syncEntityIoButtons === 'function') syncEntityIoButtons();
 }
 
 async function loadDatasetsFromDatabase() {
@@ -814,7 +816,6 @@ async function initializeDashboardApp() {
 // is admin-only, so a non-admin sees the toggle but only regains the plan
 // editing they already had — the nav stays empty and the dashboard stays put.
 
-const MODE_STORAGE_KEY = 'maan_mode';
 let appMode = 'view';
 let mayImportPlans = false;
 let entityLayerGroup = null;
@@ -1032,7 +1033,11 @@ async function entityRequest(path, options = {}) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-        throw new Error([data.error, ...(data.rejected || [])].filter(Boolean).join(' — ') || `HTTP ${response.status}`);
+        const error = new Error([data.error, ...(data.rejected || [])].filter(Boolean).join(' — ') || `HTTP ${response.status}`);
+        // The bulk import reports per-row problems in the body; keep them on the
+        // error so the caller can list them rather than just the headline.
+        error.payload = data;
+        throw error;
     }
     return data;
 }
@@ -1051,7 +1056,7 @@ async function initEditMode() {
     // to switch to, so the toggle stays hidden and the dashboard is view-only.
     const hasEditPowers = entityState.catalog.length > 0 || Boolean(editablePlanFields());
     if (toggle) toggle.hidden = !hasEditPowers;
-    if (!hasEditPowers) { setAppMode('view', { persist: false }); return; }
+    if (!hasEditPowers) { setAppMode('view'); return; }
 
     toggle?.addEventListener('click', () => setAppMode(appMode === 'edit' ? 'view' : 'edit'));
 
@@ -1061,6 +1066,7 @@ async function initEditMode() {
         loadEntityRows();
     }, 250));
     document.getElementById('entityCreateBtn')?.addEventListener('click', () => openEntityForm(null));
+    initEntityIo();
     document.querySelectorAll('#entityViewSwitch .entity-view-btn').forEach((btn) => {
         btn.addEventListener('click', () => setEntityView(btn.dataset.view));
     });
@@ -1069,15 +1075,15 @@ async function initEditMode() {
     try { storedView = localStorage.getItem(ENTITY_VIEW_KEY); } catch (_e) {}
     setEntityView(storedView === 'grid' ? 'grid' : 'map', { persist: false, reload: false });
 
-    let stored = null;
-    try { stored = localStorage.getItem(MODE_STORAGE_KEY); } catch (_e) {}
-    setAppMode(stored === 'edit' ? 'edit' : 'view', { persist: false });
+    // Always view mode on load. Edit mode writes to data every service centre
+    // reads, so it is something you choose each session rather than something a
+    // previous session leaves you in without asking.
+    setAppMode('view');
 }
 
-function setAppMode(mode, { persist = true } = {}) {
+function setAppMode(mode) {
     appMode = mode === 'edit' ? 'edit' : 'view';
     document.body.setAttribute('data-mode', appMode);
-    if (persist) { try { localStorage.setItem(MODE_STORAGE_KEY, appMode); } catch (_e) {} }
 
     // The control names the mode you are in; the tooltip names the one a click
     // would take you to, so neither reading of a toggle can mislead.
@@ -1112,6 +1118,7 @@ function setAppMode(mode, { persist = true } = {}) {
         // way back to it, since the nav lists entities only.
         loadOverview();
     } else {
+        if (geometryEdit.active) finishGeometryEdit(false);
         clearEntityLayer();
         // Leaving the workspace: the overlays were cleared, so put them back.
         renderCameras();
@@ -1139,6 +1146,8 @@ function renderEntityNav() {
 }
 
 function selectEntity(resource) {
+    if (geometryEdit.active) finishGeometryEdit(false);
+    pendingGeometry = undefined;
     entityState.overview = false;
     document.body.removeAttribute('data-entity-overview');
     entityState.resource = resource;
@@ -1159,9 +1168,243 @@ function selectEntity(resource) {
     if (title) title.textContent = entityState.label;
     const createBtn = document.getElementById('entityCreateBtn');
     if (createBtn) createBtn.hidden = !entityWritable(resource);
+    syncEntityIoButtons();
     renderEntityNav();
     renderEntityDetail();
     loadEntityRows();
+}
+
+// ── Bulk export / import ───────────────────────────────────────────────────
+// Export is open to any admin, import only to system_admin: one file can
+// rewrite a table every service centre reads. The server does all the checking;
+// this side only carries the file there and shows what came back.
+
+let entityImportState = { csv: null, analyzed: null };
+
+function syncEntityIoButtons() {
+    const exportBtn = document.getElementById('entityExportBtn');
+    const importBtn = document.getElementById('entityImportBtn');
+    // Neither makes sense on the overview: both act on one table.
+    const onEntity = Boolean(entityState.resource) && !entityState.overview;
+    if (exportBtn) exportBtn.hidden = !(onEntity && dbPermissions.mayExport);
+    if (importBtn) importBtn.hidden = !(onEntity && dbPermissions.mayImport);
+}
+
+// The endpoint needs the bearer token, so a plain link cannot fetch it; pull the
+// CSV and hand the browser a blob instead.
+async function downloadEntityCsv() {
+    const { resource, label } = entityState;
+    if (!resource) return;
+    const btn = document.getElementById('entityExportBtn');
+    if (btn) btn.disabled = true;
+    try {
+        const response = await fetch(
+            `/maan-dashboard/api/entities/${encodeURIComponent(resource)}/export`,
+            { headers: authHeaders() }
+        );
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.error || `HTTP ${response.status}`);
+        }
+        const blob = await response.blob();
+        const match = /filename="([^"]+)"/.exec(response.headers.get('content-disposition') || '');
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = match ? match[1] : `${resource}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        showNotification(`تم تنزيل ${label} (${response.headers.get('X-Row-Count') || '?'} سجل)`, 'success');
+    } catch (error) {
+        showNotification(`تعذر التنزيل: ${error.message}`, 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function entityImportStep(step) {
+    const order = ['file', 'analyze', 'commit'];
+    const at = order.indexOf(step);
+    document.querySelectorAll('#entityImportSteps .plan-step').forEach((el) => {
+        const i = order.indexOf(el.dataset.step);
+        el.classList.toggle('is-active', i === at);
+        el.classList.toggle('is-done', i < at);
+    });
+}
+
+function openEntityImport() {
+    if (!dbPermissions.mayImport || !entityState.resource) return;
+    entityImportState = { csv: null, analyzed: null };
+    const modal = document.getElementById('entityImportModal');
+    if (!modal) return;
+    document.getElementById('entityImportEntity').textContent = entityState.label;
+    const file = document.getElementById('entityImportFile');
+    if (file) file.value = '';
+    document.querySelector('.plan-file-state[data-for="entityImportFile"]').textContent = '';
+    const message = document.getElementById('entityImportMessage');
+    const summary = document.getElementById('entityImportSummary');
+    if (message) { message.hidden = true; message.innerHTML = ''; }
+    if (summary) { summary.hidden = true; summary.innerHTML = ''; }
+    document.getElementById('entityImportCommitBtn').hidden = true;
+    entityImportStep('file');
+    modal.hidden = false;
+}
+
+function closeEntityImport() {
+    const modal = document.getElementById('entityImportModal');
+    if (modal) modal.hidden = true;
+}
+
+function entityImportMessage(text, kind) {
+    const el = document.getElementById('entityImportMessage');
+    if (!el) return;
+    el.hidden = false;
+    el.className = `plan-modal-message is-${kind}`;
+    el.textContent = text;
+}
+
+// The analyse report and the commit report have the same shape, so one renderer
+// serves both — the heading is the only difference.
+function renderEntityImportReport(report, applied) {
+    const summary = document.getElementById('entityImportSummary');
+    if (!summary) return;
+    const tiles = [
+        { icon: 'fa-plus', label: 'سجلات جديدة', value: report.inserts },
+        { icon: 'fa-pen', label: 'سجلات مُحدَّثة', value: report.updates },
+        { icon: 'fa-equals', label: 'بلا تغيير', value: report.unchanged },
+        { icon: 'fa-draw-polygon', label: 'أشكال هندسية', value: report.geometryChanges },
+    ];
+    summary.hidden = false;
+    summary.innerHTML = `
+        <h4>${applied ? 'تم الاعتماد' : `فحص ${report.rows.toLocaleString()} صفاً`}</h4>
+        <div class="plan-summary-grid">
+            ${tiles.map((t) => `
+                <div class="plan-summary-tile">
+                    <i class="fa-solid ${t.icon}" aria-hidden="true"></i>
+                    <b>${Number(t.value || 0).toLocaleString()}</b>
+                    <span>${t.label}</span>
+                </div>`).join('')}
+        </div>
+        ${report.fields && report.fields.length ? `
+            <p class="plan-summary-note">الأعمدة المتأثرة: ${
+                report.fields.map((f) => `${escapeHtml(f.label)} (${f.count.toLocaleString()})`).join('، ')
+            }</p>` : ''}
+        ${(report.warnings || []).map((w) => `<p class="plan-summary-note">${escapeHtml(w)}</p>`).join('')}`;
+}
+
+function renderEntityImportErrors(payload) {
+    const summary = document.getElementById('entityImportSummary');
+    if (!summary) return;
+    const errors = (payload.report && payload.report.errors) || [];
+    summary.hidden = false;
+    summary.innerHTML = `
+        <h4>لم يُكتب أي شيء</h4>
+        ${errors.length ? `
+            <ul class="entity-import-errors">
+                ${errors.map((e) => `<li><b>سطر ${e.line}</b> — ${escapeHtml(e.message)}</li>`).join('')}
+            </ul>` : ''}
+        ${(payload.report && payload.report.warnings || []).map((w) => `<p class="plan-summary-note">${escapeHtml(w)}</p>`).join('')}`;
+}
+
+async function runEntityImport(step) {
+    const resource = entityState.resource;
+    const analyzeBtn = document.getElementById('entityImportAnalyzeBtn');
+    const commitBtn = document.getElementById('entityImportCommitBtn');
+    if (!entityImportState.csv) {
+        entityImportMessage('اختر ملف CSV أولاً', 'error');
+        return;
+    }
+    if (step === 'commit' && !entityImportState.analyzed) {
+        entityImportMessage('تحقّق من الملف قبل الاعتماد', 'error');
+        return;
+    }
+
+    analyzeBtn.disabled = true;
+    commitBtn.disabled = true;
+    entityImportMessage(step === 'commit' ? 'جارٍ الاعتماد…' : 'جارٍ التحقّق…', 'info');
+
+    try {
+        // Raw CSV, not JSON: escaping 22MB of GeoJSON quotes would roughly
+        // double the upload for nothing.
+        const response = await fetch(
+            `/maan-dashboard/api/entities/${encodeURIComponent(resource)}/import/${step}`,
+            {
+                method: 'POST',
+                headers: authHeaders({ 'Content-Type': 'text/csv; charset=utf-8' }),
+                body: entityImportState.csv,
+            }
+        );
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            const failure = new Error(data.error || `HTTP ${response.status}`);
+            failure.payload = data;
+            throw failure;
+        }
+        if (step === 'analyze') {
+            entityImportState.analyzed = data;
+            entityImportStep('commit');
+            commitBtn.hidden = false;
+            const nothing = !data.inserts && !data.updates;
+            entityImportMessage(
+                nothing ? 'الملف صالح، لكنه لا يحمل أي تغيير' : 'الملف صالح — راجع الملخص ثم اعتمده',
+                nothing ? 'info' : 'success'
+            );
+            renderEntityImportReport(data, false);
+            commitBtn.hidden = nothing;
+        } else {
+            entityImportState = { csv: null, analyzed: null };
+            entityImportMessage('تم تحديث الجدول', 'success');
+            renderEntityImportReport(data, true);
+            commitBtn.hidden = true;
+            overviewCache = null;   // the overview's cached rows are now stale
+            await loadEntityRows();
+            await refreshDatasetsAfterEntityWrite();
+        }
+    } catch (error) {
+        // entityRequest throws with the server's message; the row-level detail
+        // rides along on the response body, so re-fetch it for the list.
+        entityImportMessage(error.message, 'error');
+        if (error.payload) renderEntityImportErrors(error.payload);
+        document.getElementById('entityImportCommitBtn').hidden = true;
+    } finally {
+        analyzeBtn.disabled = false;
+        commitBtn.disabled = false;
+    }
+}
+
+function initEntityIo() {
+    document.getElementById('entityExportBtn')?.addEventListener('click', downloadEntityCsv);
+    document.getElementById('entityImportBtn')?.addEventListener('click', openEntityImport);
+    document.getElementById('entityImportClose')?.addEventListener('click', closeEntityImport);
+    document.getElementById('entityImportModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'entityImportModal') closeEntityImport();
+    });
+    document.getElementById('entityImportAnalyzeBtn')?.addEventListener('click', () => runEntityImport('analyze'));
+    document.getElementById('entityImportCommitBtn')?.addEventListener('click', () => runEntityImport('commit'));
+
+    document.getElementById('entityImportFile')?.addEventListener('change', async (event) => {
+        const input = event.target;
+        const state = document.querySelector('.plan-file-state[data-for="entityImportFile"]');
+        const card = input.closest('.plan-file-card');
+        const file = input.files && input.files[0];
+        entityImportState = { csv: null, analyzed: null };
+        document.getElementById('entityImportCommitBtn').hidden = true;
+        if (!file) {
+            if (state) state.textContent = '';
+            card?.classList.remove('is-set');
+            return;
+        }
+        const text = await readFileText(input);
+        entityImportState.csv = text;
+        const lines = String(text).split(/\r?\n/).filter((l) => l.trim() !== '').length;
+        if (state) {
+            state.textContent = `${file.name} · ${(file.size / 1024).toFixed(0)} كيلوبايت · ${Math.max(0, lines - 1)} صفاً`;
+        }
+        card?.classList.add('is-set');
+        entityImportStep('analyze');
+    });
 }
 
 // ── Overview (all entities at once) ────────────────────────────────────────
@@ -1196,6 +1439,7 @@ async function loadOverview() {
     if (title) title.textContent = 'نظرة عامة';
     const createBtn = document.getElementById('entityCreateBtn');
     if (createBtn) createBtn.hidden = true;
+    syncEntityIoButtons();
     renderEntityNav();
     renderEntityDetail();
 
@@ -1776,7 +2020,7 @@ function renderEntityLegend() {
             <div class="map-legend-head">
                 <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
                 <span class="map-legend-title">كل العناصر</span>
-                <span class="map-legend-sub">${drawn.toLocaleString()} سجل</span>
+                <span class="map-legend-sub">${drawn.toLocaleString()}</span>
             </div>
             <div class="map-legend-items">
                 ${sets.map((set) => `
@@ -1797,12 +2041,9 @@ function renderEntityLegend() {
     }
 
     const palette = entityPalette();
-    const shaped = entityState.rows.filter((r) => r.geojson).length;
-    const pinned = entityState.rows.length - shaped;
-    const drawnAs = [
-        shaped ? `${shaped.toLocaleString()} شكل` : '',
-        pinned ? `${pinned.toLocaleString()} علامة` : '',
-    ].filter(Boolean).join(' · ');
+    // Just the count. Splitting it into "N shapes · M pins" named a distinction
+    // the reader can already see on the map, so the number carries it alone.
+    const drawnAs = entityState.rows.length.toLocaleString();
 
     const rows = [];
     if (entityState.colorBy) {
@@ -1869,7 +2110,249 @@ function renderEntityLegend() {
         ${entityState.filter ? '<div class="map-legend-note">تصفية مطبّقة</div>' : ''}`;
 }
 
+// ── Drawing a record's geometry ────────────────────────────────────────────
+// Geometry used to be read-only everywhere. It is now editable from the record
+// form by drawing on the map: click to place a point for المساكن, trace a
+// polygon or a line for the rest. The shape is only staged here — nothing is
+// written until the form is saved, so cancelling leaves the record untouched.
+//
+// While drawing, the entity layer stops redrawing itself. It rebuilds on every
+// load and every pan, and would otherwise wipe the layer carrying the vertex
+// handles out from under the user.
+
+const geometryEdit = { active: false, group: null, layer: null, handler: null, kind: null, multiPart: 0 };
+// undefined = untouched · string = a new shape to save · null = cleared
+let pendingGeometry;
+
+function entityGeometryKind(resource = entityState.resource) {
+    const entry = entityState.catalog.find((e) => e.name === resource);
+    return (entry && entry.geometryKind) || null;
+}
+
+function geometryEditable() {
+    return Boolean(entityGeometryKind()) && entityWritable() && typeof L.Draw !== 'undefined';
+}
+
+function geometryDrawStyle() {
+    const color = entityPalette().series[0];
+    return { color, weight: 3, fillColor: color, fillOpacity: 0.25 };
+}
+
+// The shape the editor should start from: whatever is staged, else whatever the
+// record already has.
+function currentGeometryGeoJson() {
+    if (pendingGeometry !== undefined) {
+        return pendingGeometry ? JSON.parse(pendingGeometry) : null;
+    }
+    const detail = entityState.detail || {};
+    if (detail.geojson) {
+        try { return JSON.parse(detail.geojson); } catch (_e) { return null; }
+    }
+    // A residence has no shape, only a coordinate pair.
+    if (entityGeometryKind() === 'point' && Number.isFinite(detail.lon) && Number.isFinite(detail.lat)) {
+        return { type: 'Point', coordinates: [detail.lon, detail.lat] };
+    }
+    return null;
+}
+
+// Almost every shape here is stored as a MULTI* even when it has a single part
+// (all 26 entrances, 42 parking, 51 warehouses…), because that is what the
+// column declares. Leaflet's GeoJSON reader nests a MultiPolygon's coordinates
+// one level deeper than a Polygon's, and the vertex editor does not attach
+// handles to that nesting — so a single-part multi is unwrapped before editing.
+// Saving re-wraps it: the server coerces POLYGON back to MULTIPOLYGON.
+function simplifyForEditing(geometry) {
+    if (!geometry) return { geometry: null, parts: 0 };
+    const single = { MultiPolygon: 'Polygon', MultiLineString: 'LineString', MultiPoint: 'Point' };
+    const target = single[geometry.type];
+    if (!target) return { geometry, parts: 1 };
+    const parts = (geometry.coordinates || []).length;
+    if (parts === 1) return { geometry: { type: target, coordinates: geometry.coordinates[0] }, parts: 1 };
+    return { geometry, parts };
+}
+
+function stopGeometryDraw() {
+    if (geometryEdit.handler) {
+        try { geometryEdit.handler.disable(); } catch (_e) {}
+        geometryEdit.handler = null;
+    }
+    map.off(L.Draw.Event.CREATED, onGeometryDrawn);
+}
+
+function onGeometryDrawn(event) {
+    if (geometryEdit.group) geometryEdit.group.clearLayers();
+    attachGeometryLayer(event.layer);
+    stopGeometryDraw();
+    renderGeometryBar();
+}
+
+// Put a layer under the editor's control and turn its handles on.
+function attachGeometryLayer(layer) {
+    geometryEdit.layer = layer;
+    layer.addTo(geometryEdit.group);
+    if (layer instanceof L.Marker) {
+        layer.dragging?.enable();
+        return;
+    }
+    if (!layer.editing) {
+        // leaflet-draw did not extend this layer type; redrawing still works.
+        console.warn('No vertex editor for this layer; redraw is the only option.');
+        return;
+    }
+    layer.editing.enable();
+}
+
+function startGeometryEdit() {
+    if (!geometryEditable() || !map) return;
+    geometryEdit.active = true;
+    geometryEdit.kind = entityGeometryKind();
+    geometryEdit.multiPart = 0;
+    document.body.setAttribute('data-geometry-edit', 'on');
+
+    try {
+        if (!geometryEdit.group) geometryEdit.group = L.featureGroup().addTo(map);
+        geometryEdit.group.clearLayers();
+        clearEntityLayer(); // the record being drawn is the only thing on the map
+        // The map may have been resized (or hidden in grid view) since its last
+        // draw; drawing against a stale size puts the shape in the wrong place.
+        map.invalidateSize();
+
+        const { geometry, parts } = simplifyForEditing(currentGeometryGeoJson());
+        if (geometry && parts > 1) {
+            // A genuinely multi-part shape has no single ring of vertices to
+            // drag. Say so rather than showing handles that edit one piece.
+            geometryEdit.multiPart = parts;
+            const style = { ...geometryDrawStyle(), dashArray: '5 4' };
+            L.geoJSON(geometry, { style: () => style }).eachLayer((l) => l.addTo(geometryEdit.group));
+            const bounds = geometryEdit.group.getBounds();
+            if (bounds && bounds.isValid()) fitMapToGeometry(bounds);
+        } else if (geometry) {
+            const style = geometryDrawStyle();
+            L.geoJSON(geometry, {
+                style: () => style,
+                pointToLayer: (_f, latlng) => L.marker(latlng, { draggable: true }),
+            }).eachLayer((layer) => attachGeometryLayer(layer));
+            const bounds = geometryEdit.group.getBounds();
+            if (bounds && bounds.isValid()) fitMapToGeometry(bounds);
+        } else {
+            beginGeometryDraw();
+        }
+    } catch (error) {
+        // Never leave the user staring at a button that did nothing.
+        console.error('Could not open the geometry editor:', error);
+        showNotification(`تعذر فتح محرر الشكل: ${error.message}`, 'error');
+        finishGeometryEdit(false);
+        return;
+    }
+    renderGeometryBar();
+}
+
+// No shape yet (or the user asked to redraw): arm the right draw tool.
+function beginGeometryDraw() {
+    stopGeometryDraw();
+    if (geometryEdit.group) geometryEdit.group.clearLayers();
+    geometryEdit.layer = null;
+
+    const options = { shapeOptions: geometryDrawStyle() };
+    geometryEdit.handler = geometryEdit.kind === 'point'
+        ? new L.Draw.Marker(map, {})
+        : (geometryEdit.kind === 'linear'
+            ? new L.Draw.Polyline(map, options)
+            : new L.Draw.Polygon(map, { ...options, allowIntersection: false }));
+
+    map.on(L.Draw.Event.CREATED, onGeometryDrawn);
+    geometryEdit.handler.enable();
+    renderGeometryBar();
+}
+
+function finishGeometryEdit(save) {
+    if (!geometryEdit.active) return;
+    stopGeometryDraw();
+
+    if (save) {
+        const layer = geometryEdit.layer;
+        if (layer) {
+            pendingGeometry = JSON.stringify(layer.toGeoJSON().geometry);
+        } else if (geometryEdit.multiPart > 1) {
+            // A multi-part shape is shown but not editable, so confirming
+            // without redrawing means "leave it as it is" — never "delete it".
+            pendingGeometry = undefined;
+        } else {
+            pendingGeometry = null; // nothing drawn and confirmed: the shape is cleared
+        }
+    }
+
+    geometryEdit.active = false;
+    geometryEdit.layer = null;
+    geometryEdit.kind = null;
+    geometryEdit.multiPart = 0;
+    if (geometryEdit.group) geometryEdit.group.clearLayers();
+    document.body.removeAttribute('data-geometry-edit');
+
+    renderEntityDetail();
+    drawEntityLayer({ fit: false });
+}
+
+const GEOMETRY_KIND_LABEL = { point: 'نقطة', linear: 'مسار', areal: 'مضلّع' };
+
+// The controls that appear inside the form while a shape is being drawn, and the
+// button that starts it when one is not.
+function renderGeometryBar() {
+    const host = document.getElementById('entityGeometry');
+    if (!host) return;
+    if (!geometryEditable()) { host.innerHTML = ''; return; }
+
+    const kind = entityGeometryKind();
+    const staged = pendingGeometry !== undefined;
+    const has = Boolean(currentGeometryGeoJson());
+
+    if (!geometryEdit.active) {
+        host.innerHTML = `
+            <div class="entity-geometry">
+                <span class="entity-geometry-label">
+                    <i class="fa-solid fa-draw-polygon" aria-hidden="true"></i>
+                    الشكل الهندسي · ${escapeHtml(GEOMETRY_KIND_LABEL[kind] || '')}
+                </span>
+                ${staged ? `<span class="entity-geometry-staged">${pendingGeometry ? 'تم التعديل — احفظ للتأكيد' : 'سيُحذف عند الحفظ'}</span>` : ''}
+                <button type="button" class="entity-geometry-btn" id="entityGeometryEditBtn">
+                    <i class="fa-solid fa-pen-ruler" aria-hidden="true"></i>
+                    ${has ? 'تعديل على الخريطة' : 'رسم على الخريطة'}
+                </button>
+            </div>`;
+        document.getElementById('entityGeometryEditBtn')?.addEventListener('click', startGeometryEdit);
+        return;
+    }
+
+    const drawing = Boolean(geometryEdit.handler);
+    const multi = geometryEdit.multiPart > 1;
+    const hint = drawing
+        ? (kind === 'point' ? 'اضغط على الخريطة لتحديد الموقع' : 'ارسم على الخريطة ثم أغلق الشكل')
+        : (multi
+            ? `الشكل مكوّن من ${geometryEdit.multiPart} أجزاء ولا يمكن تحريره بالنقاط — استخدم «إعادة الرسم» لاستبداله بشكل واحد`
+            : 'اسحب النقاط على الخريطة لتعديل الشكل');
+    host.innerHTML = `
+        <div class="entity-geometry is-editing">
+            <span class="entity-geometry-label">
+                <i class="fa-solid fa-draw-polygon" aria-hidden="true"></i>
+                ${escapeHtml(hint)}
+            </span>
+            <div class="entity-geometry-actions">
+                <button type="button" class="entity-geometry-btn" id="entityGeometryRedrawBtn">
+                    <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> إعادة الرسم
+                </button>
+                <button type="button" class="entity-geometry-btn ghost" id="entityGeometryCancelBtn">إلغاء</button>
+                <button type="button" class="entity-geometry-btn primary" id="entityGeometryDoneBtn">تم</button>
+            </div>
+        </div>`;
+    document.getElementById('entityGeometryRedrawBtn')?.addEventListener('click', beginGeometryDraw);
+    document.getElementById('entityGeometryCancelBtn')?.addEventListener('click', () => finishGeometryEdit(false));
+    document.getElementById('entityGeometryDoneBtn')?.addEventListener('click', () => finishGeometryEdit(true));
+}
+
 async function openEntityForm(id) {
+    // A shape drawn for one record must never follow you to the next.
+    if (geometryEdit.active) finishGeometryEdit(false);
+    pendingGeometry = undefined;
     entityState.creating = id === null;
     entityState.selectedId = id;
     if (id) {
@@ -1948,6 +2431,7 @@ function renderEntityDetail() {
             </div>
             ${writable ? '' : '<p class="entity-readonly-why">هذه بيانات مشتركة بين جميع المراكز؛ التعديل عليها من صلاحيات مشرف النظام.</p>'}
             <div class="entity-fields">${controls}</div>
+            <div id="entityGeometry"></div>
             ${readOnly ? `<div class="entity-readonly"><span class="entity-readonly-label">قيم للقراءة فقط</span><div class="entity-readonly-grid">${readOnly}</div></div>` : ''}
             <p class="entity-form-error" id="entityFormError" hidden></p>
             <div class="entity-form-actions">
@@ -1956,7 +2440,11 @@ function renderEntityDetail() {
             </div>
         </form>`;
 
+    renderGeometryBar();
+
     document.getElementById('entityCancelBtn').addEventListener('click', () => {
+        if (geometryEdit.active) finishGeometryEdit(false);
+        pendingGeometry = undefined;
         entityState.selectedId = null;
         entityState.detail = null;
         entityState.creating = false;
@@ -1980,6 +2468,9 @@ async function saveEntityRecord(event) {
         const raw = form.get(field.name);
         values[field.name] = field.type === 'number' && raw !== '' && raw !== null ? Number(raw) : (raw ?? '');
     }
+    // Only sent when the user actually drew something; the server treats an
+    // absent `geometry` as "leave the shape alone".
+    if (pendingGeometry !== undefined) values.geometry = pendingGeometry;
 
     try {
         if (creating) {
@@ -1987,6 +2478,8 @@ async function saveEntityRecord(event) {
                 method: 'POST', body: JSON.stringify(values),
             });
             showNotification('تم إنشاء السجل', 'success');
+            pendingGeometry = undefined;
+            overviewCache = null;
             entityState.search = '';
             const search = document.getElementById('entitySearch');
             if (search) search.value = '';
@@ -1997,6 +2490,8 @@ async function saveEntityRecord(event) {
                 method: 'PATCH', body: JSON.stringify(values),
             });
             showNotification('تم حفظ التعديلات', 'success');
+            pendingGeometry = undefined;
+            overviewCache = null;  // the overview's cached shapes are now stale
             await loadEntityRows();
             await openEntityForm(selectedId);
         }
@@ -2125,6 +2620,9 @@ function bindEntityViewportRedraw() {
 
 function drawEntityLayer({ fit = true } = {}) {
     if (!map) return;
+    // While a shape is being drawn, the map belongs to the editor: a rebuild
+    // here would remove the very layer carrying the vertex handles.
+    if (geometryEdit.active) return;
     if (!entityLayerGroup) entityLayerGroup = L.layerGroup().addTo(map);
     bindEntityViewportRedraw();
     entityLayerGroup.clearLayers();

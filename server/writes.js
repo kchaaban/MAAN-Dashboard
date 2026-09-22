@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { pool, writePool, invalidate } = require('./db');
+const { checkGeometry, GEOMETRY_TARGETS } = require('./geometry');
 
 const ADMIN_TYPES = ['system_admin', 'transport_authority'];
 const ADMIN_FALLBACK_ROLES = ['Administrator', 'Operations Manager'];
@@ -96,6 +97,9 @@ const requiredText = (max) => (value) => {
 };
 
 const fk = (table) => ({
+    // `table` is named as well as baked into the SQL so a bulk import can check
+    // a whole column's worth of references in one query instead of per row.
+    table,
     sql: `SELECT 1 FROM ${table} WHERE id = $1`,
     params: (value) => [value],
 });
@@ -120,6 +124,9 @@ const centroid = (axis) => `ST_${axis}(ST_Centroid(t.gis))`;
 Object.assign(RESOURCES, {
     residences: referenceResource({
         table: 'residences', label: 'المساكن', icon: 'fa-house',
+        // No geometry column: a residence's location is two numeric columns,
+        // so a drawn point is written into these rather than into a shape.
+        pointColumns: { lon: 'longitude', lat: 'latitude' },
         scoped: ({ plans }) => `EXISTS (SELECT 1 FROM plans p WHERE p.start_point_type = 'residence' AND p.start_point_id = t.id${plans})`,
         stats: {
             sql: ({ plans }) => `
@@ -346,6 +353,11 @@ function catalogFor(user) {
         .map(([name, spec]) => ({
             name, label: spec.label, icon: spec.icon,
             geometry: Boolean(spec.geom),
+            // What the map editor should let you draw here: a polygon, a line,
+            // a single point, or nothing at all.
+            geometryKind: spec.pointColumns
+                ? 'point'
+                : (spec.geom ? ((GEOMETRY_TARGETS[name] || {}).family === 'linear' ? 'linear' : 'areal') : null),
             // Whether records of this entity wear the icon as a data mark (on
             // the map and in the grid). The nav still uses `icon` as its label
             // glyph either way.
@@ -410,6 +422,43 @@ function validate(spec, patch) {
     return { clean, parking, rejected };
 }
 
+// The record form can redraw a shape on the map, so writes carry an optional
+// `geometry` field: a GeoJSON string. It is not a column — residences have no
+// shape at all and store a point as two numeric columns — so it is resolved
+// here rather than in validate().
+const GEOMETRY_FIELD = 'geometry';
+
+function wantsGeometry(spec, patch) {
+    return Object.prototype.hasOwnProperty.call(patch || {}, GEOMETRY_FIELD)
+        && (spec.geom || spec.pointColumns);
+}
+
+// Turn the drawn GeoJSON into what this entity actually stores: an EWKT shape
+// for the seven tables with a `gis` column, or a longitude/latitude pair for
+// residences, which have no geometry column.
+async function resolveGeometry(client, resource, spec, raw) {
+    const text = raw === null || raw === undefined ? '' : String(raw).trim();
+    if (!text) return { clear: true };
+
+    if (spec.pointColumns) {
+        let point = null;
+        try { point = JSON.parse(text); } catch (_e) { return { error: 'geometry: تعذر قراءة الشكل' }; }
+        const coords = point && point.type === 'Point' && Array.isArray(point.coordinates)
+            ? point.coordinates : null;
+        if (!coords || coords.length < 2) return { error: 'geometry: هذا العنصر يقبل نقطة فقط' };
+        const [lon, lat] = coords.map(Number);
+        if (!Number.isFinite(lon) || lon < -180 || lon > 180) return { error: 'geometry: خط طول خارج النطاق' };
+        if (!Number.isFinite(lat) || lat < -90 || lat > 90) return { error: 'geometry: دائرة عرض خارج النطاق' };
+        return { point: { [spec.pointColumns.lon]: lon, [spec.pointColumns.lat]: lat } };
+    }
+
+    // The same checker the CSV import uses: SRID forced to 4326, 2D, valid, and
+    // coerced to whatever type the column declares.
+    const result = await checkGeometry(client, resource, text);
+    if (result.error) return { error: `geometry: ${result.error}` };
+    return { ewkt: result.ewkt };
+}
+
 async function updateRow({ resource, id, patch, user }) {
     if (!mayEdit(user, resource)) {
         return { ok: false, status: 403, error: 'Not permitted to edit this resource' };
@@ -417,9 +466,15 @@ async function updateRow({ resource, id, patch, user }) {
     if (!uuid(id)) return { ok: false, status: 400, error: 'Invalid id' };
 
     const spec = RESOURCES[resource];
-    const { clean, parking, rejected } = validate(spec, patch);
+    // Geometry is not a column, so it is pulled out before validate() sees it.
+    const geometryWanted = wantsGeometry(spec, patch);
+    const geometryRaw = geometryWanted ? patch[GEOMETRY_FIELD] : undefined;
+    const rest = { ...patch };
+    delete rest[GEOMETRY_FIELD];
+
+    const { clean, parking, rejected } = validate(spec, rest);
     if (rejected.length) return { ok: false, status: 400, error: 'Invalid fields', rejected };
-    if (!Object.keys(clean).length && !parking.length) {
+    if (!Object.keys(clean).length && !parking.length && !geometryWanted) {
         return { ok: false, status: 400, error: 'No editable fields supplied' };
     }
 
@@ -439,6 +494,21 @@ async function updateRow({ resource, id, patch, user }) {
         }
 
         const assignments = { ...clean };
+        let geometrySql = null;
+        if (geometryWanted) {
+            const resolved = await resolveGeometry(client, resource, spec, geometryRaw);
+            if (resolved.error) {
+                await client.query('ROLLBACK');
+                return { ok: false, status: 400, error: 'Invalid fields', rejected: [resolved.error] };
+            }
+            if (resolved.point) Object.assign(assignments, resolved.point);
+            else if (resolved.clear) {
+                if (spec.pointColumns) {
+                    assignments[spec.pointColumns.lon] = null;
+                    assignments[spec.pointColumns.lat] = null;
+                } else geometrySql = { sql: 'NULL', value: null };
+            } else geometrySql = { sql: 'ST_GeomFromEWKT(', value: resolved.ewkt };
+        }
         for (const [field, parsed] of parking) {
             const compound = spec.compound[field];
             assignments[compound.idColumn] = parsed.id;
@@ -447,20 +517,29 @@ async function updateRow({ resource, id, patch, user }) {
 
         const columns = Object.keys(assignments);
         const values = columns.map((c) => assignments[c]);
-        const setSql = columns.map((c, i) => `${c} = $${i + 1}`).join(', ');
-        const idParam = columns.length + 1;
+        const setSql = columns.map((c, i) => `${c} = $${i + 1}`);
+        if (geometrySql) {
+            if (geometrySql.value === null) setSql.push(`${spec.geom} = NULL`);
+            else {
+                values.push(geometrySql.value);
+                setSql.push(`${spec.geom} = ST_GeomFromEWKT($${values.length})`);
+            }
+        }
+        const idParam = values.length + 1;
         const own = spec.ownership(scope, idParam + 1);
 
+        // A geometry-only edit touches no column, so fall back to the id rather
+        // than building `SELECT  FROM`.
         const before = await client.query(
-            `SELECT ${columns.join(', ')} FROM ${spec.table} WHERE id = $1`, [id]
+            `SELECT ${columns.length ? columns.join(', ') : 'id'} FROM ${spec.table} WHERE id = $1`, [id]
         );
 
         // Ownership lives in the WHERE clause rather than a prior SELECT, so a row
         // cannot change hands between the check and the write.
         const result = await client.query(
-            `UPDATE ${spec.table} SET ${setSql}, updated_at = now()
+            `UPDATE ${spec.table} SET ${setSql.join(', ')}, updated_at = now()
              WHERE id = $${idParam} AND (${own.sql})
-             RETURNING id, ${columns.join(', ')}`,
+             RETURNING id${columns.length ? ', ' + columns.join(', ') : ''}`,
             [...values, id, ...own.values]
         );
 
@@ -472,7 +551,8 @@ async function updateRow({ resource, id, patch, user }) {
         await client.query('COMMIT');
         console.log(
             `[write] ${user.username} (${user.typeCode || user.role}) ${resource}/${id} ` +
-            columns.map((c) => `${c}: ${before.rows[0]?.[c]} -> ${result.rows[0][c]}`).join(', ')
+            (columns.map((c) => `${c}: ${before.rows[0]?.[c]} -> ${result.rows[0][c]}`)
+                .concat(geometrySql ? ['geometry redrawn'] : []).join(', ') || 'no column change')
         );
 
         for (const dataset of spec.invalidates) invalidate(dataset);
@@ -753,7 +833,12 @@ async function createRow({ resource, values, user }) {
     // for the ownership clause to test.
     if (!isAdmin(user)) return { ok: false, status: 403, error: 'Not permitted' };
 
-    const { clean, rejected } = validate(spec, values);
+    const geometryWanted = wantsGeometry(spec, values);
+    const geometryRaw = geometryWanted ? values[GEOMETRY_FIELD] : undefined;
+    const rest = { ...values };
+    delete rest[GEOMETRY_FIELD];
+
+    const { clean, rejected } = validate(spec, rest);
     for (const [name, column] of Object.entries(spec.columns)) {
         if (column.required && (clean[name] === undefined || clean[name] === null)) {
             rejected.push(`${name}: ${column.label} مطلوب`);
@@ -770,14 +855,33 @@ async function createRow({ resource, values, user }) {
             return { ok: false, status: 400, error: 'Invalid fields', rejected: refProblems };
         }
 
+        const assignments = { ...clean };
+        let geometryEwkt = null;
+        if (geometryWanted) {
+            const resolved = await resolveGeometry(client, resource, spec, geometryRaw);
+            if (resolved.error) {
+                await client.query('ROLLBACK');
+                return { ok: false, status: 400, error: 'Invalid fields', rejected: [resolved.error] };
+            }
+            if (resolved.point) Object.assign(assignments, resolved.point);
+            else if (!resolved.clear) geometryEwkt = resolved.ewkt;
+        }
+
         const id = crypto.randomUUID();
-        const columns = Object.keys(clean);
+        const columns = Object.keys(assignments);
+        const params = [id, ...columns.map((c) => assignments[c])];
+        const names = [...columns];
         const placeholders = columns.map((_, i) => `$${i + 2}`);
+        if (geometryEwkt) {
+            params.push(geometryEwkt);
+            names.push(spec.geom);
+            placeholders.push(`ST_GeomFromEWKT($${params.length})`);
+        }
         const result = await client.query(
-            `INSERT INTO ${spec.table} (id${columns.length ? ', ' + columns.join(', ') : ''}, created_at, updated_at)
+            `INSERT INTO ${spec.table} (id${names.length ? ', ' + names.join(', ') : ''}, created_at, updated_at)
              VALUES ($1${placeholders.length ? ', ' + placeholders.join(', ') : ''}, now(), now())
              RETURNING id`,
-            [id, ...columns.map((c) => clean[c])]
+            params
         );
         await client.query('COMMIT');
 
@@ -793,6 +897,14 @@ async function createRow({ resource, values, user }) {
 }
 
 // Field descriptors the editor renders from, so the UI never hardcodes the list.
+function geometryKindFor(resource) {
+    const spec = RESOURCES[resource];
+    if (!spec) return null;
+    if (spec.pointColumns) return 'point';
+    if (!spec.geom) return null;
+    return (GEOMETRY_TARGETS[resource] || {}).family === 'linear' ? 'linear' : 'areal';
+}
+
 function fieldsFor(resource) {
     const spec = RESOURCES[resource];
     const fields = Object.entries(spec.columns).map(([name, col]) => ({
@@ -807,4 +919,5 @@ function fieldsFor(resource) {
 module.exports = {
     updateRow, deleteRow, createRow, listRows, readRow,
     mayEdit, mayView, isAdmin, catalogFor, RESOURCES, getEditOptions, fieldsFor,
+    geometryKindFor,
 };

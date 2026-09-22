@@ -8,10 +8,12 @@
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <!-- Vertex handles for redrawing a record's shape in edit mode -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
     <!-- FontAwesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Custom CSS -->
-  <link rel="stylesheet" crossorigin href="/maan-dashboard/assets/index-CX7O0pIo.css">
+  <link rel="stylesheet" crossorigin href="/maan-dashboard/assets/index-Bo-kuRdL.css">
 </head>
 <body class="dark-mode auth-required">
 
@@ -221,6 +223,12 @@
                                     <i class="fa-solid fa-table-cells" aria-hidden="true"></i><span>جدول</span>
                                 </button>
                             </div>
+                            <button class="entity-io-btn" id="entityExportBtn" type="button" title="تنزيل الجدول كملف CSV" aria-label="تنزيل CSV" hidden>
+                                <i class="fa-solid fa-download" aria-hidden="true"></i>
+                            </button>
+                            <button class="entity-io-btn" id="entityImportBtn" type="button" title="استيراد ملف CSV لتحديث الجدول" aria-label="استيراد CSV" hidden>
+                                <i class="fa-solid fa-upload" aria-hidden="true"></i>
+                            </button>
                             <button class="entity-create-btn" id="entityCreateBtn" type="button">
                                 <i class="fa-solid fa-plus" aria-hidden="true"></i><span>إضافة</span>
                             </button>
@@ -417,11 +425,61 @@
         </div>
     </div>
 
+    <!-- Bulk import of one reference table. system_admin only; the server
+         analyses the file and refuses it whole if any row fails a check. -->
+    <div id="entityImportModal" class="plan-modal-overlay" hidden>
+        <div class="plan-modal glass" role="dialog" aria-modal="true" aria-labelledby="entityImportTitle">
+            <div class="plan-modal-header">
+                <h3 id="entityImportTitle"><i class="fa-solid fa-file-import" aria-hidden="true"></i> استيراد <span id="entityImportEntity">البيانات</span></h3>
+                <button id="entityImportClose" class="plan-modal-close" type="button" aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <p class="plan-modal-intro">
+                نزّل الجدول أولاً، عدّله في Excel، ثم أعِد تحميله هنا. يُطابق الاستيراد الصفوف
+                بعمود <code>id</code>: صف له معرّف يُحدَّث، وصف بمعرّف فارغ يُضاف كسجل جديد.
+                <b>لا يحذف الاستيراد أي صف</b>؛ الصفوف غير الموجودة في الملف تبقى كما هي.
+            </p>
+
+            <div class="plan-modal-body">
+                <ol class="plan-steps" id="entityImportSteps">
+                    <li class="plan-step is-active" data-step="file"><span class="plan-step-num">1</span><span>اختر الملف</span></li>
+                    <li class="plan-step" data-step="analyze"><span class="plan-step-num">2</span><span>تحقّق</span></li>
+                    <li class="plan-step" data-step="commit"><span class="plan-step-num">3</span><span>اعتماد</span></li>
+                </ol>
+
+                <label class="plan-file-card" for="entityImportFile">
+                    <span class="plan-file-icon"><i class="fa-solid fa-file-csv" aria-hidden="true"></i></span>
+                    <span class="plan-file-text">
+                        <span class="plan-file-name">ملف CSV</span>
+                        <span class="plan-file-hint">يجب أن يحتوي عمود <code>id</code> — صدّر الجدول للحصول عليه</span>
+                        <span class="plan-file-state" data-for="entityImportFile"></span>
+                    </span>
+                    <input type="file" id="entityImportFile" accept=".csv,text/csv" hidden>
+                </label>
+
+                <p class="plan-modal-note">
+                    <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                    تُفحص كل الصفوف قبل الكتابة: صلاحية المعرّفات، القيم، المراجع، والأشكال الهندسية
+                    (GeoJSON أو WKT، تُحوَّل إلى SRID 4326). إن فشل صف واحد يُرفض الملف كاملاً ولا يُكتب شيء.
+                    خلية شكل هندسي لم تُعدَّل تُترك كما هي.
+                </p>
+            </div>
+
+            <div id="entityImportMessage" class="plan-modal-message" hidden></div>
+            <div id="entityImportSummary" class="plan-modal-summary" hidden></div>
+            <div class="plan-modal-footer">
+                <button id="entityImportAnalyzeBtn" class="plan-btn plan-btn-secondary" type="button">تحقّق من الملف</button>
+                <button id="entityImportCommitBtn" class="plan-btn plan-btn-primary" type="button" hidden>اعتماد التغييرات</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <!-- PapaParse for CSV -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Turf.js for geometric operations -->
