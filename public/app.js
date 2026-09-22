@@ -151,6 +151,9 @@ function renderSegmentedFilter(containerId, { title, segments, selected, onSelec
 
     const track = document.createElement('div');
     track.className = 'filter-bar-track';
+    // With a selection the other segments step back so the chosen one is the
+    // only segment at full strength (see .has-selection in styles.css).
+    track.classList.toggle('has-selection', selected !== null && selected !== undefined);
     track.setAttribute('role', 'tablist');
     track.setAttribute('aria-label', title);
 
@@ -185,6 +188,7 @@ function renderSegmentedFilter(containerId, { title, segments, selected, onSelec
         }
         btn.title = seg.tooltip || `${seg.label} — ${percent}% (${amount.toLocaleString('ar-EG')})`;
         btn.innerHTML =
+            (isSelected ? '<i class="fa-solid fa-check filter-seg-check" aria-hidden="true"></i>' : '') +
             `<span class="filter-seg-label">${escapeHtml(seg.label)}</span>` +
             `<span class="filter-seg-pct">${percent}%</span>`;
         btn.addEventListener('click', () => onSelect(isSelected ? null : seg.value));
@@ -253,7 +257,18 @@ const PLAN_TYPE_RING_ORDER = ['tarwia', 'direct_taseed', 'taseed_tarwia', 'efada
 // Which end of an "internal" path the entrance sits at. تروية and افاضة depart
 // through their entrance, so their path starts there. تصعيد تروية travels Mina ->
 // Arafat and arrives at the Arafat entrance, so its path must end there instead.
+// Zoom limits measured against the live tile services over Makkah: the Esri
+// Canvas basemaps carry real tiles only to z16 and answer deeper requests with a
+// "Map data not yet available" placeholder. Capping maxNativeZoom makes Leaflet
+// stretch the z16 tile instead, so zooming in blurs the basemap rather than
+// blanking it; MAP_MAX_ZOOM is how far the user may go.
+const ESRI_CANVAS_MAX_ZOOM = 16;
+const MAP_MAX_ZOOM = 20;
+
 const PLAN_TYPES_ARRIVING_AT_ENTRANCE = new Set(['taseed_tarwia']);
+// Line segments that make up the actual journey, in travel order. Anything else
+// drawn as a line (the tarwia exit overlay) is decoration, oriented on its own.
+const JOURNEY_LINE_TYPES = new Set(['external', 'internal']);
 const TRANSPORT_TYPE_MENU_OPTIONS = ['ترددي', 'تقليدي رد', 'تقليدي ردين', 'قطار'];
 const DISTRICT_COLOR_PALETTE = [
     "#2A9D90",
@@ -706,6 +721,13 @@ function editablePlanFields() {
     return dbPermissions.editable && dbPermissions.editable.plans;
 }
 
+// Editing a plan needs both the permission and edit mode: view mode is a
+// read-only dashboard, so the card actions and the import button are hidden
+// there even for a user who may edit.
+function canEditPlansNow() {
+    return appMode === 'edit' && Boolean(editablePlanFields());
+}
+
 async function loadPermissions() {
     try {
         const response = await fetch('/maan-dashboard/api/db-permissions', { headers: authHeaders() });
@@ -781,6 +803,1687 @@ async function initializeDashboardApp() {
 
     setupEventListeners();
     loadData();
+    initPlanImport();
+    initEditMode();
+}
+
+// ---------------------------------------------------------------- edit mode
+// View mode is the read-only analytics dashboard. Edit mode swaps the filter
+// bars and chart panels for a data workspace: the entity nav on the side,
+// records beside the map, and a form for the selected record. Reference data
+// is admin-only, so a non-admin sees the toggle but only regains the plan
+// editing they already had — the nav stays empty and the dashboard stays put.
+
+const MODE_STORAGE_KEY = 'maan_mode';
+let appMode = 'view';
+let mayImportPlans = false;
+let entityLayerGroup = null;
+
+const entityState = {
+    catalog: [],
+    resource: null,
+    label: '',
+    columns: [],
+    columnLabels: {},
+    rows: [],
+    // 'map' draws the records as geometry; 'grid' shows them as a table with
+    // per-column sorting and filtering. Both read the same loaded rows.
+    view: 'map',
+    sort: null,          // { key, dir: 1 | -1 }
+    colFilters: {},      // column key -> substring / exact value
+    gridPage: 0,
+    total: 0,
+    matched: 0,
+    filter: null,
+    loadAll: false,
+    // Entering edit mode opens on every entity at once; picking one from the
+    // nav narrows to it. Switching modes again brings the overview back.
+    overview: false,
+    overviewSets: null,
+    limit: 0,
+    selectedId: null,
+    detail: null,
+    search: '',
+    creating: false,
+    colorBy: null,
+    icons: null,
+    // discriminant value -> palette colour, built per entity from the rows
+    colors: new Map(),
+    groupCounts: new Map(),
+    otherGroups: 0,
+};
+
+// Map shapes are the "any two can touch" case, so every pair has to stay
+// distinguishable — not just neighbours in a legend. Validated against both
+// Esri canvases (dark #2e2e2e, light #d4d4d4): these three hues pass the
+// lightness band, chroma floor, colour-vision separation and the normal-vision
+// floor on all pairs in both themes. A fourth hue fails hard (worst pair ΔE 1.6
+// for deuteranopia — indistinguishable), which is why the palette stops at
+// three and everything else folds into a neutral "أخرى".
+const ENTITY_PALETTE = {
+    dark: { series: ['#3987e5', '#d95926', '#199e70'], other: '#a8a8a2' },
+    light: { series: ['#2a78d6', '#eb6834', '#1baf7a'], other: '#55554f' },
+};
+const ENTITY_COLOR_SLOTS = 3;
+
+function entityPalette() {
+    return document.body.classList.contains('light-mode') ? ENTITY_PALETTE.light : ENTITY_PALETTE.dark;
+}
+
+function entityColorKey(row) {
+    const key = row && row.color_key;
+    return (key === null || key === undefined || key === '') ? null : String(key);
+}
+
+// The three largest groups get the hues; the rest share the neutral. Colour is
+// never the only cue — the legend, the tooltip and the list all name the group.
+function buildEntityColors(rows) {
+    const counts = new Map();
+    rows.forEach((row) => {
+        const key = entityColorKey(row);
+        if (key !== null) counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    const ranked = [...counts.entries()]
+        .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'ar'));
+    const palette = entityPalette();
+    const colors = new Map();
+    ranked.slice(0, ENTITY_COLOR_SLOTS).forEach(([value], i) => colors.set(value, palette.series[i]));
+    entityState.groupCounts = counts;
+    entityState.otherGroups = Math.max(0, ranked.length - ENTITY_COLOR_SLOTS);
+    return colors;
+}
+
+function entityColorFor(row) {
+    const key = entityColorKey(row);
+    if (key === null) return entityPalette().other;
+    return entityState.colors.get(key) || entityPalette().other;
+}
+
+// While the workspace is up it owns the map, so every dashboard overlay stays
+// off: plan routes, district shading, cameras, camp gates and the static MAKAF
+// paths — the last of which carry the flow animation.
+function isEntityWorkspaceActive() {
+    return appMode === 'edit' && entityState.catalog.length > 0;
+}
+
+// District boundaries, always drawn as a backdrop while editing. View mode
+// shades them as a pilgrim choropleth, but there is no plan metric to shade by
+// here, and a filled layer would fight the entity shapes for attention. The
+// pane sits at z-index 350, below the overlay pane the shapes use, so clicks
+// still reach a record and only land on a district where no record covers it.
+// Districts are a backdrop, so colour here separates neighbours rather than
+// encoding identity — 106 districts is far past what any palette can keep
+// distinguishable, and the reader never needs to name a district by its colour
+// (the tooltip does that). Adjacent districts are given different tints by
+// greedy graph colouring, the four-colour-map approach, so boundaries read
+// even where two districts meet. Muted and faint on purpose: these must not
+// compete with the entity shapes drawn on top.
+const DISTRICT_TINTS = ['#4b7f93', '#7d6b9e', '#9a7b4f', '#8f5f6b', '#5f8a6a', '#6b7280'];
+let districtTintCache = null;
+
+function districtFeatureBBox(feature) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const walk = (coords) => {
+        if (typeof coords[0] === 'number') {
+            if (coords[0] < minX) minX = coords[0];
+            if (coords[0] > maxX) maxX = coords[0];
+            if (coords[1] < minY) minY = coords[1];
+            if (coords[1] > maxY) maxY = coords[1];
+            return;
+        }
+        coords.forEach(walk);
+    };
+    if (feature.geometry && feature.geometry.coordinates) walk(feature.geometry.coordinates);
+    return { minX, minY, maxX, maxY };
+}
+
+// Bounding boxes, not exact geometry: an over-estimate of adjacency is safe
+// here (it only ever forces more separation, never less) and it keeps this to a
+// cheap O(n²) pass instead of thousands of polygon intersections.
+function buildDistrictTints() {
+    if (districtTintCache) return districtTintCache;
+    const features = (typeof DISTRICTS_DATA !== 'undefined' && DISTRICTS_DATA.features) || [];
+    const boxes = features.map(districtFeatureBBox);
+    const pad = 0.0005; // ~50m, so districts that merely touch count as neighbours
+
+    const neighbours = features.map(() => []);
+    for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+            const a = boxes[i];
+            const b = boxes[j];
+            const apart = a.maxX + pad < b.minX || b.maxX + pad < a.minX
+                || a.maxY + pad < b.minY || b.maxY + pad < a.minY;
+            if (!apart) { neighbours[i].push(j); neighbours[j].push(i); }
+        }
+    }
+
+    // Welsh–Powell: colour the most-constrained districts first, so the palette
+    // stays small.
+    const order = features.map((_f, i) => i).sort((x, y) => neighbours[y].length - neighbours[x].length);
+    const tintOf = new Array(features.length).fill(-1);
+    order.forEach((i) => {
+        const taken = new Set(neighbours[i].map((n) => tintOf[n]).filter((c) => c >= 0));
+        let slot = 0;
+        while (taken.has(slot) && slot < DISTRICT_TINTS.length - 1) slot++;
+        tintOf[i] = slot;
+    });
+
+    districtTintCache = tintOf;
+    return tintOf;
+}
+
+function districtReferenceStyle(tintIndex) {
+    const light = document.body.classList.contains('light-mode');
+    const tint = DISTRICT_TINTS[tintIndex % DISTRICT_TINTS.length];
+    return {
+        color: tint,
+        weight: 1,
+        opacity: light ? 0.6 : 0.5,
+        fill: true,
+        fillColor: tint,
+        fillOpacity: light ? 0.1 : 0.14,
+    };
+}
+
+function renderDistrictReference() {
+    if (!districtsLayerGroup) return;
+    districtsLayerGroup.clearLayers();
+    if (!isEntityWorkspaceActive()) return;
+    if (typeof DISTRICTS_DATA === 'undefined' || !DISTRICTS_DATA.features) return;
+
+    const tints = buildDistrictTints();
+    DISTRICTS_DATA.features.forEach((feature, index) => {
+        const name = getDistrictNameFromFeature(feature);
+        const style = districtReferenceStyle(tints[index] < 0 ? 0 : tints[index]);
+        const layer = L.geoJSON(feature, { pane: 'districtPane', style: () => style });
+        if (name) layer.bindTooltip(name, { sticky: true, className: 'district-tooltip' });
+        layer.addTo(districtsLayerGroup);
+    });
+}
+
+function clearDashboardMapLayers() {
+    [routeLayerGroup, districtsLayerGroup, camerasLayerGroup, campsGatesLayerGroup, makafPathsLayerGroup]
+        .forEach((group) => { if (group) group.clearLayers(); });
+}
+
+function syncImportButton() {
+    const btn = document.getElementById('planImportBtn');
+    if (btn) btn.hidden = !(mayImportPlans && appMode === 'edit');
+}
+
+function entityFields(resource) {
+    return (dbPermissions.editable && dbPermissions.editable[resource])
+        || (dbPermissions.viewable && dbPermissions.viewable[resource])
+        || [];
+}
+
+// Write access for the entity in hand. A company or centre user may browse the
+// reference tables but not change shared data, so their form is read-only.
+function entityWritable(resource = entityState.resource) {
+    const entry = entityState.catalog.find((e) => e.name === resource);
+    if (entry && typeof entry.editable === 'boolean') return entry.editable;
+    return Boolean(dbPermissions.editable && dbPermissions.editable[resource]);
+}
+
+async function entityRequest(path, options = {}) {
+    const response = await fetch(`/maan-dashboard/api/${path}`, {
+        ...options,
+        headers: authHeaders(options.body ? { 'Content-Type': 'application/json' } : {}),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error([data.error, ...(data.rejected || [])].filter(Boolean).join(' — ') || `HTTP ${response.status}`);
+    }
+    return data;
+}
+
+async function initEditMode() {
+    const toggle = document.getElementById('modeToggle');
+    try {
+        const data = await entityRequest('entities');
+        entityState.catalog = data.entities || [];
+    } catch (error) {
+        console.warn('Could not load the entity catalogue:', error.message);
+        entityState.catalog = [];
+    }
+
+    // A user who can neither manage reference data nor edit plans has nothing
+    // to switch to, so the toggle stays hidden and the dashboard is view-only.
+    const hasEditPowers = entityState.catalog.length > 0 || Boolean(editablePlanFields());
+    if (toggle) toggle.hidden = !hasEditPowers;
+    if (!hasEditPowers) { setAppMode('view', { persist: false }); return; }
+
+    toggle?.addEventListener('click', () => setAppMode(appMode === 'edit' ? 'view' : 'edit'));
+
+    renderEntityNav();
+    document.getElementById('entitySearch')?.addEventListener('input', debounce((e) => {
+        entityState.search = e.target.value;
+        loadEntityRows();
+    }, 250));
+    document.getElementById('entityCreateBtn')?.addEventListener('click', () => openEntityForm(null));
+    document.querySelectorAll('#entityViewSwitch .entity-view-btn').forEach((btn) => {
+        btn.addEventListener('click', () => setEntityView(btn.dataset.view));
+    });
+
+    let storedView = null;
+    try { storedView = localStorage.getItem(ENTITY_VIEW_KEY); } catch (_e) {}
+    setEntityView(storedView === 'grid' ? 'grid' : 'map', { persist: false, reload: false });
+
+    let stored = null;
+    try { stored = localStorage.getItem(MODE_STORAGE_KEY); } catch (_e) {}
+    setAppMode(stored === 'edit' ? 'edit' : 'view', { persist: false });
+}
+
+function setAppMode(mode, { persist = true } = {}) {
+    appMode = mode === 'edit' ? 'edit' : 'view';
+    document.body.setAttribute('data-mode', appMode);
+    if (persist) { try { localStorage.setItem(MODE_STORAGE_KEY, appMode); } catch (_e) {} }
+
+    // The control names the mode you are in; the tooltip names the one a click
+    // would take you to, so neither reading of a toggle can mislead.
+    const editing = appMode === 'edit';
+    const toggle = document.getElementById('modeToggle');
+    if (toggle) {
+        toggle.classList.toggle('is-edit', editing);
+        toggle.setAttribute('aria-checked', editing ? 'true' : 'false');
+        toggle.title = editing
+            ? 'وضع التحرير: إدارة البيانات — اضغط للعودة إلى وضع العرض'
+            : 'وضع العرض: لوحة تحليلية للقراءة فقط — اضغط للتبديل إلى وضع التحرير';
+        toggle.setAttribute('aria-label', 'وضع التحرير');
+    }
+    const modeLabel = document.getElementById('modeToggleLabel');
+    if (modeLabel) modeLabel.textContent = editing ? 'تحرير' : 'عرض';
+    const modeIcon = document.getElementById('modeToggleIcon');
+    if (modeIcon) modeIcon.className = `fa-solid ${editing ? 'fa-pen-to-square' : 'fa-chart-line'}`;
+
+    const managing = appMode === 'edit' && entityState.catalog.length > 0;
+    const nav = document.getElementById('entityNav');
+    const workspace = document.getElementById('entityWorkspace');
+    const planKpis = document.querySelector('.kpi-cards');
+    if (nav) nav.hidden = !managing;
+    if (workspace) workspace.hidden = !managing;
+    if (planKpis) planKpis.hidden = managing;
+
+    syncImportButton();
+    cachedMapRenderKey = null;
+    if (managing) {
+        clearDashboardMapLayers();
+        // Always the overview on entry, not the last entity: it is also the only
+        // way back to it, since the nav lists entities only.
+        loadOverview();
+    } else {
+        clearEntityLayer();
+        // Leaving the workspace: the overlays were cleared, so put them back.
+        renderCameras();
+        renderCampsGates();
+        renderMakafPaths();
+    }
+    // The plan cards carry edit/delete buttons only in edit mode.
+    updatePlanList();
+    scheduleDashboardUpdate();
+}
+
+function renderEntityNav() {
+    const nav = document.getElementById('entityNav');
+    if (!nav) return;
+    nav.innerHTML =
+        '<h3><i class="fa-solid fa-database" aria-hidden="true"></i> البيانات المرجعية</h3>' +
+        entityState.catalog.map((e) => `
+            <button type="button" class="entity-nav-item${e.name === entityState.resource ? ' is-active' : ''}" data-entity="${escapeHtml(e.name)}">
+                <i class="fa-solid ${escapeHtml(e.icon)}" aria-hidden="true"></i>
+                <span>${escapeHtml(e.label)}</span>
+            </button>`).join('');
+    nav.querySelectorAll('.entity-nav-item').forEach((btn) => {
+        btn.addEventListener('click', () => selectEntity(btn.dataset.entity));
+    });
+}
+
+function selectEntity(resource) {
+    entityState.overview = false;
+    document.body.removeAttribute('data-entity-overview');
+    entityState.resource = resource;
+    entityState.label = (entityState.catalog.find((e) => e.name === resource) || {}).label || resource;
+    entityState.search = '';
+    entityState.filter = null;
+    // The grid keeps its view but not its columns' sort or filters: those name
+    // columns that the next entity does not have.
+    entityState.loadAll = entityState.view === 'grid';
+    entityState.sort = null;
+    entityState.colFilters = {};
+    entityState.gridPage = 0;
+    entityState.selectedId = null;
+    entityState.detail = null;
+    const search = document.getElementById('entitySearch');
+    if (search) search.value = '';
+    const title = document.getElementById('entityTitle');
+    if (title) title.textContent = entityState.label;
+    const createBtn = document.getElementById('entityCreateBtn');
+    if (createBtn) createBtn.hidden = !entityWritable(resource);
+    renderEntityNav();
+    renderEntityDetail();
+    loadEntityRows();
+}
+
+// ── Overview (all entities at once) ────────────────────────────────────────
+// Every reference entity on one map. Nine categories cannot be told apart by
+// colour — only three hues clear the colour-vision and contrast checks against
+// the Esri canvases — so the three largest entities take those hues and the six
+// small ones share the neutral and are told apart by their icons instead. They
+// are few enough (243 records all told) that every one of them gets its badge,
+// which is exactly what makes that split work.
+const ENTITY_OVERVIEW_LIMIT = 6000;
+let overviewCache = null;
+// The overview draws ~6,400 shapes, 4,974 of them camp paths. As SVG that is
+// 6,400 DOM nodes and panning stutters badly; on a canvas it is one node and
+// Leaflet still delivers clicks and tooltips. Built lazily and reused, because
+// a renderer per draw would leak a canvas per pan.
+let overviewRenderer = null;
+
+function getOverviewRenderer() {
+    if (!overviewRenderer) overviewRenderer = L.canvas({ padding: 0.3 });
+    return overviewRenderer;
+}
+
+async function loadOverview() {
+    entityState.overview = true;
+    entityState.resource = null;
+    entityState.rows = [];
+    entityState.selectedId = null;
+    entityState.detail = null;
+    document.body.setAttribute('data-entity-overview', 'on');
+
+    const title = document.getElementById('entityTitle');
+    if (title) title.textContent = 'نظرة عامة';
+    const createBtn = document.getElementById('entityCreateBtn');
+    if (createBtn) createBtn.hidden = true;
+    renderEntityNav();
+    renderEntityDetail();
+
+    const busy = '<div class="entity-empty">جارٍ تحميل كل العناصر…</div>';
+    const list = document.getElementById('entityList');
+    const grid = document.getElementById('entityGrid');
+    if (list) list.innerHTML = busy;
+    if (grid) grid.innerHTML = busy;
+
+    if (!overviewCache) {
+        // One request per entity, in parallel. A failure is per entity: the rest
+        // of the map still draws, and the summary says which one is missing.
+        const results = await Promise.all(entityState.catalog.map((entry) =>
+            entityRequest(`entities/${encodeURIComponent(entry.name)}?limit=${ENTITY_OVERVIEW_LIMIT}`)
+                .then((data) => ({
+                    entry,
+                    rows: data.rows || [],
+                    total: data.total || 0,
+                    icons: data.icons || null,
+                }))
+                .catch((error) => ({ entry, rows: [], total: 0, icons: null, error: error.message }))
+        ));
+        overviewCache = assignOverviewColors(results);
+    }
+    if (!entityState.overview) return; // the user picked an entity while we loaded
+    entityState.overviewSets = overviewCache;
+
+    renderOverviewSummary();
+    renderEntityLegend();
+    drawEntityLayer();
+}
+
+// Rank by table size, give the top three the validated hues, the rest the
+// neutral — the same three-slot rule the single-entity view uses for its colour
+// groups, applied to entities instead of to one entity's discriminant.
+function assignOverviewColors(sets) {
+    const palette = entityPalette();
+    const ranked = [...sets].sort((a, b) => b.total - a.total);
+    ranked.forEach((set, i) => {
+        set.color = i < ENTITY_COLOR_SLOTS ? palette.series[i] : palette.other;
+        set.toned = i < ENTITY_COLOR_SLOTS;
+    });
+    // Back to catalogue order for the summary and the legend, so the panel does
+    // not reshuffle itself between loads.
+    return sets;
+}
+
+function renderOverviewSummary() {
+    const sets = entityState.overviewSets ? assignOverviewColors(entityState.overviewSets) : [];
+    const rows = sets.map((set) => {
+        const shown = set.rows.length;
+        const note = set.error
+            ? `<span class="entity-row-meta is-error">${escapeHtml(set.error)}</span>`
+            : `<span class="entity-row-meta">${shown.toLocaleString()}${shown < set.total ? ` من ${set.total.toLocaleString()}` : ''} سجل</span>`;
+        return `
+            <button type="button" class="entity-row entity-overview-row" data-entity="${escapeHtml(set.entry.name)}">
+                <span class="entity-overview-swatch" style="background:${escapeHtml(set.color)}"></span>
+                <span class="entity-row-title">
+                    <i class="fa-solid ${escapeHtml(set.entry.icon)}" aria-hidden="true"></i>
+                    ${escapeHtml(set.entry.label)}
+                </span>
+                ${note}
+            </button>`;
+    }).join('');
+
+    const total = sets.reduce((n, s) => n + s.rows.length, 0);
+    const hint = '<div class="entity-overview-hint">كل العناصر معروضة على الخريطة — اختر عنصراً لتحريره</div>';
+
+    const list = document.getElementById('entityList');
+    if (list) list.innerHTML = hint + rows;
+    const grid = document.getElementById('entityGrid');
+    if (grid) grid.innerHTML = hint + rows;
+
+    document.querySelectorAll('.entity-overview-row').forEach((btn) => {
+        btn.addEventListener('click', () => selectEntity(btn.dataset.entity));
+    });
+
+    const foot = `${sets.length} عنصراً · ${total.toLocaleString()} سجل على الخريطة`;
+    const listFoot = document.getElementById('entityListFoot');
+    if (listFoot) listFoot.textContent = foot;
+    const gridFoot = document.getElementById('entityGridFoot');
+    if (gridFoot) gridFoot.textContent = foot;
+}
+
+// Every entity drawn in one pass. Point records are culled to the viewport once
+// there are more than ENTITY_PIN_CULL_AFTER of them across all entities, so the
+// ~1,900 residences do not put 1,900 DOM nodes on the map at once.
+function drawOverviewLayer() {
+    const sets = entityState.overviewSets ? assignOverviewColors(entityState.overviewSets) : [];
+    const allBounds = L.latLngBounds();
+
+    const pinCount = sets.reduce((n, set) => n + set.rows.reduce(
+        (m, r) => m + (!r.geojson && Number.isFinite(r.lon) && Number.isFinite(r.lat) ? 1 : 0), 0), 0);
+    const cullPins = pinCount > ENTITY_PIN_CULL_AFTER;
+    const viewport = cullPins ? map.getBounds().pad(0.3) : null;
+
+    sets.forEach((set) => {
+        const { color } = set;
+        const withIcons = set.entry.mapIcon !== false;
+        // The small entities all get badges; the big ones would be a wall of them.
+        const badgeAll = withIcons && set.rows.length <= ENTITY_BADGE_LIMIT;
+        const iconFor = (row) => {
+            const key = row.icon_key;
+            if (set.icons && key && set.icons.map && set.icons.map[key]) return set.icons.map[key];
+            return set.entry.icon || 'fa-location-dot';
+        };
+
+        set.rows.forEach((row) => {
+            const label = String(row.name ?? row[Object.keys(row)[1]] ?? '');
+            const tip = `${set.entry.label} · ${label}`;
+            const attach = (layer) => {
+                layer.addTo(entityLayerGroup);
+                layer.bindTooltip(tip, { direction: 'top', sticky: true });
+                layer.on('click', () => {
+                    selectEntity(set.entry.name);
+                    openEntityForm(row.id);
+                });
+            };
+
+            let bounds = null;
+            if (row.geojson) {
+                let shapeLayer = null;
+                try {
+                    shapeLayer = L.geoJSON(JSON.parse(row.geojson), {
+                        renderer: getOverviewRenderer(),
+                        style: () => ({ color, weight: 1.5, fillColor: color, fillOpacity: 0.22 }),
+                        pointToLayer: (_f, latlng) => (withIcons
+                            ? L.marker(latlng, { icon: entityPinIcon(color, false, row, iconFor(row)) })
+                            : L.circleMarker(latlng, { renderer: getOverviewRenderer(), radius: 4.5, color, weight: 1.5, fillColor: color, fillOpacity: 0.7 })),
+                    });
+                } catch (_e) {
+                    shapeLayer = null;
+                }
+                if (shapeLayer) {
+                    attach(shapeLayer);
+                    bounds = shapeLayer.getBounds();
+                    const type = (() => { try { return String(JSON.parse(row.geojson).type || ''); } catch (_e) { return ''; } })();
+                    if (badgeAll && /Polygon|LineString/.test(type) && bounds && bounds.isValid()) {
+                        attach(L.marker(bounds.getCenter(), { icon: entityPinIcon(color, false, row, iconFor(row)) }));
+                    }
+                }
+            } else if (Number.isFinite(row.lon) && Number.isFinite(row.lat)) {
+                const at = L.latLng(row.lat, row.lon);
+                bounds = L.latLngBounds(at, at);
+                if (!viewport || viewport.contains(at)) {
+                    attach(withIcons
+                        ? L.marker(at, { icon: entityPinIcon(color, false, row, iconFor(row)) })
+                        : L.circleMarker(at, { renderer: getOverviewRenderer(), radius: 4.5, color, weight: 1.5, fillColor: color, fillOpacity: 0.7 }));
+                }
+            }
+            if (bounds && bounds.isValid()) allBounds.extend(bounds);
+        });
+    });
+
+    renderDistrictReference();
+    return allBounds;
+}
+
+async function loadEntityRows() {
+    const { resource, search } = entityState;
+    if (!resource) return;
+    const list = document.getElementById('entityList');
+    const grid = document.getElementById('entityGrid');
+    const busy = '<div class="entity-empty">جارٍ التحميل…</div>';
+    if (list) list.innerHTML = busy;
+    if (grid && entityState.view === 'grid') grid.innerHTML = busy;
+    try {
+        const params = new URLSearchParams({ limit: String(entityState.loadAll ? Math.max(entityState.total, ENTITY_PAGE_SIZE) : ENTITY_PAGE_SIZE) });
+        if (search) params.set('q', search);
+        if (entityState.filter) params.set('filter', entityState.filter);
+        const data = await entityRequest(`entities/${encodeURIComponent(resource)}?${params}`);
+        if (data.resource !== entityState.resource) return; // a newer selection won
+        entityState.rows = data.rows || [];
+        entityState.columns = data.columns || [];
+        entityState.columnLabels = data.columnLabels || {};
+        entityState.total = data.total || 0;
+        entityState.matched = data.matched ?? data.total ?? 0;
+        entityState.filter = data.filter ?? null;
+        entityState.limit = data.limit || 0;
+        entityState.colorBy = data.colorBy || null;
+        entityState.icons = data.icons || null;
+        entityState.colors = buildEntityColors(entityState.rows);
+    } catch (error) {
+        entityState.rows = [];
+        entityState.total = 0;
+        const message = `<div class="entity-empty">${escapeHtml(error.message)}</div>`;
+        if (list) list.innerHTML = message;
+        if (grid) grid.innerHTML = message;
+        return;
+    }
+    renderEntityList();
+    renderEntityGrid();
+    renderEntityLegend();
+    drawEntityLayer();
+}
+
+function renderEntityList() {
+    if (entityState.overview) return; // the overview owns both panels
+    const list = document.getElementById('entityList');
+    const foot = document.getElementById('entityListFoot');
+    if (!list) return;
+    if (!entityState.rows.length) {
+        list.innerHTML = '<div class="entity-empty">لا توجد سجلات</div>';
+        if (foot) foot.textContent = '';
+        return;
+    }
+    const [titleCol, ...restCols] = entityState.columns;
+    list.innerHTML = entityState.rows.map((row) => {
+        const meta = restCols
+            .map((c) => (row[c] === null || row[c] === undefined || row[c] === '' ? '' : String(row[c])))
+            .filter(Boolean).join(' · ');
+        return `
+            <button type="button" class="entity-row${row.id === entityState.selectedId ? ' is-active' : ''}" data-id="${escapeHtml(row.id)}">
+                <span class="entity-row-title">${escapeHtml(row[titleCol] ?? '—')}</span>
+                ${meta ? `<span class="entity-row-meta">${escapeHtml(meta)}</span>` : ''}
+            </button>`;
+    }).join('');
+    list.querySelectorAll('.entity-row').forEach((btn) => {
+        btn.addEventListener('click', () => openEntityForm(btn.dataset.id));
+    });
+    if (foot) {
+        const shown = entityState.rows.length;
+        const FILTER_NAMES = { used: 'مستخدمة في الخطط', unused: 'غير مستخدمة' };
+        const narrowed = entityState.search || entityState.filter;
+        const pool = narrowed ? entityState.matched : entityState.total;
+        const active = entityState.filter ? ` · ${FILTER_NAMES[entityState.filter]}` : '';
+        foot.replaceChildren();
+        if (shown < pool) {
+            foot.append(`معروض ${shown.toLocaleString()} من ${pool.toLocaleString()}${active} `);
+            const more = document.createElement('button');
+            more.type = 'button';
+            more.className = 'entity-load-all';
+            more.textContent = `عرض الكل (${pool.toLocaleString()})`;
+            more.addEventListener('click', () => { entityState.loadAll = true; loadEntityRows(); });
+            foot.append(more);
+        } else {
+            foot.append(`${shown.toLocaleString()} سجل${active}`);
+        }
+    }
+}
+
+// ── Grid view ──────────────────────────────────────────────────────────────
+// The same records, as a table. Sorting and filtering are per column and run
+// client-side over the rows already loaded — which is why switching to the grid
+// loads the whole (scoped) table first: a table that quietly sorted only the
+// first page would be worse than no sorting at all.
+
+const ENTITY_VIEW_KEY = 'maan_entity_view';
+const ENTITY_GRID_PAGE = 50;
+// Past this many distinct values a dropdown stops being a shortcut, so the
+// column gets a free-text box instead.
+const ENTITY_GRID_SELECT_MAX = 30;
+const ENTITY_COLLATOR = new Intl.Collator('ar', { numeric: true, sensitivity: 'base' });
+
+function setEntityView(view, { persist = true, reload = true } = {}) {
+    entityState.view = view === 'grid' ? 'grid' : 'map';
+    document.body.setAttribute('data-entity-view', entityState.view);
+    if (persist) { try { localStorage.setItem(ENTITY_VIEW_KEY, entityState.view); } catch (_e) {} }
+
+    document.querySelectorAll('#entityViewSwitch .entity-view-btn').forEach((btn) => {
+        const on = btn.dataset.view === entityState.view;
+        btn.classList.toggle('is-active', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    if (!reload) return;
+
+    if (entityState.view === 'grid') {
+        entityState.gridPage = 0;
+        if (!entityState.loadAll && entityState.rows.length < entityState.matched) {
+            entityState.loadAll = true;
+            loadEntityRows();
+            return;
+        }
+        renderEntityGrid();
+    } else {
+        // The map spent the grid session at display:none, so Leaflet's cached
+        // size is stale and tiles would lay out against a zero-width box.
+        requestAnimationFrame(() => {
+            if (map) map.invalidateSize();
+            drawEntityLayer();
+            renderEntityLegend();
+        });
+    }
+}
+
+// Which geometry a record carries, worked out once and cached on the row: the
+// grid re-renders on every keystroke and re-parsing thousands of shapes each
+// time would be felt.
+function entityGeoKind(row) {
+    if (row.__geoKind === undefined) {
+        let kind = '';
+        if (row.geojson) {
+            try {
+                const type = String(JSON.parse(row.geojson).type || '');
+                kind = /Polygon/.test(type) ? 'مضلّع' : (/LineString/.test(type) ? 'خط' : 'نقطة');
+            } catch (_e) { kind = 'شكل'; }
+        } else if (Number.isFinite(row.lon) && Number.isFinite(row.lat)) {
+            kind = 'نقطة';
+        }
+        Object.defineProperty(row, '__geoKind', { value: kind, enumerable: false });
+    }
+    return row.__geoKind;
+}
+
+// The list columns the server chose, plus the two the map encodes (the colour
+// discriminant and the icon column) and the geometry kind — so everything the
+// map says about a record is also readable as text.
+function entityGridColumns() {
+    const fields = entityFields(entityState.resource);
+    const typeOf = (key) => (fields.find((f) => f.name === key) || {}).type || 'text';
+    const cols = entityState.columns.map((key) => ({
+        key, label: entityState.columnLabels[key] || key, type: typeOf(key),
+    }));
+    // The map's colour and icon keys become columns too — unless they are just
+    // a list column under a second name, which several entities are.
+    const derived = (meta, key) => {
+        if (!meta) return;
+        if (meta.column && entityState.columns.includes(meta.column)) return;
+        cols.push({ key, label: meta.label, type: 'text' });
+    };
+    derived(entityState.colorBy, 'color_key');
+    derived(entityState.icons, 'icon_key');
+    if (entityState.rows.some((r) => entityGeoKind(r))) {
+        cols.push({ key: '__geo', label: 'الشكل', type: 'text' });
+    }
+    return cols;
+}
+
+function entityGridValue(row, col) {
+    if (col.key === '__geo') return entityGeoKind(row);
+    const v = row[col.key];
+    return (v === null || v === undefined) ? '' : v;
+}
+
+// Blanks sort last in both directions: they are absence, not a low value, and
+// flipping the arrow should not park them at the top.
+function entityGridSortRows(rows, col, dir) {
+    return [...rows].sort((a, b) => {
+        const av = entityGridValue(a, col);
+        const bv = entityGridValue(b, col);
+        const aEmpty = av === '';
+        const bEmpty = bv === '';
+        if (aEmpty || bEmpty) return aEmpty && bEmpty ? 0 : (aEmpty ? 1 : -1);
+        if (col.type === 'number') return (Number(av) - Number(bv)) * dir;
+        return ENTITY_COLLATOR.compare(String(av), String(bv)) * dir;
+    });
+}
+
+function entityGridRows(cols) {
+    const active = Object.entries(entityState.colFilters)
+        .filter(([, f]) => f && f.value !== '' && f.value !== null && f.value !== undefined);
+
+    let rows = entityState.rows;
+    if (active.length) {
+        rows = rows.filter((row) => active.every(([key, f]) => {
+            const col = cols.find((c) => c.key === key) || { key, type: 'text' };
+            const val = String(entityGridValue(row, col));
+            if (f.exact) return val === String(f.value);
+            return val.toLowerCase().includes(String(f.value).toLowerCase());
+        }));
+    }
+    if (entityState.sort) {
+        const col = cols.find((c) => c.key === entityState.sort.key);
+        if (col) rows = entityGridSortRows(rows, col, entityState.sort.dir);
+    }
+    return rows;
+}
+
+// A dropdown when the column is a small taxonomy, a text box when it is not.
+function entityGridDistinct(col) {
+    if (col.type === 'number') return null;
+    const seen = new Set();
+    for (const row of entityState.rows) {
+        const v = entityGridValue(row, col);
+        if (v === '') continue;
+        seen.add(String(v));
+        if (seen.size > ENTITY_GRID_SELECT_MAX) return null;
+    }
+    return [...seen].sort(ENTITY_COLLATOR.compare);
+}
+
+function renderEntityGrid() {
+    const host = document.getElementById('entityGrid');
+    const foot = document.getElementById('entityGridFoot');
+    if (!host) return;
+    if (entityState.overview) return; // the overview owns both panels
+    if (entityState.view !== 'grid' || !entityState.resource) return;
+    if (!entityState.rows.length) {
+        host.innerHTML = '<div class="entity-empty">لا توجد سجلات</div>';
+        if (foot) foot.replaceChildren();
+        return;
+    }
+
+    const cols = entityGridColumns();
+    const rows = entityGridRows(cols);
+    const pageCount = Math.max(1, Math.ceil(rows.length / ENTITY_GRID_PAGE));
+    if (entityState.gridPage > pageCount - 1) entityState.gridPage = pageCount - 1;
+    const start = entityState.gridPage * ENTITY_GRID_PAGE;
+    const page = rows.slice(start, start + ENTITY_GRID_PAGE);
+
+    const sortMark = (key) => {
+        if (!entityState.sort || entityState.sort.key !== key) return 'fa-sort';
+        return entityState.sort.dir === 1 ? 'fa-sort-up' : 'fa-sort-down';
+    };
+    const headCells = cols.map((c) => {
+        const sorted = entityState.sort && entityState.sort.key === c.key;
+        return `<th scope="col"${sorted ? ` aria-sort="${entityState.sort.dir === 1 ? 'ascending' : 'descending'}"` : ''}>
+            <button type="button" class="entity-grid-sort${sorted ? ' is-sorted' : ''}" data-sort="${escapeHtml(c.key)}" title="فرز حسب ${escapeHtml(c.label)}">
+                <span>${escapeHtml(c.label)}</span>
+                <i class="fa-solid ${sortMark(c.key)}" aria-hidden="true"></i>
+            </button></th>`;
+    }).join('');
+
+    const filterCells = cols.map((c) => {
+        const current = entityState.colFilters[c.key];
+        const value = current ? String(current.value) : '';
+        const options = entityGridDistinct(c);
+        if (options) {
+            return `<th><select class="entity-grid-filter" data-filter-col="${escapeHtml(c.key)}" data-exact="1" aria-label="تصفية ${escapeHtml(c.label)}">
+                <option value="">الكل</option>
+                ${options.map((o) => `<option value="${escapeHtml(o)}"${o === value ? ' selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+            </select></th>`;
+        }
+        return `<th><input type="search" class="entity-grid-filter" data-filter-col="${escapeHtml(c.key)}"
+            value="${escapeHtml(value)}" placeholder="تصفية…" autocomplete="off" aria-label="تصفية ${escapeHtml(c.label)}"></th>`;
+    }).join('');
+
+    const body = page.map((row) => {
+        const color = entityColorFor(row);
+        const cells = cols.map((c, i) => {
+            const raw = entityGridValue(row, c);
+            const shown = c.type === 'number' && raw !== '' ? Number(raw).toLocaleString() : raw;
+            // The first column carries the same icon and colour the map uses, so
+            // a record is recognisable in either view.
+            const lead = i === 0 && entityMapIcons()
+                ? `<i class="fa-solid ${escapeHtml(entityIconClass(row))} entity-grid-icon" style="color:${escapeHtml(color)}" aria-hidden="true"></i>`
+                : '';
+            return `<td class="${c.type === 'number' ? 'num' : ''}">${lead}${escapeHtml(shown === '' ? '—' : shown)}</td>`;
+        }).join('');
+        return `<tr class="entity-grid-row${row.id === entityState.selectedId ? ' is-active' : ''}" data-id="${escapeHtml(row.id)}" tabindex="0">${cells}</tr>`;
+    }).join('');
+
+    const focused = document.activeElement;
+    const focusKey = focused && focused.classList.contains('entity-grid-filter')
+        ? focused.dataset.filterCol : null;
+
+    host.innerHTML = `
+        <table class="entity-grid-table">
+            <thead>
+                <tr class="entity-grid-head">${headCells}</tr>
+                <tr class="entity-grid-filters">${filterCells}</tr>
+            </thead>
+            <tbody>${body}</tbody>
+        </table>`;
+
+    host.querySelectorAll('.entity-grid-sort').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const key = btn.dataset.sort;
+            const cur = entityState.sort;
+            entityState.sort = (cur && cur.key === key)
+                ? (cur.dir === 1 ? { key, dir: -1 } : null)   // asc → desc → unsorted
+                : { key, dir: 1 };
+            entityState.gridPage = 0;
+            renderEntityGrid();
+        });
+    });
+
+    const applyFilter = (el) => {
+        const key = el.dataset.filterCol;
+        const value = el.value;
+        if (value === '') delete entityState.colFilters[key];
+        else entityState.colFilters[key] = { value, exact: el.dataset.exact === '1' };
+        entityState.gridPage = 0;
+        renderEntityGrid();
+    };
+    host.querySelectorAll('input.entity-grid-filter').forEach((el) => {
+        el.addEventListener('input', debounce(() => applyFilter(el), 220));
+    });
+    host.querySelectorAll('select.entity-grid-filter').forEach((el) => {
+        el.addEventListener('change', () => applyFilter(el));
+    });
+
+    const open = (tr) => openEntityForm(tr.dataset.id);
+    host.querySelectorAll('.entity-grid-row').forEach((tr) => {
+        tr.addEventListener('click', () => open(tr));
+        tr.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(tr); }
+        });
+    });
+
+    // The table is rebuilt on each keystroke, so put the caret back where it was.
+    if (focusKey) {
+        const again = host.querySelector(`.entity-grid-filter[data-filter-col="${focusKey}"]`);
+        if (again) {
+            again.focus();
+            if (again.setSelectionRange) {
+                const end = again.value.length;
+                try { again.setSelectionRange(end, end); } catch (_e) {}
+            }
+        }
+    }
+
+    if (foot) {
+        foot.replaceChildren();
+        const filtered = Object.keys(entityState.colFilters).length > 0;
+        const from = rows.length ? start + 1 : 0;
+        const to = Math.min(start + ENTITY_GRID_PAGE, rows.length);
+        const info = document.createElement('span');
+        info.className = 'entity-grid-count';
+        info.textContent = filtered
+            ? `${from.toLocaleString()}–${to.toLocaleString()} من ${rows.length.toLocaleString()} مصفّاة (${entityState.rows.length.toLocaleString()} محمّلة)`
+            : `${from.toLocaleString()}–${to.toLocaleString()} من ${rows.length.toLocaleString()}`;
+        foot.append(info);
+
+        if (filtered || entityState.sort) {
+            const reset = document.createElement('button');
+            reset.type = 'button';
+            reset.className = 'entity-grid-reset';
+            reset.textContent = 'إلغاء الفرز والتصفية';
+            reset.addEventListener('click', () => {
+                entityState.colFilters = {};
+                entityState.sort = null;
+                entityState.gridPage = 0;
+                renderEntityGrid();
+            });
+            foot.append(reset);
+        }
+
+        if (pageCount > 1) {
+            const pager = document.createElement('div');
+            pager.className = 'entity-grid-pager';
+            const step = (delta, icon, label) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'entity-grid-page-btn';
+                b.title = label;
+                b.setAttribute('aria-label', label);
+                b.innerHTML = `<i class="fa-solid ${icon}" aria-hidden="true"></i>`;
+                b.disabled = delta < 0 ? entityState.gridPage === 0 : entityState.gridPage >= pageCount - 1;
+                b.addEventListener('click', () => {
+                    entityState.gridPage = Math.min(pageCount - 1, Math.max(0, entityState.gridPage + delta));
+                    renderEntityGrid();
+                });
+                return b;
+            };
+            // RTL: "previous" sits on the right, so the chevron points that way.
+            pager.append(step(-1, 'fa-chevron-right', 'الصفحة السابقة'));
+            const at = document.createElement('span');
+            at.className = 'entity-grid-page-at';
+            at.textContent = `${(entityState.gridPage + 1).toLocaleString()} / ${pageCount.toLocaleString()}`;
+            pager.append(at);
+            pager.append(step(1, 'fa-chevron-left', 'الصفحة التالية'));
+            foot.append(pager);
+        }
+    }
+}
+
+// The legend lives on the map, beside the shapes it explains: the entity and
+// how its records are drawn, then each colour group with its count. Groups past
+// the three coloured slots are named here too, so folding them into one neutral
+// hides no information.
+function renderEntityLegend() {
+    const host = document.getElementById('mapLegend');
+    if (!host) return;
+    if (!isEntityWorkspaceActive()) {
+        host.hidden = true;
+        host.innerHTML = '';
+        return;
+    }
+    // In the overview the legend is the key to the whole map: which colour or
+    // glyph is which entity, and how many of each is drawn.
+    if (entityState.overview) {
+        const sets = entityState.overviewSets ? assignOverviewColors(entityState.overviewSets) : [];
+        if (!sets.length) { host.hidden = true; host.innerHTML = ''; return; }
+        const drawn = sets.reduce((n, s) => n + s.rows.length, 0);
+        host.hidden = false;
+        host.innerHTML = `
+            <div class="map-legend-head">
+                <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
+                <span class="map-legend-title">كل العناصر</span>
+                <span class="map-legend-sub">${drawn.toLocaleString()} سجل</span>
+            </div>
+            <div class="map-legend-items">
+                ${sets.map((set) => `
+                    <span class="entity-legend-item" title="${escapeHtml(set.entry.label)} — ${set.rows.length.toLocaleString()} سجل">
+                        <span class="entity-legend-dot" style="background:${escapeHtml(set.color)}"></span>
+                        <i class="fa-solid ${escapeHtml(set.entry.icon)} entity-legend-icon" aria-hidden="true"></i>
+                        <span class="entity-legend-text">${escapeHtml(set.entry.label)}</span>
+                        <span class="entity-legend-count">${set.rows.length.toLocaleString()}</span>
+                    </span>`).join('')}
+            </div>
+            <div class="map-legend-hint">اللون يميّز أكبر ${ENTITY_COLOR_SLOTS} عناصر؛ البقية بلون محايد وتتميّز بأيقوناتها</div>`;
+        return;
+    }
+    if (!entityState.resource || !entityState.rows.length) {
+        host.hidden = true;
+        host.innerHTML = '';
+        return;
+    }
+
+    const palette = entityPalette();
+    const shaped = entityState.rows.filter((r) => r.geojson).length;
+    const pinned = entityState.rows.length - shaped;
+    const drawnAs = [
+        shaped ? `${shaped.toLocaleString()} شكل` : '',
+        pinned ? `${pinned.toLocaleString()} علامة` : '',
+    ].filter(Boolean).join(' · ');
+
+    const rows = [];
+    if (entityState.colorBy) {
+        const missing = entityState.rows.filter((r) => entityColorKey(r) === null).length;
+        [...entityState.colors.entries()]
+            .map(([value, color]) => ({ value, color, n: entityState.groupCounts.get(value) || 0 }))
+            .sort((a, b) => b.n - a.n)
+            .forEach((e) => rows.push(e));
+
+        if (entityState.otherGroups > 0) {
+            const rest = [...entityState.groupCounts.entries()]
+                .filter(([value]) => !entityState.colors.has(value))
+                .sort((a, b) => b[1] - a[1]);
+            rows.push({
+                value: `بقية المجموعات · ${entityState.otherGroups}`,
+                color: palette.other,
+                n: rest.reduce((sum, [, n]) => sum + n, 0),
+                hint: rest.map(([v, n]) => `${v} (${n})`).join('، '),
+            });
+        }
+        if (missing) rows.push({ value: 'بدون قيمة', color: palette.other, n: missing });
+    }
+
+    // Icon key: only the glyphs actually present on this page.
+    const iconRows = [];
+    if (entityState.icons && entityState.icons.map) {
+        const counts = new Map();
+        entityState.rows.forEach((r) => {
+            const key = r.icon_key;
+            if (key && entityState.icons.map[key]) counts.set(key, (counts.get(key) || 0) + 1);
+        });
+        [...counts.entries()]
+            .sort((x, y) => y[1] - x[1])
+            .forEach(([value, n]) => iconRows.push({ value, n, icon: entityState.icons.map[value] }));
+    }
+
+    host.hidden = false;
+    host.innerHTML = `
+        <div class="map-legend-head">
+            <i class="fa-solid ${escapeHtml(entityIconClass())}" aria-hidden="true"></i>
+            <span class="map-legend-title">${escapeHtml(entityState.label)}</span>
+            ${drawnAs ? `<span class="map-legend-sub">${escapeHtml(drawnAs)}</span>` : ''}
+        </div>
+        ${entityState.colorBy ? `<div class="map-legend-by">${escapeHtml(entityState.colorBy.label)}</div>` : ''}
+        <div class="map-legend-items">
+            ${rows.map((e) => `
+                <span class="entity-legend-item" title="${escapeHtml(e.hint || `${e.value} — ${e.n} سجل`)}">
+                    <span class="entity-legend-dot" style="background:${escapeHtml(e.color)}"></span>
+                    <span class="entity-legend-text">${escapeHtml(e.value)}</span>
+                    <span class="entity-legend-count">${e.n.toLocaleString()}</span>
+                </span>`).join('')}
+        </div>
+        ${iconRows.length ? `
+            <div class="map-legend-by">${escapeHtml(entityState.icons.label)}</div>
+            <div class="map-legend-items">
+                ${iconRows.map((e) => `
+                    <span class="entity-legend-item" title="${escapeHtml(e.value)} — ${e.n} سجل">
+                        <i class="fa-solid ${escapeHtml(e.icon)} entity-legend-icon" aria-hidden="true"></i>
+                        <span class="entity-legend-text">${escapeHtml(e.value)}</span>
+                        <span class="entity-legend-count">${e.n.toLocaleString()}</span>
+                    </span>`).join('')}
+            </div>` : ''}
+        ${entityState.otherGroups ? `<div class="map-legend-hint">اللون يميّز أكبر ${ENTITY_COLOR_SLOTS} مجموعات فقط؛ البقية بلون محايد — مرّر عليها لعرضها</div>` : ''}
+        ${entityState.filter ? '<div class="map-legend-note">تصفية مطبّقة</div>' : ''}`;
+}
+
+async function openEntityForm(id) {
+    entityState.creating = id === null;
+    entityState.selectedId = id;
+    if (id) {
+        try {
+            const data = await entityRequest(`entities/${encodeURIComponent(entityState.resource)}/${id}`);
+            entityState.detail = data.row;
+        } catch (error) {
+            entityState.detail = null;
+            showNotification(error.message, 'error');
+            return;
+        }
+    } else {
+        entityState.detail = {};
+    }
+    renderEntityList();
+    renderEntityGrid();
+    renderEntityDetail();
+    drawEntityLayer();
+}
+
+function renderEntityDetail() {
+    const host = document.getElementById('entityDetail');
+    if (!host) return;
+    const { resource, detail, creating } = entityState;
+    if (entityState.overview) {
+        host.innerHTML = '<div class="entity-empty">اختر عنصراً من القائمة المرجعية، أو اضغط شكلاً على الخريطة لتحريره</div>';
+        return;
+    }
+    if (!resource || !detail) {
+        host.innerHTML = '<div class="entity-empty">اختر سجلاً لعرض تفاصيله</div>';
+        return;
+    }
+
+    const fields = entityFields(resource);
+    const writable = entityWritable(resource);
+    const lock = writable ? '' : ' disabled';
+    const options = dbPermissions.options || {};
+    const controls = fields.map((field) => {
+        const value = detail[field.name];
+        if (field.type === 'select') {
+            const list = options[field.options] || [];
+            return `
+                <label class="entity-field">
+                    <span>${escapeHtml(field.label)}</span>
+                    <select name="${escapeHtml(field.name)}"${lock}>
+                        <option value="">—</option>
+                        ${list.map((o) => `<option value="${escapeHtml(o.id ?? o.value)}" ${String(o.id ?? o.value) === String(value ?? '') ? 'selected' : ''}>${escapeHtml(o.name ?? o.label)}</option>`).join('')}
+                    </select>
+                </label>`;
+        }
+        const type = field.type === 'number' ? 'number' : 'text';
+        return `
+            <label class="entity-field">
+                <span>${escapeHtml(field.label)}</span>
+                <input type="${type}" name="${escapeHtml(field.name)}" value="${escapeHtml(value ?? '')}" autocomplete="off"${lock}>
+            </label>`;
+    }).join('');
+
+    // Geometry and derived measures are shown but never sent back.
+    const readOnlyPairs = [
+        ['lon', 'خط الطول'], ['lat', 'دائرة العرض'],
+        ['shape_area', 'المساحة'], ['objectid', 'المعرف المساحي'],
+    ].filter(([k]) => detail[k] !== null && detail[k] !== undefined);
+    const readOnly = readOnlyPairs.map(([k, label]) => {
+        const raw = detail[k];
+        const shown = typeof raw === 'number' ? raw.toFixed(k === 'shape_area' ? 0 : 6) : raw;
+        return `<div class="entity-readonly-item"><span>${escapeHtml(label)}</span><b>${escapeHtml(shown)}</b></div>`;
+    }).join('');
+
+    host.innerHTML = `
+        <form id="entityForm" class="entity-form">
+            <div class="entity-detail-head">
+                <h3>${creating ? 'سجل جديد' : escapeHtml(detail.name ?? '')}</h3>
+                ${writable && !creating ? '<button type="button" class="entity-delete-btn" id="entityDeleteBtn"><i class="fa-solid fa-trash-can" aria-hidden="true"></i> حذف</button>' : ''}
+                ${writable ? '' : '<span class="entity-readonly-badge"><i class="fa-solid fa-lock" aria-hidden="true"></i> عرض فقط</span>'}
+            </div>
+            ${writable ? '' : '<p class="entity-readonly-why">هذه بيانات مشتركة بين جميع المراكز؛ التعديل عليها من صلاحيات مشرف النظام.</p>'}
+            <div class="entity-fields">${controls}</div>
+            ${readOnly ? `<div class="entity-readonly"><span class="entity-readonly-label">قيم للقراءة فقط</span><div class="entity-readonly-grid">${readOnly}</div></div>` : ''}
+            <p class="entity-form-error" id="entityFormError" hidden></p>
+            <div class="entity-form-actions">
+                <button type="button" class="entity-btn ghost" id="entityCancelBtn">${writable ? 'إلغاء' : 'إغلاق'}</button>
+                ${writable ? `<button type="submit" class="entity-btn primary">${creating ? 'إنشاء' : 'حفظ'}</button>` : ''}
+            </div>
+        </form>`;
+
+    document.getElementById('entityCancelBtn').addEventListener('click', () => {
+        entityState.selectedId = null;
+        entityState.detail = null;
+        entityState.creating = false;
+        renderEntityList();
+        renderEntityGrid();
+        renderEntityDetail();
+        drawEntityLayer();
+    });
+    document.getElementById('entityDeleteBtn')?.addEventListener('click', deleteEntityRecord);
+    document.getElementById('entityForm').addEventListener('submit', saveEntityRecord);
+}
+
+async function saveEntityRecord(event) {
+    event.preventDefault();
+    const { resource, selectedId, creating } = entityState;
+    if (!entityWritable(resource)) return;
+    const errorEl = document.getElementById('entityFormError');
+    const form = new FormData(event.target);
+    const values = {};
+    for (const field of entityFields(resource)) {
+        const raw = form.get(field.name);
+        values[field.name] = field.type === 'number' && raw !== '' && raw !== null ? Number(raw) : (raw ?? '');
+    }
+
+    try {
+        if (creating) {
+            const created = await entityRequest(`entities/${encodeURIComponent(resource)}`, {
+                method: 'POST', body: JSON.stringify(values),
+            });
+            showNotification('تم إنشاء السجل', 'success');
+            entityState.search = '';
+            const search = document.getElementById('entitySearch');
+            if (search) search.value = '';
+            await loadEntityRows();
+            await openEntityForm(created.id);
+        } else {
+            await entityRequest(`db/${encodeURIComponent(resource)}/${selectedId}`, {
+                method: 'PATCH', body: JSON.stringify(values),
+            });
+            showNotification('تم حفظ التعديلات', 'success');
+            await loadEntityRows();
+            await openEntityForm(selectedId);
+        }
+        await refreshDatasetsAfterEntityWrite();
+    } catch (error) {
+        if (errorEl) { errorEl.textContent = error.message; errorEl.hidden = false; }
+    }
+}
+
+async function deleteEntityRecord() {
+    const { resource, selectedId, detail } = entityState;
+    if (!selectedId || !entityWritable(resource)) return;
+    if (!confirm(`حذف «${detail?.name ?? ''}» نهائياً؟`)) return;
+    try {
+        await entityRequest(`db/${encodeURIComponent(resource)}/${selectedId}`, { method: 'DELETE' });
+        showNotification('تم حذف السجل', 'success');
+        entityState.selectedId = null;
+        entityState.detail = null;
+        await loadEntityRows();
+        renderEntityDetail();
+        await refreshDatasetsAfterEntityWrite();
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+}
+
+// Reference edits change what the dashboard datasets join against, and the
+// server has already dropped its caches, so pull them again for view mode.
+async function refreshDatasetsAfterEntityWrite() {
+    try {
+        await loadDatasetsFromDatabase();
+        const parsed = Papa.parse(window.CSV_DATA || '', { header: true, dynamicTyping: true, skipEmptyLines: true });
+        applyPlansRows(parsed.data, 'database');
+    } catch (error) {
+        console.warn('Could not refresh datasets after the edit:', error.message);
+    }
+}
+
+function clearEntityLayer() {
+    if (entityLayerGroup) entityLayerGroup.clearLayers();
+}
+
+// Geometry is read-only here, so these are plain styles with no editing
+// handles. Colour carries the discriminant; selection is carried by weight and
+// opacity instead, so the group a record belongs to stays readable when it is
+// the one being edited.
+function entityShapeStyle(selected, row) {
+    const color = entityColorFor(row);
+    return selected
+        ? { color: '#f59e0b', weight: 3.5, fillColor: color, fillOpacity: 0.55 }
+        : { color, weight: 1.5, fillColor: color, fillOpacity: 0.22 };
+}
+
+// A point record of an icon-less entity: the same colour, worn as a plain dot,
+// so it is still on the map and still clickable.
+function entityDotStyle(selected, row) {
+    const color = entityColorFor(row);
+    return selected
+        ? { radius: 7, color: '#f59e0b', weight: 2.5, fillColor: color, fillOpacity: 0.9 }
+        : { radius: 4.5, color, weight: 1.5, fillColor: color, fillOpacity: 0.7 };
+}
+
+// How many shapes may carry an icon badge before the map turns into a wall of
+// pins. Above this only the selected record is badged; the shapes still read.
+const ENTITY_BADGE_LIMIT = 80;
+// Covers every entity except paths (~5k) in one request, so "all" really means
+// all for the ones people browse most. Past this the footer offers to load the
+// rest rather than silently truncating.
+const ENTITY_PAGE_SIZE = 2000;
+// Icon pins are DOM elements, so thousands of them would crawl. Past this many
+// point records only the ones in view (plus a margin) get built, and the layer
+// is rebuilt as the map moves — so every record still wears its icon, there are
+// just never thousands of nodes alive at once.
+const ENTITY_PIN_CULL_AFTER = 300;
+let entityViewportBound = false;
+
+// Some entities are drawn without any icon: a line entity gains nothing from a
+// glyph pinned at its midpoint. Declared per entity on the server, so the
+// frontend does not hardcode which ones.
+function entityMapIcons(resource = entityState.resource) {
+    const entry = entityState.catalog.find((e) => e.name === resource);
+    return !entry || entry.mapIcon !== false;
+}
+
+function entityIconClass(row, override) {
+    if (override) return override;
+    const icons = entityState.icons;
+    if (icons && row) {
+        const key = row.icon_key;
+        if (key && icons.map && icons.map[key]) return icons.map[key];
+        if (icons.fallback) return icons.fallback;
+    }
+    const entry = entityState.catalog.find((e) => e.name === entityState.resource);
+    return (entry && entry.icon) || 'fa-location-dot';
+}
+
+// The icon says which entity this is; geometry type decides how it is worn —
+// a record with no shape becomes the pin itself, a polygon or line keeps its
+// shape and gets the icon as a badge at its centre.
+function entityPinIcon(color, selected, row, iconOverride) {
+    const size = selected ? 28 : 22;
+    return L.divIcon({
+        className: '',
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+        // One node per pin, not three: the glyph comes from Font Awesome's own
+        // ::before on this element, so a thousand markers is a thousand spans
+        // rather than a span wrapping an <i>.
+        html: `<span class="entity-pin fa-solid ${entityIconClass(row, iconOverride)}${selected ? ' is-selected' : ''}" `
+            + `style="--pin-bg:${color};--pin-ink:${inkForFill(color) || '#ffffff'};width:${size}px;height:${size}px"`
+            + ` aria-hidden="true"></span>`,
+    });
+}
+
+// Rebuild the pins as the map moves, so culling follows the viewport. Bound
+// once, and never re-fits — the user is the one panning.
+function bindEntityViewportRedraw() {
+    if (entityViewportBound || !map) return;
+    entityViewportBound = true;
+    map.on('moveend zoomend', () => {
+        if (isEntityWorkspaceActive() && (entityState.resource || entityState.overview)) {
+            drawEntityLayer({ fit: false });
+        }
+    });
+}
+
+function drawEntityLayer({ fit = true } = {}) {
+    if (!map) return;
+    if (!entityLayerGroup) entityLayerGroup = L.layerGroup().addTo(map);
+    bindEntityViewportRedraw();
+    entityLayerGroup.clearLayers();
+    if (appMode !== 'edit') return;
+    if (entityState.overview) {
+        const bounds = drawOverviewLayer();
+        if (fit && bounds && bounds.isValid()) fitMapToGeometry(bounds);
+        return;
+    }
+    if (!entityState.resource) return;
+
+    const titleColumn = entityState.columns[0];
+    const allBounds = L.latLngBounds();
+    let selectedBounds = null;
+    const withIcons = entityMapIcons();
+    const badgeAll = withIcons && entityState.rows.length <= ENTITY_BADGE_LIMIT;
+
+    // Records drawn as a pin rather than a shape; only these need culling.
+    const pinCount = entityState.rows.reduce(
+        (n, r) => n + (!r.geojson && Number.isFinite(r.lon) && Number.isFinite(r.lat) ? 1 : 0), 0);
+    const cullPins = pinCount > ENTITY_PIN_CULL_AFTER;
+    const viewport = cullPins ? map.getBounds().pad(0.3) : null;
+
+    entityState.rows.forEach((row) => {
+        const selected = row.id === entityState.selectedId;
+        const label = String(row[titleColumn] ?? '');
+        const color = entityColorFor(row);
+        const tip = row.color_key ? `${label} — ${row.color_key}` : label;
+        // The selected record is drawn from the detail endpoint's exact shape;
+        // the rest from the simplified shape that came with the list.
+        const shape = (selected && entityState.detail && entityState.detail.geojson) || row.geojson;
+
+        const attach = (layer) => {
+            layer.addTo(entityLayerGroup);
+            if (tip) layer.bindTooltip(tip, { direction: 'top', sticky: true });
+            layer.on('click', () => openEntityForm(row.id));
+        };
+
+        let shapeLayer = null;
+        if (shape) {
+            try {
+                shapeLayer = L.geoJSON(JSON.parse(shape), {
+                    style: () => entityShapeStyle(selected, row),
+                    // A bare GeoJSON Point is the pin case, not a shape.
+                    pointToLayer: (_feature, latlng) => (withIcons
+                        ? L.marker(latlng, {
+                            icon: entityPinIcon(color, selected, row),
+                            zIndexOffset: selected ? 1000 : 0,
+                        })
+                        : L.circleMarker(latlng, entityDotStyle(selected, row))),
+                });
+            } catch (_e) {
+                shapeLayer = null; // a malformed shape must not blank the map
+            }
+        }
+
+        let bounds = null;
+        if (shapeLayer) {
+            attach(shapeLayer);
+            bounds = shapeLayer.getBounds();
+            // Polygons and lines wear the icon as a badge at their centre.
+            const isAreaOrLine = /Polygon|LineString/.test(JSON.parse(shape).type || '');
+            if (isAreaOrLine && withIcons && (badgeAll || selected) && bounds && bounds.isValid()) {
+                attach(L.marker(bounds.getCenter(), {
+                    icon: entityPinIcon(color, selected, row),
+                    zIndexOffset: selected ? 1000 : 0,
+                }));
+            }
+        } else if (Number.isFinite(row.lon) && Number.isFinite(row.lat)) {
+            const at = L.latLng(row.lat, row.lon);
+            bounds = L.latLngBounds(at, at);
+            // Every point record wears its icon. Off-screen ones are simply not
+            // built this pass; the moveend redraw brings them in as you pan, and
+            // the bounds above still come from the full set so the fit is right.
+            if (!viewport || selected || viewport.contains(at)) {
+                attach(withIcons
+                    ? L.marker(at, {
+                        icon: entityPinIcon(color, selected, row),
+                        zIndexOffset: selected ? 1000 : 0,
+                    })
+                    : L.circleMarker(at, entityDotStyle(selected, row)));
+            }
+        }
+
+        if (bounds && bounds.isValid()) {
+            allBounds.extend(bounds);
+            if (selected) selectedBounds = bounds;
+        }
+    });
+
+    renderDistrictReference();
+
+    if (!fit) return;
+    if (selectedBounds) fitMapToGeometry(selectedBounds);
+    else if (allBounds.isValid()) fitMapToGeometry(allBounds);
+}
+
+// ---------------------------------------------------------------- plan import
+
+function readFileText(input) {
+    const file = input && input.files && input.files[0];
+    if (!file) return Promise.resolve(null);
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error(`تعذر قراءة الملف ${file.name}`));
+        reader.readAsText(file);
+    });
+}
+
+async function collectPlanFiles() {
+    const [assignCampUsers, assignResidences, periodPreferences, mashaersTrips] = await Promise.all([
+        readFileText(document.getElementById('fileAssignCampUsers')),
+        readFileText(document.getElementById('fileAssignResidences')),
+        readFileText(document.getElementById('filePeriodPreferences')),
+        readFileText(document.getElementById('fileMashaersTrips')),
+    ]);
+    return { assignCampUsers, assignResidences, periodPreferences, mashaersTrips };
+}
+
+// The three steps are advisory: they show where the user is, and the analyse
+// button stays the only gate on the write.
+function planStep(step) {
+    const order = ['files', 'analyze', 'commit'];
+    const at = order.indexOf(step);
+    document.querySelectorAll('#planSteps .plan-step').forEach((el) => {
+        const i = order.indexOf(el.dataset.step);
+        el.classList.toggle('is-active', i === at);
+        el.classList.toggle('is-done', i < at);
+    });
+}
+
+const PLAN_REQUIRED_FILES = ['fileAssignCampUsers', 'fileAssignResidences', 'filePeriodPreferences'];
+
+// Reflect each chosen file back: name, size and line count, so a wrong or empty
+// file is obvious before analysing rather than after.
+function planFileState(input) {
+    const state = document.querySelector(`.plan-file-state[data-for="${input.id}"]`);
+    const card = input.closest('.plan-file-card');
+    const file = input.files && input.files[0];
+    if (!state || !card) return;
+
+    if (!file) {
+        card.classList.remove('is-filled', 'is-problem');
+        state.textContent = 'لم يُختر ملف';
+        return;
+    }
+
+    const kb = file.size < 1024 ? `${file.size} بايت` : `${Math.round(file.size / 1024).toLocaleString()} كيلوبايت`;
+    const looksCsv = /\.csv$/i.test(file.name) || /csv/i.test(file.type || '');
+    card.classList.toggle('is-problem', !looksCsv || file.size === 0);
+    card.classList.toggle('is-filled', looksCsv && file.size > 0);
+    state.textContent = file.size === 0
+        ? `${file.name} — الملف فارغ`
+        : (!looksCsv ? `${file.name} — ليس ملف CSV` : `${file.name} · ${kb}`);
+
+    // Row count needs a read; worth it, since "0 rows" is the usual surprise.
+    if (looksCsv && file.size > 0) {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const rows = String(reader.result || '').split(/\r?\n/).filter((l) => l.trim()).length - 1;
+            state.textContent = `${file.name} · ${kb} · ${Math.max(0, rows).toLocaleString()} صفاً`;
+            if (rows <= 0) { card.classList.add('is-problem'); state.textContent = `${file.name} — لا صفوف بيانات`; }
+        };
+        reader.onerror = () => {};
+        reader.readAsText(file);
+    }
+}
+
+function planFilesReady() {
+    return PLAN_REQUIRED_FILES.some((id) => {
+        const el = document.getElementById(id);
+        return el && el.files && el.files.length;
+    });
+}
+
+function planMsg(text, kind = 'info') {
+    const el = document.getElementById('planImportMessage');
+    if (!el) return;
+    el.hidden = !text;
+    el.textContent = text || '';
+    el.className = `plan-modal-message plan-msg-${kind}`;
+}
+
+function renderPlanSummary(s) {
+    const box = document.getElementById('planImportSummary');
+    if (!box) return;
+
+    const typeLabels = { tarwia: 'تروية', direct_taseed: 'تصعيد مباشر', taseed_tarwia: 'تصعيد تروية', efada: 'إفاضة', nafra: 'نفرة' };
+    const typeIcons = { tarwia: 'fa-tent', direct_taseed: 'fa-right-to-bracket', taseed_tarwia: 'fa-arrow-right-arrow-left', efada: 'fa-flag', nafra: 'fa-bus' };
+    const byType = s.plans.byType || {};
+
+    const tile = (icon, label, value) => `
+        <div class="plan-sum-tile">
+            <i class="fa-solid ${icon}" aria-hidden="true"></i>
+            <span class="plan-sum-label">${label}</span>
+            <b class="plan-sum-value">${Number(value || 0).toLocaleString()}</b>
+        </div>`;
+
+    const phases = Object.entries(byType).map(([code, n]) => `
+        <div class="plan-phase">
+            <i class="fa-solid ${typeIcons[code] || 'fa-diagram-project'}" aria-hidden="true"></i>
+            <span>${typeLabels[code] || code}</span>
+            <b>${Number(n).toLocaleString()}</b>
+        </div>`).join('');
+
+    // Split by consequence: the unmatched lists mean rows will be dropped, the
+    // notices only qualify what gets built.
+    const unmatched = s.unmatched || {};
+    const dropped = [
+        ['مخيمات غير معروفة', unmatched.camps],
+        ['مساكن غير معروفة', unmatched.residences],
+        ['جنسيات غير معروفة', unmatched.countries],
+    ].filter(([, arr]) => arr && arr.length);
+
+    const notices = (s.warnings || []).concat(s.planIssues || []);
+    if (!s.routingConfigured) notices.push('خدمة المسارات غير مهيأة؛ ستُستخدم مسارات مستقيمة مؤقتاً.');
+
+    box.hidden = false;
+    box.innerHTML = `
+        <div class="plan-sum-head">
+            <h3><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i> ملخص التحليل</h3>
+            <span class="plan-sum-center">
+                <i class="fa-solid fa-sitemap" aria-hidden="true"></i>
+                ${escapeHtml(s.center.name || '')} · ${escapeHtml(String(s.center.office || ''))}
+            </span>
+        </div>
+
+        <div class="plan-sum-tiles">
+            ${tile('fa-diagram-project', 'خطط', s.plans.total)}
+            ${tile('fa-bus', 'حافلات', s.plans.totalBuses)}
+            ${tile('fa-route', 'رحلات', s.plans.totalTrips)}
+            ${tile('fa-users', 'حجاج', s.plans.totalHaj)}
+            ${tile('fa-tent', 'تعيينات مخيمات', s.assignCamps)}
+            ${tile('fa-house', 'تعيينات مساكن', s.assignResidences)}
+            ${tile('fa-bus-simple', 'حافلات مُخصّصة', s.mashaersTrips)}
+        </div>
+
+        ${phases ? `<div class="plan-phases">${phases}</div>`
+                 : '<div class="plan-warn"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> لا توجد خطط قابلة للإنشاء من هذه الملفات</div>'}
+
+        ${dropped.length ? `
+            <div class="plan-notice is-dropped">
+                <div class="plan-notice-head"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i> صفوف لم يُعرف ما تشير إليه — ستُتجاهل</div>
+                ${dropped.map(([label, arr]) => `
+                    <div class="plan-notice-line">
+                        <b>${label} (${arr.length}):</b>
+                        ${escapeHtml(arr.slice(0, 15).join('، '))}${arr.length > 15 ? ' …' : ''}
+                    </div>`).join('')}
+            </div>` : ''}
+
+        ${notices.length ? `
+            <div class="plan-notice">
+                <div class="plan-notice-head"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> ملاحظات (${notices.length})</div>
+                ${notices.map((n) => `<div class="plan-notice-line">${escapeHtml(n)}</div>`).join('')}
+            </div>` : ''}
+    `;
+}
+
+async function planImportRequest(path, files) {
+    const response = await fetch(`/maan-dashboard/api/plan-import/${path}`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ files }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    return data;
+}
+
+function initPlanImport() {
+    const btn = document.getElementById('planImportBtn');
+    const modal = document.getElementById('planImportModal');
+    if (!btn || !modal) return;
+
+    const analyzeBtn = document.getElementById('planAnalyzeBtn');
+    const commitBtn = document.getElementById('planCommitBtn');
+    let lastFiles = null;
+    const PLAN_FILE_INPUT_IDS = ['fileAssignCampUsers', 'fileAssignResidences', 'filePeriodPreferences', 'fileMashaersTrips'];
+
+    const openModal = () => { modal.hidden = false; planStep('files'); };
+    const closeModal = () => { modal.hidden = true; };
+    const resetAfterChange = () => { commitBtn.hidden = true; lastFiles = null; };
+
+    // Only show the button to users the server says may import — and only in
+    // edit mode, since importing creates plans.
+    fetch('/maan-dashboard/api/plan-import/capabilities', { headers: authHeaders() })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((cap) => { mayImportPlans = Boolean(cap && cap.mayImport); syncImportButton(); })
+        .catch(() => {});
+
+    btn.addEventListener('click', openModal);
+    document.getElementById('planModalClose')?.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    PLAN_FILE_INPUT_IDS.forEach((id) => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        input.addEventListener('change', () => {
+            planFileState(input);
+            resetAfterChange();
+            planStep('files');
+            planMsg('');
+            analyzeBtn.disabled = !planFilesReady();
+        });
+        planFileState(input);
+    });
+    analyzeBtn.disabled = !planFilesReady();
+
+    analyzeBtn.addEventListener('click', async () => {
+        analyzeBtn.disabled = true;
+        planStep('analyze');
+        planMsg('جارٍ تحليل الملفات…', 'info');
+        document.getElementById('planImportSummary').hidden = true;
+        commitBtn.hidden = true;
+        try {
+            const files = await collectPlanFiles();
+            if (!files.assignCampUsers && !files.assignResidences && !files.periodPreferences) {
+                planMsg('يرجى اختيار الملفات المطلوبة أولاً.', 'error');
+                planStep('files');
+                return;
+            }
+            const summary = await planImportRequest('analyze', files);
+            lastFiles = files;
+            renderPlanSummary(summary);
+            if (summary.plans.total === 0) {
+                commitBtn.hidden = true;
+                planMsg('لم ينتج عن الملفات أي خطة — راجع التنبيهات أدناه.', 'error');
+            } else {
+                commitBtn.hidden = false;
+                planMsg(`جاهز لإنشاء ${summary.plans.total.toLocaleString()} خطة. راجع الملخص ثم اعتمد.`, 'success');
+            }
+        } catch (err) {
+            planMsg(err.message, 'error');
+            planStep('files');
+        } finally {
+            analyzeBtn.disabled = !planFilesReady();
+        }
+    });
+
+    commitBtn.addEventListener('click', async () => {
+        if (!lastFiles) { planMsg('يرجى تحليل الملفات أولاً.', 'error'); return; }
+        commitBtn.disabled = true;
+        planStep('commit');
+        planMsg('جارٍ إنشاء الخطط…', 'info');
+        try {
+            const summary = await planImportRequest('commit', lastFiles);
+            planMsg(`تم إنشاء ${summary.plansCreated} خطة بنجاح. جارٍ تحديث اللوحة…`, 'success');
+            commitBtn.hidden = true;
+            // Rebuild the dashboard from the freshly written data.
+            await loadDatasetsFromDatabase();
+            loadData();
+            setTimeout(closeModal, 1500);
+        } catch (err) {
+            planMsg(err.message, 'error');
+            planStep('analyze');
+        } finally {
+            commitBtn.disabled = false;
+        }
+    });
 }
 
 // Initialize Application
@@ -1256,6 +2959,14 @@ function applyTheme(theme) {
     }
 
     if (rawData.length) updateCharts();
+    // The entity palette is stepped per theme (each set is validated against
+    // its own basemap), so a theme change has to restyle the map.
+    if (typeof entityState !== 'undefined' && entityState.rows.length) {
+        entityState.colors = buildEntityColors(entityState.rows);
+        renderEntityLegend();
+        drawEntityLayer();
+    }
+    if (typeof renderDistrictReference === 'function') renderDistrictReference();
 }
 
 function getThemeColors() {
@@ -2322,7 +4033,14 @@ function orientConnectedRouteSegments(row, lineItems) {
     }
 
     const startAnchor = getRouteResidenceAnchor(row) || getRowAnchorLatLng(row, 'start');
-    const endAnchor = getRouteDestinationAnchor(row) || getRowAnchorLatLng(row, 'end');
+    // Plans that depart through the entrance continue into the camp, so the
+    // sequence must end at the camp, not the entrance; anchoring on the
+    // entrance flips the internal segment and the gap connector spans the camp.
+    const planTypeCode = normalizePlanTypeCode(row['plan_type_code'] || row['plan_type_name']);
+    const departsThroughEntrance = !PLAN_TYPES_ARRIVING_AT_ENTRANCE.has(planTypeCode)
+        && segments.some(item => item.type === 'internal');
+    const endAnchor = (departsThroughEntrance && row['end_point_type'] !== 'residence' && getRowAnchorLatLng(row, 'end'))
+        || getRouteDestinationAnchor(row) || getRowAnchorLatLng(row, 'end');
     if (!startAnchor || !endAnchor) {
         return segments.map(item => ({ ...item, latlngs: orientLatLngsForRoute(item.latlngs, row, item) }));
     }
@@ -2528,7 +4246,10 @@ function updateMapLabelScale() {
 function initMap() {
     // Center roughly around Makkah
     map = L.map('map', {
-        zoomControl: false // Move to bottom right
+        zoomControl: false, // Move to bottom right
+        // Deeper than any basemap has tiles; the layers upscale past their own
+        // limit so editing can zoom right into a camp shape.
+        maxZoom: MAP_MAX_ZOOM,
     }).setView([21.4225, 39.8262], 13);
 
     L.control.zoom({
@@ -2537,27 +4258,28 @@ function initMap() {
 
     // Basemaps
     const darkBaseMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles &copy; Esri'
+        attribution: 'Tiles &copy; Esri', maxNativeZoom: ESRI_CANVAS_MAX_ZOOM, maxZoom: MAP_MAX_ZOOM
     });
     const darkRoadLabelsMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Labels &copy; Esri'
+        attribution: 'Labels &copy; Esri', maxNativeZoom: ESRI_CANVAS_MAX_ZOOM, maxZoom: MAP_MAX_ZOOM
     });
     const darkMap = L.layerGroup([darkBaseMap, darkRoadLabelsMap]);
 
     const lightBaseMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles &copy; Esri'
+        attribution: 'Tiles &copy; Esri', maxNativeZoom: ESRI_CANVAS_MAX_ZOOM, maxZoom: MAP_MAX_ZOOM
     });
     const lightRoadLabelsMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Labels &copy; Esri'
+        attribution: 'Labels &copy; Esri', maxNativeZoom: ESRI_CANVAS_MAX_ZOOM, maxZoom: MAP_MAX_ZOOM
     });
     const lightMap = L.layerGroup([lightBaseMap, lightRoadLabelsMap]);
 
     const streetsMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
+        attribution: '&copy; OpenStreetMap contributors', maxNativeZoom: 19, maxZoom: MAP_MAX_ZOOM
     });
 
     const satelliteMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+        maxNativeZoom: 19, maxZoom: MAP_MAX_ZOOM
     });
 
     lightMapLayer = lightMap;
@@ -3026,6 +4748,8 @@ function setupEventListeners() {
 
     const topNavActions = document.querySelector('.top-nav-actions');
     if (topNavActions) {
+        // Anything tagged .dashboard-tool below belongs to the analytics
+        // dashboard and is hidden in edit mode (see styles.css).
         // Toolbar buttons are positioned relative to the theme toggle. Captured by
         // id and captured once, because the buttons inserted below also carry the
         // .theme-toggle-btn class and would otherwise shadow it.
@@ -3033,7 +4757,7 @@ function setupEventListeners() {
         // Add clear filters button
         const clearFiltersBtn = document.createElement('button');
         clearFiltersBtn.id = 'clearFiltersBtn';
-        clearFiltersBtn.className = 'theme-toggle-btn';
+        clearFiltersBtn.className = 'theme-toggle-btn dashboard-tool';
         clearFiltersBtn.type = 'button';
         clearFiltersBtn.title = 'مسح جميع الفلاتر';
         clearFiltersBtn.setAttribute('aria-label', 'مسح الفلاتر');
@@ -3045,7 +4769,7 @@ function setupEventListeners() {
         // Add camera stats export button
         const cameraExportBtn = document.createElement('button');
         cameraExportBtn.id = 'cameraExportBtn';
-        cameraExportBtn.className = 'theme-toggle-btn';
+        cameraExportBtn.className = 'theme-toggle-btn dashboard-tool';
         cameraExportBtn.type = 'button';
         cameraExportBtn.title = 'تصدير إحصائيات الكاميرات CSV';
         cameraExportBtn.setAttribute('aria-label', 'تصدير إحصائيات الكاميرات');
@@ -3057,7 +4781,7 @@ function setupEventListeners() {
         // Add Cameras toggle button
         const camerasBtn = document.createElement('button');
         camerasBtn.id = 'camerasToggleBtn';
-        camerasBtn.className = 'theme-toggle-btn';
+        camerasBtn.className = 'theme-toggle-btn dashboard-tool';
         camerasBtn.type = 'button';
         camerasBtn.title = 'تبديل عرض الكاميرات';
         camerasBtn.setAttribute('aria-label', 'تبديل الكاميرات');
@@ -3070,7 +4794,7 @@ function setupEventListeners() {
 
         const exitPathsBtn = document.createElement('button');
         exitPathsBtn.id = 'exitPathsToggleBtn';
-        exitPathsBtn.className = 'theme-toggle-btn active';
+        exitPathsBtn.className = 'theme-toggle-btn active dashboard-tool';
         exitPathsBtn.type = 'button';
         exitPathsBtn.title = 'تبديل عرض مسارات الخروج';
         exitPathsBtn.setAttribute('aria-label', 'تبديل مسارات الخروج');
@@ -4091,6 +5815,7 @@ function renderCameras() {
 
     camerasLayerGroup.clearLayers();
 
+    if (isEntityWorkspaceActive()) return;
     if (!showCameras || typeof CAMERAS_DATA === 'undefined') return;
 
     // Get geometries from filtered plans (if any plans are displayed)
@@ -4224,6 +5949,7 @@ const debouncedRenderCameras = debounce(renderCameras, 300);
 function renderCampsGates() {
     if (!campsGatesLayerGroup) return;
     campsGatesLayerGroup.clearLayers();
+    if (isEntityWorkspaceActive()) return;
     if (!showCampsGates || typeof CAMPS_GATES_DATA === 'undefined') return;
 
     const planGeometries = filteredData.length > 0 ? getFilteredPlanGeometries() : null;
@@ -4284,12 +6010,15 @@ function toggleCampsGates() {
 function renderMakafPaths() {
     if (!makafPathsLayerGroup) return;
     makafPathsLayerGroup.clearLayers();
+    if (isEntityWorkspaceActive()) return;
     if (typeof MAKAF_PATHS_DATA === 'undefined') return;
 
-    // Collect unique camp_labels from filtered plans — direct_taseed type only
+    // Static fallback only: camps whose direct_taseed plans already carry a
+    // routed internal_path from the DB get that drawn by getRowGeojsons(), so
+    // drawing the MAKAF line too would show two entrance->camp paths.
     const activeCampLabels = new Set(
         filteredData
-            .filter(row => (row['plan_type_code'] || '').trim() === 'direct_taseed')
+            .filter(row => (row['plan_type_code'] || '').trim() === 'direct_taseed' && !row['internal_path'])
             .map(row => (row['camp_label'] || '').trim())
             .filter(Boolean)
     );
@@ -4687,6 +6416,38 @@ const angledXAxisLabelsPlugin = {
     }
 };
 
+// A planned/target KPI is really a share: "2,198/4,210" makes the reader do the
+// division, so the meter and the percentage carry it and the two numbers stay
+// as the detail. Below COVERAGE_LOW the fill turns amber — a gap that large is
+// usually unmatched import data, not a plan that is simply still filling up.
+const COVERAGE_LOW = 60;
+
+function setKpiRatio(element, planned, target, label, title) {
+    if (!element) return;
+    const value = Number(planned) || 0;
+    const total = Number(target) || 0;
+    const pct = total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
+
+    element.textContent = `${value.toLocaleString()}/${total.toLocaleString()}`;
+    element.title = title;
+    if (element.previousElementSibling) element.previousElementSibling.textContent = label;
+
+    const info = element.parentElement;
+    if (!info) return;
+    let meter = info.querySelector('.kpi-meter');
+    if (!meter) {
+        meter = document.createElement('div');
+        meter.className = 'kpi-meter';
+        meter.innerHTML = '<span class="kpi-meter-track"><span class="kpi-meter-fill"></span></span><span class="kpi-meter-pct"></span>';
+        info.appendChild(meter);
+    }
+    meter.querySelector('.kpi-meter-fill').style.width = `${pct}%`;
+    meter.querySelector('.kpi-meter-pct').textContent = total > 0 ? `${pct}%` : '—';
+    meter.classList.toggle('low', total > 0 && pct < COVERAGE_LOW);
+    meter.setAttribute('role', 'img');
+    meter.setAttribute('aria-label', total > 0 ? `${label}: ${pct}%` : label);
+}
+
 // Update KPI Cards
 function updateKPIs(stats) {
     const totalPilgrims = stats.totalPilgrims;
@@ -4707,36 +6468,35 @@ function updateKPIs(stats) {
         : calculateKpiTotalPilgrims(filteredData.filter(isTarwiyaKpiTotalPlanType));
 
     // Animate numbers
-    const pilgrimsElement = document.getElementById('kpiPilgrims');
-    pilgrimsElement.textContent = `${plannedPilgrims.toLocaleString()}/${campStats.totalPilgrims.toLocaleString()}`;
-    pilgrimsElement.previousElementSibling.textContent = 'الحجاج (مخطط/مستهدف)';
-    pilgrimsElement.title = 'الحجاج المخططون حسب نوع الخطة المحدد / المستهدفون من تخصيصات المخيمات';
+    setKpiRatio(
+        document.getElementById('kpiPilgrims'),
+        plannedPilgrims, campStats.totalPilgrims,
+        'الحجاج (مخطط/مستهدف)',
+        'الحجاج المخططون حسب نوع الخطة المحدد / المستهدفون من تخصيصات المخيمات'
+    );
     document.getElementById('kpiBuses').textContent = totalBuses.toLocaleString();
     document.getElementById('kpiPlans').textContent = totalPlans.toLocaleString();
     document.getElementById('kpiTrips').textContent = totalTrips.toLocaleString();
-    const serviceCentersElement = document.getElementById('kpiServiceCenters');
-    if (serviceCentersElement) {
-        serviceCentersElement.textContent = `${plannedServiceCenters.toLocaleString()}/${campStats.serviceCenterCount.toLocaleString()}`;
-        serviceCentersElement.previousElementSibling.textContent = 'مراكز الخدمة (مخطط/إجمالي)';
-        serviceCentersElement.title = 'مراكز الخدمة من البيانات المعروضة / إجمالي مراكز الخدمة من data.js';
-    }
+    setKpiRatio(
+        document.getElementById('kpiServiceCenters'),
+        plannedServiceCenters, campStats.serviceCenterCount,
+        'مراكز الخدمة (مخطط/إجمالي)',
+        'مراكز الخدمة من البيانات المعروضة / إجمالي مراكز الخدمة'
+    );
 
-    const residencesElement = document.getElementById('kpiResidences');
-    if (residencesElement) {
-        residencesElement.textContent = `${residenceStats.totalResidences.toLocaleString()}/${residenceStats.totalAssigned.toLocaleString()}`;
-        residencesElement.previousElementSibling.textContent = 'عدد المساكن (مخطط/إجمالي)';
-        residencesElement.title = 'المساكن من الخطط / إجمالي المساكن المخصصة للشركة';
-    }
-    
-    // Display camps with numerator/denominator format
-    const campElement = document.getElementById('kpiCamps');
-    if (campElement) {
-        // Get denominator from assign_camps.js instead of from CSV
-        const assignCampsCampCount = getCampCountFromAssignCamps();
-        campElement.textContent = `${totalCamps.toLocaleString()}/${assignCampsCampCount.toLocaleString()}`;
-        campElement.previousElementSibling.textContent = 'مخيمات (مخطط/إجمالي)';
-        campElement.title = `${campStats.totalAssignments} تخصيص`;
-    }
+    setKpiRatio(
+        document.getElementById('kpiResidences'),
+        residenceStats.totalResidences, residenceStats.totalAssigned,
+        'عدد المساكن (مخطط/إجمالي)',
+        'المساكن من الخطط / إجمالي المساكن المخصصة للشركة'
+    );
+
+    setKpiRatio(
+        document.getElementById('kpiCamps'),
+        totalCamps, getCampCountFromAssignCamps(),
+        'مخيمات (مخطط/إجمالي)',
+        `${campStats.totalAssignments} تخصيص`
+    );
 
     // Update secondary stats display
     updateSecondaryStats(stats);
@@ -4788,6 +6548,13 @@ function sampleAcrossPlanTypes(data, limit) {
 }
 
 function updateMap() {
+    // The entity workspace owns the map; it draws the selected records itself.
+    if (isEntityWorkspaceActive()) {
+        clearDashboardMapLayers();
+        renderDistrictReference();
+        cachedMapRenderKey = null;
+        return;
+    }
     const mapKey = [
         filteredData.length,
         filteredData.length ? filteredData[0]['plan_id'] : '',
@@ -4868,7 +6635,16 @@ function updateMap() {
             if (geojsonsToRender.length === 0) return;
 
             const connectedLineLatLngsByItem = new Map();
-            const lineItems = geojsonsToRender.filter(item => item.geojson?.type === 'LineString' || item.geojson?.type === 'MultiLineString');
+            // The journey chain is the routed leg plus the camp's internal leg.
+            // The tarwia exit overlay is a separate decoration: it has its own
+            // orientation rule below and can be toggled off entirely. Letting it
+            // into the chain made tarwia a 3-segment case, and 3+ segments keep
+            // the order they arrive in (internal, exit, external) — so the
+            // scorer flipped the routed leg backwards to fit that impossible
+            // order, and its dashes animated into the residence.
+            const lineItems = geojsonsToRender.filter(item =>
+                (item.geojson?.type === 'LineString' || item.geojson?.type === 'MultiLineString')
+                && JOURNEY_LINE_TYPES.has(item.type));
             const connectedLineSequence = orientConnectedRouteSegments(row, lineItems);
             connectedLineSequence.forEach(orientedItem => {
                 const sourceItem = geojsonsToRender.find(item => item.type === orientedItem.type && item.geojson === orientedItem.geojson);
@@ -4876,6 +6652,9 @@ function updateMap() {
                     const routeLatLngs = sourceItem.type === "internal"
                         ? orientLatLngsForRoute(orientedItem.latlngs, row, sourceItem)
                         : orientedItem.latlngs;
+                    // Keep the sequence in step with what is drawn, so the gap
+                    // connectors join the same endpoints the polylines use.
+                    orientedItem.latlngs = routeLatLngs;
                     connectedLineLatLngsByItem.set(sourceItem, routeLatLngs);
                 }
             });
@@ -5692,47 +7471,60 @@ function updatePlanList() {
         div.className = 'plan-item' + (selectedPlanId === plan['plan_id'] ? ' active' : '');
         const buses = Number(plan['number_of_buses']) || 0;
         const trips = getTripCount(plan, buses);
+        const haj = Number(plan['number_of_haj']) || 0;
         const planType = plan['plan_type_name'] || plan['plan_type_code'] || 'غير معروف';
         const transportType = plan['transport_type_name'] || 'غير معروف';
+        const transportCompany = plan['transport_company_name'] || 'غير محدد';
+        // The mashaers file is the centre's bus roster (one row per bus), so a
+        // plan shows the centre's supplier mix: lead company (most buses) with
+        // "+N" more, and on hover every company with its bus count.
+        const transportCompanyCount = Number(plan['transport_company_count']) || 0;
+        const transportBusCount = Number(plan['transport_bus_count']) || 0;
+        const transportCompanyLabel = transportCompanyCount > 1
+            ? `${transportCompany} +${transportCompanyCount - 1}`
+            : transportCompany;
+        const busesNote = transportBusCount ? ` · ${transportBusCount.toLocaleString('ar-EG')} حافلة` : '';
+        const transportCompanyTitle = transportCompanyCount > 1
+            ? `شركات النقل (${transportCompanyCount})${busesNote}: ${plan['transport_companies'] || ''}`
+            : `شركة النقل: ${transportCompany}${busesNote}`;
         const company = plan['owner_company_name'] || 'غير معروف';
         const centerNum = plan['owner_office_number'] || '';
 
         div.innerHTML = `
             <div class="plan-header">
-                <span class="plan-company">${company}</span>
-                <span class="plan-time">${plan['timing_start_at'] || ''} - ${plan['timing_end_at'] || ''}</span>
+                <span class="plan-company">${escapeHtml(company)}</span>
+                <span class="plan-time">${escapeHtml(plan['timing_start_at'] || '')} - ${escapeHtml(plan['timing_end_at'] || '')}</span>
             </div>
             <div class="plan-details">
-                <div class="plan-stat">🚌 ${plan['number_of_buses']}</div>
-                <div class="plan-stat">🛣️ ${trips.toLocaleString()}</div>
-                <div class="plan-stat plan-type-stat" title="${planType}">📋 ${planType}</div>
-                <div class="plan-stat plan-type-stat transport-type-stat" title="${transportType}">🚐 ${transportType}</div>
-                <div class="plan-stat">👥 ${plan['number_of_haj']}</div>
-                <div class="plan-stat">⏱️ ${plan['period'] || ''}</div>
+                <div class="plan-stat" title="عدد الحافلات"><i class="fa-solid fa-bus" aria-hidden="true"></i>${buses.toLocaleString()}</div>
+                <div class="plan-stat" title="عدد الرحلات"><i class="fa-solid fa-route" aria-hidden="true"></i>${trips.toLocaleString()}</div>
+                <div class="plan-stat" title="عدد الحجاج"><i class="fa-solid fa-users" aria-hidden="true"></i>${haj.toLocaleString()}</div>
+                <div class="plan-stat" title="الفترة"><i class="fa-solid fa-clock" aria-hidden="true"></i>${escapeHtml(plan['period'] || '')}</div>
+                <div class="plan-stat plan-type-stat" title="نوع الخطة: ${escapeHtml(planType)}"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i>${escapeHtml(planType)}</div>
+                <div class="plan-stat plan-type-stat transport-type-stat" title="نمط النقل: ${escapeHtml(transportType)}"><i class="fa-solid fa-van-shuttle" aria-hidden="true"></i>${escapeHtml(transportType)}</div>
+                <div class="plan-stat plan-type-stat transport-company-stat" title="${escapeHtml(transportCompanyTitle)}"><i class="fa-solid fa-building" aria-hidden="true"></i>${escapeHtml(transportCompanyLabel)}</div>
             </div>
-            <div class="plan-route" style="padding: 8px; font-size: 11px; border-top: 1px solid #243249; margin-top: 8px;">
-                <div style="margin: 4px 0;"><strong>من:</strong> ${plan['start_point_name'] || 'غير متوفر'}</div>
-                <div style="margin: 4px 0;"><strong>إلى:</strong> ${plan['end_point_name'] || 'غير متوفر'}</div>
+            <div class="plan-route">
+                <div class="plan-route-leg">
+                    <i class="fa-solid fa-circle-dot" aria-hidden="true"></i>
+                    <span class="plan-route-label">من</span>
+                    <span class="plan-route-point">${escapeHtml(plan['start_point_name'] || 'غير متوفر')}</span>
+                </div>
+                <div class="plan-route-leg">
+                    <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+                    <span class="plan-route-label">إلى</span>
+                    <span class="plan-route-point">${escapeHtml(plan['end_point_name'] || 'غير متوفر')}</span>
+                </div>
             </div>
             ${centerNum ? `
-            <div style="padding: 8px; border-top: 1px solid #243249; margin-top: 8px;">
-                <button class="plan-service-center-btn" data-company="${company}" data-center="${centerNum}" style="
-                    width: 100%;
-                    padding: 6px 10px;
-                    background: linear-gradient(135deg, rgba(193, 181, 143,0.15), rgba(193, 181, 143,0.08));
-                    border: 1px solid rgba(193, 181, 143,0.2);
-                    border-radius: 6px;
-                    color: #caab79;
-                    font-size: 12px;
-                    font-weight: 600;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                ">
-                    📍 مركز الخدمة: ${company} / ${centerNum}
+            <div class="plan-center-row">
+                <button type="button" class="plan-service-center-btn" data-company="${escapeHtml(company)}" data-center="${escapeHtml(centerNum)}">
+                    <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+                    <span>مركز الخدمة: ${escapeHtml(company)} / ${escapeHtml(centerNum)}</span>
                 </button>
             </div>
             ` : ''}
-            ${editablePlanFields() ? `
+            ${canEditPlansNow() ? `
             <div class="plan-actions">
                 <button type="button" class="plan-action-btn plan-edit-btn" title="تعديل الخطة" aria-label="تعديل الخطة">
                     <i class="fa-solid fa-pen-to-square"></i> تعديل
@@ -5773,16 +7565,6 @@ function updatePlanList() {
                 };
                 selectedPlanId = null;
                 applyFilters();
-            });
-
-            centerBtn.addEventListener('mouseover', () => {
-                centerBtn.style.background = 'linear-gradient(135deg, rgba(193, 181, 143,0.25), rgba(193, 181, 143,0.15))';
-                centerBtn.style.borderColor = 'rgba(193, 181, 143,0.4)';
-            });
-
-            centerBtn.addEventListener('mouseout', () => {
-                centerBtn.style.background = 'linear-gradient(135deg, rgba(193, 181, 143,0.15), rgba(193, 181, 143,0.08))';
-                centerBtn.style.borderColor = 'rgba(193, 181, 143,0.2)';
             });
         }
 

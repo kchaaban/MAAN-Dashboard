@@ -25,7 +25,7 @@ SELECT u.id, u.name, u.email, u.password, u.is_active,
        sc.center_name
 FROM users u
 LEFT JOIN types t            ON u.type_id = t.id
-LEFT JOIN companies c        ON u.company_id = c.id
+LEFT JOIN service_companies c ON u.company_id = c.id
 LEFT JOIN service_centers sc ON u.service_center_id = sc.id
 WHERE lower(u.email) = lower($1)
 LIMIT 1`;

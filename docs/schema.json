@@ -1,0 +1,5853 @@
+{
+ "extracted_at": "2026-09-21T20:04:56.601Z",
+ "database": "transport",
+ "tables": [
+  "assign_camps",
+  "assign_residences",
+  "bus_stops",
+  "bus_warehouses",
+  "cache",
+  "cache_locks",
+  "camps",
+  "countries",
+  "drop_off_areas",
+  "entrances",
+  "failed_jobs",
+  "general_points",
+  "import_jobs",
+  "job_batches",
+  "jobs",
+  "mashaers_trips",
+  "migrations",
+  "model_has_permissions",
+  "model_has_roles",
+  "organizers",
+  "parking",
+  "password_reset_tokens",
+  "paths",
+  "periods",
+  "permissions",
+  "personal_access_tokens",
+  "plan_desires",
+  "plan_logs",
+  "plan_types",
+  "plans",
+  "platforms",
+  "residences",
+  "role_has_permissions",
+  "roles",
+  "round_trips",
+  "service_centers",
+  "service_companies",
+  "sessions",
+  "spatial_ref_sys",
+  "timing",
+  "transport_companies",
+  "transport_companies_bak",
+  "transport_company_user_bak",
+  "transport_types",
+  "types",
+  "users"
+ ],
+ "views": [
+  "camps_geometries",
+  "final_plan_view",
+  "geography_columns",
+  "geometry_columns",
+  "paths_powerbi",
+  "plan_show_view",
+  "simulation_data_view"
+ ],
+ "columns": [
+  {
+   "table_name": "assign_camps",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_camps",
+   "column_name": "user_id",
+   "ordinal_position": 2,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_camps",
+   "column_name": "camp_id",
+   "ordinal_position": 3,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_camps",
+   "column_name": "haj_count",
+   "ordinal_position": 4,
+   "type": "integer",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_camps",
+   "column_name": "transport_type_id",
+   "ordinal_position": 5,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_camps",
+   "column_name": "created_at",
+   "ordinal_position": 6,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_camps",
+   "column_name": "updated_at",
+   "ordinal_position": 7,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_camps",
+   "column_name": "service_center_id",
+   "ordinal_position": 8,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_camps",
+   "column_name": "created_by",
+   "ordinal_position": 9,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_camps",
+   "column_name": "country_id",
+   "ordinal_position": 10,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_camps",
+   "column_name": "piligrim_type",
+   "ordinal_position": 11,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_residences",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_residences",
+   "column_name": "created_by",
+   "ordinal_position": 2,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_residences",
+   "column_name": "service_center_id",
+   "ordinal_position": 3,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_residences",
+   "column_name": "type",
+   "ordinal_position": 4,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_residences",
+   "column_name": "created_at",
+   "ordinal_position": 5,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_residences",
+   "column_name": "updated_at",
+   "ordinal_position": 6,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_residences",
+   "column_name": "residence_id",
+   "ordinal_position": 7,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_residences",
+   "column_name": "haj_count",
+   "ordinal_position": 8,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_residences",
+   "column_name": "tarwia",
+   "ordinal_position": 9,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "assign_residences",
+   "column_name": "direct_taseed",
+   "ordinal_position": 10,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_stops",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_stops",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_stops",
+   "column_name": "created_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_stops",
+   "column_name": "updated_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_stops",
+   "column_name": "shape_area",
+   "ordinal_position": 5,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_stops",
+   "column_name": "shape_length",
+   "ordinal_position": 6,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_stops",
+   "column_name": "gis_data_type",
+   "ordinal_position": 7,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_stops",
+   "column_name": "gis",
+   "ordinal_position": 8,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_stops",
+   "column_name": "objectid",
+   "ordinal_position": 9,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_stops",
+   "column_name": "area",
+   "ordinal_position": 10,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_warehouses",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_warehouses",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_warehouses",
+   "column_name": "created_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_warehouses",
+   "column_name": "updated_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_warehouses",
+   "column_name": "shape_area",
+   "ordinal_position": 5,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_warehouses",
+   "column_name": "shape_length",
+   "ordinal_position": 6,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_warehouses",
+   "column_name": "gis_data_type",
+   "ordinal_position": 7,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_warehouses",
+   "column_name": "gis",
+   "ordinal_position": 8,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_warehouses",
+   "column_name": "capacity",
+   "ordinal_position": 9,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_warehouses",
+   "column_name": "objectid",
+   "ordinal_position": 10,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_warehouses",
+   "column_name": "city",
+   "ordinal_position": 11,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "bus_warehouses",
+   "column_name": "area",
+   "ordinal_position": 12,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "cache",
+   "column_name": "key",
+   "ordinal_position": 1,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "cache",
+   "column_name": "value",
+   "ordinal_position": 2,
+   "type": "text",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "cache",
+   "column_name": "expiration",
+   "ordinal_position": 3,
+   "type": "integer",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "cache_locks",
+   "column_name": "key",
+   "ordinal_position": 1,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "cache_locks",
+   "column_name": "owner",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "cache_locks",
+   "column_name": "expiration",
+   "ordinal_position": 3,
+   "type": "integer",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "platform_id",
+   "ordinal_position": 2,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "entrance_id",
+   "ordinal_position": 3,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "name",
+   "ordinal_position": 4,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "created_at",
+   "ordinal_position": 5,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "updated_at",
+   "ordinal_position": 6,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "square",
+   "ordinal_position": 7,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "gis",
+   "ordinal_position": 8,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "shape_area",
+   "ordinal_position": 9,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "shape_length",
+   "ordinal_position": 10,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "path_entrance_id",
+   "ordinal_position": 11,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "path_residence_id",
+   "ordinal_position": 12,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "path_camp_id",
+   "ordinal_position": 13,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "path_dropoff_id",
+   "ordinal_position": 14,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "objectid",
+   "ordinal_position": 15,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "gate",
+   "ordinal_position": 16,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "street",
+   "ordinal_position": 17,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "block",
+   "ordinal_position": 18,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "transport_type_id",
+   "ordinal_position": 19,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "capacity",
+   "ordinal_position": 20,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "type",
+   "ordinal_position": 21,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "gate_lat",
+   "ordinal_position": 22,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "gate_lon",
+   "ordinal_position": 23,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps",
+   "column_name": "drop_off_area_id",
+   "ordinal_position": 24,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps_geometries",
+   "column_name": "camp_label",
+   "ordinal_position": 1,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps_geometries",
+   "column_name": "platform_name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps_geometries",
+   "column_name": "polygon_no",
+   "ordinal_position": 3,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "camps_geometries",
+   "column_name": "st_asgeojson",
+   "ordinal_position": 4,
+   "type": "text",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "countries",
+   "column_name": "name",
+   "ordinal_position": 1,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "countries",
+   "column_name": "name_ar",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "countries",
+   "column_name": "created_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "countries",
+   "column_name": "updated_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "countries",
+   "column_name": "id",
+   "ordinal_position": 5,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "countries",
+   "column_name": "country_id",
+   "ordinal_position": 6,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "countries",
+   "column_name": "iso2",
+   "ordinal_position": 7,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "countries",
+   "column_name": "iso3",
+   "ordinal_position": 8,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "drop_off_areas",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "drop_off_areas",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "drop_off_areas",
+   "column_name": "created_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "drop_off_areas",
+   "column_name": "updated_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "drop_off_areas",
+   "column_name": "shape_area",
+   "ordinal_position": 5,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "drop_off_areas",
+   "column_name": "shape_length",
+   "ordinal_position": 6,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "drop_off_areas",
+   "column_name": "gis_data_type",
+   "ordinal_position": 7,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "drop_off_areas",
+   "column_name": "gis",
+   "ordinal_position": 8,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "drop_off_areas",
+   "column_name": "objectid",
+   "ordinal_position": 9,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "drop_off_areas",
+   "column_name": "area",
+   "ordinal_position": 10,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "drop_off_areas",
+   "column_name": "street",
+   "ordinal_position": 11,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "entrances",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "entrances",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "entrances",
+   "column_name": "created_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "entrances",
+   "column_name": "updated_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "entrances",
+   "column_name": "shape_area",
+   "ordinal_position": 5,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "entrances",
+   "column_name": "shape_length",
+   "ordinal_position": 6,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "entrances",
+   "column_name": "gis_data_type",
+   "ordinal_position": 7,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "entrances",
+   "column_name": "platform_id",
+   "ordinal_position": 8,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "entrances",
+   "column_name": "gis",
+   "ordinal_position": 9,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "entrances",
+   "column_name": "longitude",
+   "ordinal_position": 10,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "entrances",
+   "column_name": "latitude",
+   "ordinal_position": 11,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "entrances",
+   "column_name": "asm_code",
+   "ordinal_position": 12,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "entrances",
+   "column_name": "objectid",
+   "ordinal_position": 13,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "entrances",
+   "column_name": "capacity",
+   "ordinal_position": 14,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "failed_jobs",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "bigint",
+   "nullable": false,
+   "column_default": "nextval('failed_jobs_id_seq'::regclass)"
+  },
+  {
+   "table_name": "failed_jobs",
+   "column_name": "uuid",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "failed_jobs",
+   "column_name": "connection",
+   "ordinal_position": 3,
+   "type": "text",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "failed_jobs",
+   "column_name": "queue",
+   "ordinal_position": 4,
+   "type": "text",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "failed_jobs",
+   "column_name": "payload",
+   "ordinal_position": 5,
+   "type": "text",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "failed_jobs",
+   "column_name": "exception",
+   "ordinal_position": 6,
+   "type": "text",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "failed_jobs",
+   "column_name": "failed_at",
+   "ordinal_position": 7,
+   "type": "timestamp",
+   "nullable": false,
+   "column_default": "CURRENT_TIMESTAMP"
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "plan_id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "camp_label",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "allocated_haj",
+   "ordinal_position": 3,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "number_of_buses",
+   "ordinal_position": 4,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "number_of_late_haj",
+   "ordinal_position": 5,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "number_of_early_haj",
+   "ordinal_position": 6,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "license_number",
+   "ordinal_position": 7,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "district",
+   "ordinal_position": 8,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "residence_haj",
+   "ordinal_position": 9,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "tarwia",
+   "ordinal_position": 10,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "direct_taseed",
+   "ordinal_position": 11,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "get_type_parking",
+   "ordinal_position": 12,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "get_parking_name",
+   "ordinal_position": 13,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "set_type_parking",
+   "ordinal_position": 14,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "set_parking_name",
+   "ordinal_position": 15,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "entrance_asm_code",
+   "ordinal_position": 16,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "entrance_name",
+   "ordinal_position": 17,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "entrance_point_geom",
+   "ordinal_position": 18,
+   "type": "text",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "start_point_name",
+   "ordinal_position": 19,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "start_point_type",
+   "ordinal_position": 20,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "start_point_geom",
+   "ordinal_position": 21,
+   "type": "text",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "end_point_name",
+   "ordinal_position": 22,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "end_point_type",
+   "ordinal_position": 23,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "end_point_geom",
+   "ordinal_position": 24,
+   "type": "text",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "path_geom",
+   "ordinal_position": 25,
+   "type": "text",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "internal_path_name",
+   "ordinal_position": 26,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "internal_path_geom",
+   "ordinal_position": 27,
+   "type": "text",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "owner_company_name",
+   "ordinal_position": 28,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "owner_office_number",
+   "ordinal_position": 29,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "timing_name",
+   "ordinal_position": 30,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "timing_start_at",
+   "ordinal_position": 31,
+   "type": "time",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "timing_start_at_hijri",
+   "ordinal_position": 32,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "timing_end_at",
+   "ordinal_position": 33,
+   "type": "time",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "timing_end_at_hijri",
+   "ordinal_position": 34,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "plan_type_name",
+   "ordinal_position": 35,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "plan_type_code",
+   "ordinal_position": 36,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "final_plan_view",
+   "column_name": "transport_type_name",
+   "ordinal_position": 37,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "general_points",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "general_points",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "general_points",
+   "column_name": "created_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "general_points",
+   "column_name": "updated_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "geography_columns",
+   "column_name": "f_table_catalog",
+   "ordinal_position": 1,
+   "type": "name",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "geography_columns",
+   "column_name": "f_table_schema",
+   "ordinal_position": 2,
+   "type": "name",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "geography_columns",
+   "column_name": "f_table_name",
+   "ordinal_position": 3,
+   "type": "name",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "geography_columns",
+   "column_name": "f_geography_column",
+   "ordinal_position": 4,
+   "type": "name",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "geography_columns",
+   "column_name": "coord_dimension",
+   "ordinal_position": 5,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "geography_columns",
+   "column_name": "srid",
+   "ordinal_position": 6,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "geography_columns",
+   "column_name": "type",
+   "ordinal_position": 7,
+   "type": "text",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "geometry_columns",
+   "column_name": "f_table_catalog",
+   "ordinal_position": 1,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "geometry_columns",
+   "column_name": "f_table_schema",
+   "ordinal_position": 2,
+   "type": "name",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "geometry_columns",
+   "column_name": "f_table_name",
+   "ordinal_position": 3,
+   "type": "name",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "geometry_columns",
+   "column_name": "f_geometry_column",
+   "ordinal_position": 4,
+   "type": "name",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "geometry_columns",
+   "column_name": "coord_dimension",
+   "ordinal_position": 5,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "geometry_columns",
+   "column_name": "srid",
+   "ordinal_position": 6,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "geometry_columns",
+   "column_name": "type",
+   "ordinal_position": 7,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "import_jobs",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "import_jobs",
+   "column_name": "type",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "import_jobs",
+   "column_name": "user_id",
+   "ordinal_position": 3,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "import_jobs",
+   "column_name": "status",
+   "ordinal_position": 4,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "import_jobs",
+   "column_name": "file_path",
+   "ordinal_position": 5,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "import_jobs",
+   "column_name": "result",
+   "ordinal_position": 6,
+   "type": "json",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "import_jobs",
+   "column_name": "error",
+   "ordinal_position": 7,
+   "type": "text",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "import_jobs",
+   "column_name": "started_at",
+   "ordinal_position": 8,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "import_jobs",
+   "column_name": "finished_at",
+   "ordinal_position": 9,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "import_jobs",
+   "column_name": "created_at",
+   "ordinal_position": 10,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "import_jobs",
+   "column_name": "updated_at",
+   "ordinal_position": 11,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "job_batches",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "job_batches",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "job_batches",
+   "column_name": "total_jobs",
+   "ordinal_position": 3,
+   "type": "integer",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "job_batches",
+   "column_name": "pending_jobs",
+   "ordinal_position": 4,
+   "type": "integer",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "job_batches",
+   "column_name": "failed_jobs",
+   "ordinal_position": 5,
+   "type": "integer",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "job_batches",
+   "column_name": "failed_job_ids",
+   "ordinal_position": 6,
+   "type": "text",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "job_batches",
+   "column_name": "options",
+   "ordinal_position": 7,
+   "type": "text",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "job_batches",
+   "column_name": "cancelled_at",
+   "ordinal_position": 8,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "job_batches",
+   "column_name": "created_at",
+   "ordinal_position": 9,
+   "type": "integer",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "job_batches",
+   "column_name": "finished_at",
+   "ordinal_position": 10,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "jobs",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "bigint",
+   "nullable": false,
+   "column_default": "nextval('jobs_id_seq'::regclass)"
+  },
+  {
+   "table_name": "jobs",
+   "column_name": "queue",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "jobs",
+   "column_name": "payload",
+   "ordinal_position": 3,
+   "type": "text",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "jobs",
+   "column_name": "attempts",
+   "ordinal_position": 4,
+   "type": "smallint",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "jobs",
+   "column_name": "reserved_at",
+   "ordinal_position": 5,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "jobs",
+   "column_name": "available_at",
+   "ordinal_position": 6,
+   "type": "integer",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "jobs",
+   "column_name": "created_at",
+   "ordinal_position": 7,
+   "type": "integer",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "mashaers_trips",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "mashaers_trips",
+   "column_name": "service_center_id",
+   "ordinal_position": 2,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "mashaers_trips",
+   "column_name": "transport_type_id",
+   "ordinal_position": 3,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "mashaers_trips",
+   "column_name": "transport_company_name_ar",
+   "ordinal_position": 4,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "mashaers_trips",
+   "column_name": "created_by",
+   "ordinal_position": 5,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "mashaers_trips",
+   "column_name": "created_at",
+   "ordinal_position": 6,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": "now()"
+  },
+  {
+   "table_name": "mashaers_trips",
+   "column_name": "updated_at",
+   "ordinal_position": 7,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": "now()"
+  },
+  {
+   "table_name": "mashaers_trips",
+   "column_name": "bus_id",
+   "ordinal_position": 8,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "migrations",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "integer",
+   "nullable": false,
+   "column_default": "nextval('migrations_id_seq'::regclass)"
+  },
+  {
+   "table_name": "migrations",
+   "column_name": "migration",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "migrations",
+   "column_name": "batch",
+   "ordinal_position": 3,
+   "type": "integer",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "model_has_permissions",
+   "column_name": "permission_id",
+   "ordinal_position": 1,
+   "type": "bigint",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "model_has_permissions",
+   "column_name": "model_type",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "model_has_permissions",
+   "column_name": "model_id",
+   "ordinal_position": 3,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "model_has_roles",
+   "column_name": "role_id",
+   "ordinal_position": 1,
+   "type": "bigint",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "model_has_roles",
+   "column_name": "model_type",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "model_has_roles",
+   "column_name": "model_id",
+   "ordinal_position": 3,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "organizers",
+   "column_name": "name",
+   "ordinal_position": 1,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "organizers",
+   "column_name": "created_at",
+   "ordinal_position": 2,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "organizers",
+   "column_name": "updated_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "organizers",
+   "column_name": "id",
+   "ordinal_position": 4,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": "gen_random_uuid()"
+  },
+  {
+   "table_name": "parking",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "parking",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "parking",
+   "column_name": "created_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "parking",
+   "column_name": "updated_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "parking",
+   "column_name": "shape_area",
+   "ordinal_position": 5,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "parking",
+   "column_name": "shape_length",
+   "ordinal_position": 6,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "parking",
+   "column_name": "gis_data_type",
+   "ordinal_position": 7,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "parking",
+   "column_name": "capacity",
+   "ordinal_position": 8,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "parking",
+   "column_name": "gis",
+   "ordinal_position": 9,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "parking",
+   "column_name": "area",
+   "ordinal_position": 10,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "parking",
+   "column_name": "street",
+   "ordinal_position": 11,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "parking",
+   "column_name": "objectid",
+   "ordinal_position": 12,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "password_reset_tokens",
+   "column_name": "email",
+   "ordinal_position": 1,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "password_reset_tokens",
+   "column_name": "token",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "password_reset_tokens",
+   "column_name": "created_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "paths",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "paths",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "paths",
+   "column_name": "created_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "paths",
+   "column_name": "updated_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "paths",
+   "column_name": "gis",
+   "ordinal_position": 5,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "paths",
+   "column_name": "transport_type_id",
+   "ordinal_position": 6,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "paths",
+   "column_name": "objectid",
+   "ordinal_position": 7,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "paths",
+   "column_name": "code",
+   "ordinal_position": 8,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "paths_powerbi",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "paths_powerbi",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "paths_powerbi",
+   "column_name": "transport_type_id",
+   "ordinal_position": 3,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "paths_powerbi",
+   "column_name": "gis",
+   "ordinal_position": 4,
+   "type": "text",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "paths_powerbi",
+   "column_name": "created_at",
+   "ordinal_position": 5,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "paths_powerbi",
+   "column_name": "updated_at",
+   "ordinal_position": 6,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "periods",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "periods",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "periods",
+   "column_name": "code",
+   "ordinal_position": 3,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "periods",
+   "column_name": "created_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "periods",
+   "column_name": "updated_at",
+   "ordinal_position": 5,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "permissions",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "bigint",
+   "nullable": false,
+   "column_default": "nextval('permissions_id_seq'::regclass)"
+  },
+  {
+   "table_name": "permissions",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "permissions",
+   "column_name": "guard_name",
+   "ordinal_position": 3,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "permissions",
+   "column_name": "created_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "permissions",
+   "column_name": "updated_at",
+   "ordinal_position": 5,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "permissions",
+   "column_name": "name_ar",
+   "ordinal_position": 6,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "permissions",
+   "column_name": "group",
+   "ordinal_position": 7,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "permissions",
+   "column_name": "is_show",
+   "ordinal_position": 8,
+   "type": "boolean",
+   "nullable": false,
+   "column_default": "true"
+  },
+  {
+   "table_name": "personal_access_tokens",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "bigint",
+   "nullable": false,
+   "column_default": "nextval('personal_access_tokens_id_seq'::regclass)"
+  },
+  {
+   "table_name": "personal_access_tokens",
+   "column_name": "tokenable_id",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "personal_access_tokens",
+   "column_name": "tokenable_type",
+   "ordinal_position": 3,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "personal_access_tokens",
+   "column_name": "name",
+   "ordinal_position": 4,
+   "type": "text",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "personal_access_tokens",
+   "column_name": "token",
+   "ordinal_position": 5,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "personal_access_tokens",
+   "column_name": "abilities",
+   "ordinal_position": 6,
+   "type": "text",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "personal_access_tokens",
+   "column_name": "last_used_at",
+   "ordinal_position": 7,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "personal_access_tokens",
+   "column_name": "expires_at",
+   "ordinal_position": 8,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "personal_access_tokens",
+   "column_name": "created_at",
+   "ordinal_position": 9,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "personal_access_tokens",
+   "column_name": "updated_at",
+   "ordinal_position": 10,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_desires",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_desires",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_desires",
+   "column_name": "created_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_desires",
+   "column_name": "updated_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_logs",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_logs",
+   "column_name": "plan_id",
+   "ordinal_position": 2,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_logs",
+   "column_name": "user_id",
+   "ordinal_position": 3,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_logs",
+   "column_name": "action",
+   "ordinal_position": 4,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": "'updated'::character varying"
+  },
+  {
+   "table_name": "plan_logs",
+   "column_name": "changes",
+   "ordinal_position": 5,
+   "type": "json",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_logs",
+   "column_name": "created_at",
+   "ordinal_position": 6,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_logs",
+   "column_name": "updated_at",
+   "ordinal_position": 7,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "period",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "number_of_buses",
+   "ordinal_position": 3,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "number_of_haj",
+   "ordinal_position": 4,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "number_of_late_haj",
+   "ordinal_position": 5,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "number_of_early_haj",
+   "ordinal_position": 6,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "plan_type_id",
+   "ordinal_position": 7,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "transport_type_id",
+   "ordinal_position": 8,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "entrance_id",
+   "ordinal_position": 9,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "path_id",
+   "ordinal_position": 10,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "get_type_parking",
+   "ordinal_position": 11,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "get_parking_id",
+   "ordinal_position": 12,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "set_type_parking",
+   "ordinal_position": 13,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "set_parking_id",
+   "ordinal_position": 14,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "plan_desire_id",
+   "ordinal_position": 15,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "transport_company_id",
+   "ordinal_position": 16,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "start_point_type",
+   "ordinal_position": 17,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "start_point_id",
+   "ordinal_position": 18,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "end_point_type",
+   "ordinal_position": 19,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "end_point_id",
+   "ordinal_position": 20,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "owner_id",
+   "ordinal_position": 21,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "creator_id",
+   "ordinal_position": 22,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "timing_id",
+   "ordinal_position": 23,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "path_gis",
+   "ordinal_position": 24,
+   "type": "jsonb",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "created_at",
+   "ordinal_position": 25,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "updated_at",
+   "ordinal_position": 26,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "creator_id_ref",
+   "ordinal_position": 27,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "creator_name",
+   "ordinal_position": 28,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "creator_email",
+   "ordinal_position": 29,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "creator_phone",
+   "ordinal_position": 30,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "creator_is_active",
+   "ordinal_position": 31,
+   "type": "boolean",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "creator_type_id",
+   "ordinal_position": 32,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "creator_company_id",
+   "ordinal_position": 33,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "creator_service_center_id",
+   "ordinal_position": 34,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "creator_created_by",
+   "ordinal_position": 35,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "creator_created_at",
+   "ordinal_position": 36,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "creator_updated_at",
+   "ordinal_position": 37,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "owner_service_center_id",
+   "ordinal_position": 38,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "owner_center_name",
+   "ordinal_position": 39,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "owner_office_number",
+   "ordinal_position": 40,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "owner_company_id",
+   "ordinal_position": 41,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "owner_created_by",
+   "ordinal_position": 42,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "owner_created_at",
+   "ordinal_position": 43,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "owner_updated_at",
+   "ordinal_position": 44,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "owner_company_ref_id",
+   "ordinal_position": 45,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "owner_company_name",
+   "ordinal_position": 46,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "timing_ref_id",
+   "ordinal_position": 47,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "timing_plan_type_id",
+   "ordinal_position": 48,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "timing_start_at",
+   "ordinal_position": 49,
+   "type": "time",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "timing_start_at_hijri",
+   "ordinal_position": 50,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "timing_end_at",
+   "ordinal_position": 51,
+   "type": "time",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "timing_end_at_hijri",
+   "ordinal_position": 52,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "timing_period_id",
+   "ordinal_position": 53,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "timing_created_at",
+   "ordinal_position": 54,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "timing_updated_at",
+   "ordinal_position": 55,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "plan_type_ref_id",
+   "ordinal_position": 56,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "plan_type_name",
+   "ordinal_position": 57,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "plan_type_code",
+   "ordinal_position": 58,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "plan_type_created_at",
+   "ordinal_position": 59,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "plan_type_updated_at",
+   "ordinal_position": 60,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "transport_type_ref_id",
+   "ordinal_position": 61,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "transport_type_name",
+   "ordinal_position": 62,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "transport_type_created_at",
+   "ordinal_position": 63,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "transport_type_updated_at",
+   "ordinal_position": 64,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "entrance_ref_id",
+   "ordinal_position": 65,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "entrance_name",
+   "ordinal_position": 66,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "entrance_shape_area",
+   "ordinal_position": 67,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "entrance_shape_length",
+   "ordinal_position": 68,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "entrance_gis_data_type",
+   "ordinal_position": 69,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "entrance_gis",
+   "ordinal_position": 70,
+   "type": "jsonb",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "entrance_longitude",
+   "ordinal_position": 71,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "entrance_latitude",
+   "ordinal_position": 72,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "entrance_asm_code",
+   "ordinal_position": 73,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "entrance_created_at",
+   "ordinal_position": 74,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "entrance_updated_at",
+   "ordinal_position": 75,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "path_ref_id",
+   "ordinal_position": 76,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "path_name",
+   "ordinal_position": 77,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "path_objectid",
+   "ordinal_position": 78,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "path_relation_gis",
+   "ordinal_position": 79,
+   "type": "jsonb",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "path_created_at",
+   "ordinal_position": 80,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "path_updated_at",
+   "ordinal_position": 81,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "plan_desire_ref_id",
+   "ordinal_position": 82,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "plan_desire_name",
+   "ordinal_position": 83,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "plan_desire_created_at",
+   "ordinal_position": 84,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "plan_desire_updated_at",
+   "ordinal_position": 85,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_show_view",
+   "column_name": "number_of_trips",
+   "ordinal_position": 86,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_types",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_types",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_types",
+   "column_name": "code",
+   "ordinal_position": 3,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_types",
+   "column_name": "created_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plan_types",
+   "column_name": "updated_at",
+   "ordinal_position": 5,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "creator_id",
+   "ordinal_position": 2,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "owner_id",
+   "ordinal_position": 3,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "start_point_type",
+   "ordinal_position": 4,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "start_point_id",
+   "ordinal_position": 5,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "end_point_type",
+   "ordinal_position": 6,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "end_point_id",
+   "ordinal_position": 7,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "plan_type_id",
+   "ordinal_position": 8,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "transport_type_id",
+   "ordinal_position": 9,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "transport_company_id",
+   "ordinal_position": 10,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "entrance_id",
+   "ordinal_position": 11,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "residence_id",
+   "ordinal_position": 12,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "get_parking_id",
+   "ordinal_position": 13,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "set_parking_id",
+   "ordinal_position": 14,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "plan_desire_id",
+   "ordinal_position": 15,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "period",
+   "ordinal_position": 16,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": "'1'::character varying"
+  },
+  {
+   "table_name": "plans",
+   "column_name": "number_of_buses",
+   "ordinal_position": 17,
+   "type": "integer",
+   "nullable": false,
+   "column_default": "0"
+  },
+  {
+   "table_name": "plans",
+   "column_name": "number_of_haj",
+   "ordinal_position": 18,
+   "type": "integer",
+   "nullable": false,
+   "column_default": "0"
+  },
+  {
+   "table_name": "plans",
+   "column_name": "number_of_late_haj",
+   "ordinal_position": 19,
+   "type": "integer",
+   "nullable": false,
+   "column_default": "0"
+  },
+  {
+   "table_name": "plans",
+   "column_name": "number_of_early_haj",
+   "ordinal_position": 20,
+   "type": "integer",
+   "nullable": false,
+   "column_default": "0"
+  },
+  {
+   "table_name": "plans",
+   "column_name": "created_at",
+   "ordinal_position": 21,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "updated_at",
+   "ordinal_position": 22,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "get_type_parking",
+   "ordinal_position": 23,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "path_id",
+   "ordinal_position": 24,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "set_type_parking",
+   "ordinal_position": 25,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "path_gis",
+   "ordinal_position": 26,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "timing_id",
+   "ordinal_position": 27,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "plans",
+   "column_name": "number_of_trips",
+   "ordinal_position": 28,
+   "type": "integer",
+   "nullable": false,
+   "column_default": "0"
+  },
+  {
+   "table_name": "platforms",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "platforms",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "platforms",
+   "column_name": "code",
+   "ordinal_position": 3,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "platforms",
+   "column_name": "created_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "platforms",
+   "column_name": "updated_at",
+   "ordinal_position": 5,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "residences",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "residences",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "residences",
+   "column_name": "created_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "residences",
+   "column_name": "updated_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "residences",
+   "column_name": "license_number",
+   "ordinal_position": 5,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "residences",
+   "column_name": "area",
+   "ordinal_position": 6,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "residences",
+   "column_name": "city",
+   "ordinal_position": 7,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "residences",
+   "column_name": "longitude",
+   "ordinal_position": 8,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "residences",
+   "column_name": "latitude",
+   "ordinal_position": 9,
+   "type": "double",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "residences",
+   "column_name": "type",
+   "ordinal_position": 10,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "role_has_permissions",
+   "column_name": "permission_id",
+   "ordinal_position": 1,
+   "type": "bigint",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "role_has_permissions",
+   "column_name": "role_id",
+   "ordinal_position": 2,
+   "type": "bigint",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "roles",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "bigint",
+   "nullable": false,
+   "column_default": "nextval('roles_id_seq'::regclass)"
+  },
+  {
+   "table_name": "roles",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "roles",
+   "column_name": "guard_name",
+   "ordinal_position": 3,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "roles",
+   "column_name": "created_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "roles",
+   "column_name": "updated_at",
+   "ordinal_position": 5,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "roles",
+   "column_name": "code",
+   "ordinal_position": 6,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "round_trips",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "round_trips",
+   "column_name": "plan_type_id",
+   "ordinal_position": 2,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "round_trips",
+   "column_name": "round_trip",
+   "ordinal_position": 3,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "round_trips",
+   "column_name": "created_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "round_trips",
+   "column_name": "updated_at",
+   "ordinal_position": 5,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "round_trips",
+   "column_name": "transport_type_id",
+   "ordinal_position": 6,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "service_centers",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "service_centers",
+   "column_name": "company_id",
+   "ordinal_position": 2,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "service_centers",
+   "column_name": "created_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "service_centers",
+   "column_name": "updated_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "service_centers",
+   "column_name": "center_name",
+   "ordinal_position": 5,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "service_centers",
+   "column_name": "office_number",
+   "ordinal_position": 6,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "service_centers",
+   "column_name": "created_by",
+   "ordinal_position": 7,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "service_companies",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "service_companies",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "service_companies",
+   "column_name": "created_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "service_companies",
+   "column_name": "updated_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "service_companies",
+   "column_name": "name_en",
+   "ordinal_position": 5,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "service_companies",
+   "column_name": "code",
+   "ordinal_position": 6,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "service_companies",
+   "column_name": "color",
+   "ordinal_position": 7,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "sessions",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "sessions",
+   "column_name": "user_id",
+   "ordinal_position": 2,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "sessions",
+   "column_name": "ip_address",
+   "ordinal_position": 3,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "sessions",
+   "column_name": "user_agent",
+   "ordinal_position": 4,
+   "type": "text",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "sessions",
+   "column_name": "payload",
+   "ordinal_position": 5,
+   "type": "text",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "sessions",
+   "column_name": "last_activity",
+   "ordinal_position": 6,
+   "type": "integer",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "plan_id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "camp_label",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "allocated_haj",
+   "ordinal_position": 3,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "number_of_buses",
+   "ordinal_position": 4,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "number_of_haj",
+   "ordinal_position": 5,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "number_of_late_haj",
+   "ordinal_position": 6,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "number_of_early_haj",
+   "ordinal_position": 7,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "get_type_parking",
+   "ordinal_position": 8,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "get_parking_name",
+   "ordinal_position": 9,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "get_parking_geom",
+   "ordinal_position": 10,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "set_type_parking",
+   "ordinal_position": 11,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "set_parking_name",
+   "ordinal_position": 12,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "set_parking_geom",
+   "ordinal_position": 13,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "start_point_name",
+   "ordinal_position": 14,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "start_point_type",
+   "ordinal_position": 15,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "start_point_geom",
+   "ordinal_position": 16,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "start_geom",
+   "ordinal_position": 17,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "start_point_district",
+   "ordinal_position": 18,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "end_point_name",
+   "ordinal_position": 19,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "end_point_type",
+   "ordinal_position": 20,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "end_point_geom",
+   "ordinal_position": 21,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "end_geom",
+   "ordinal_position": 22,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "owner_id",
+   "ordinal_position": 23,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "path_geom",
+   "ordinal_position": 24,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "owner_office_number",
+   "ordinal_position": 25,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "owner_company_name",
+   "ordinal_position": 26,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "period",
+   "ordinal_position": 27,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "timing_start_at",
+   "ordinal_position": 28,
+   "type": "time",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "timing_start_at_hijri",
+   "ordinal_position": 29,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "timing_end_at",
+   "ordinal_position": 30,
+   "type": "time",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "timing_end_at_hijri",
+   "ordinal_position": 31,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "plan_type_name",
+   "ordinal_position": 32,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "plan_type_code",
+   "ordinal_position": 33,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "transport_type_name",
+   "ordinal_position": 34,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "entrance_name",
+   "ordinal_position": 35,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "entrance_polygon",
+   "ordinal_position": 36,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "entrance_point_geom",
+   "ordinal_position": 37,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "entrance_asm_code",
+   "ordinal_position": 38,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "path_name",
+   "ordinal_position": 39,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "internal_path",
+   "ordinal_position": 40,
+   "type": "geometry",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "updated_at",
+   "ordinal_position": 41,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "simulation_data_view",
+   "column_name": "created_at",
+   "ordinal_position": 42,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "spatial_ref_sys",
+   "column_name": "srid",
+   "ordinal_position": 1,
+   "type": "integer",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "spatial_ref_sys",
+   "column_name": "auth_name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "spatial_ref_sys",
+   "column_name": "auth_srid",
+   "ordinal_position": 3,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "spatial_ref_sys",
+   "column_name": "srtext",
+   "ordinal_position": 4,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "spatial_ref_sys",
+   "column_name": "proj4text",
+   "ordinal_position": 5,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "timing",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "timing",
+   "column_name": "plan_type_id",
+   "ordinal_position": 2,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "timing",
+   "column_name": "start_at",
+   "ordinal_position": 3,
+   "type": "time",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "timing",
+   "column_name": "start_at_hijri",
+   "ordinal_position": 4,
+   "type": "integer",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "timing",
+   "column_name": "end_at",
+   "ordinal_position": 5,
+   "type": "time",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "timing",
+   "column_name": "end_at_hijri",
+   "ordinal_position": 6,
+   "type": "integer",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "timing",
+   "column_name": "period_id",
+   "ordinal_position": 7,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "timing",
+   "column_name": "created_at",
+   "ordinal_position": 8,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "timing",
+   "column_name": "updated_at",
+   "ordinal_position": 9,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies",
+   "column_name": "created_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies",
+   "column_name": "updated_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies_bak",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies_bak",
+   "column_name": "service_center_id",
+   "ordinal_position": 2,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies_bak",
+   "column_name": "transport_id",
+   "ordinal_position": 3,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies_bak",
+   "column_name": "contract_number",
+   "ordinal_position": 4,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies_bak",
+   "column_name": "created_at",
+   "ordinal_position": 5,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies_bak",
+   "column_name": "updated_at",
+   "ordinal_position": 6,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies_bak",
+   "column_name": "organizer_id",
+   "ordinal_position": 7,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies_bak",
+   "column_name": "country_id",
+   "ordinal_position": 8,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies_bak",
+   "column_name": "order_number",
+   "ordinal_position": 9,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies_bak",
+   "column_name": "number_of_haj",
+   "ordinal_position": 10,
+   "type": "integer",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies_bak",
+   "column_name": "transport_type_id",
+   "ordinal_position": 11,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies_bak",
+   "column_name": "status",
+   "ordinal_position": 12,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_companies_bak",
+   "column_name": "company_id",
+   "ordinal_position": 13,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_company_user_bak",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_company_user_bak",
+   "column_name": "user_id",
+   "ordinal_position": 2,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_company_user_bak",
+   "column_name": "transport_company_id",
+   "ordinal_position": 3,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_company_user_bak",
+   "column_name": "created_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_company_user_bak",
+   "column_name": "updated_at",
+   "ordinal_position": 5,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_types",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_types",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_types",
+   "column_name": "created_at",
+   "ordinal_position": 3,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_types",
+   "column_name": "updated_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "transport_types",
+   "column_name": "code",
+   "ordinal_position": 5,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "types",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "types",
+   "column_name": "name",
+   "ordinal_position": 2,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "types",
+   "column_name": "code",
+   "ordinal_position": 3,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "types",
+   "column_name": "created_at",
+   "ordinal_position": 4,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "types",
+   "column_name": "updated_at",
+   "ordinal_position": 5,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "users",
+   "column_name": "id",
+   "ordinal_position": 1,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "users",
+   "column_name": "type_id",
+   "ordinal_position": 2,
+   "type": "uuid",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "users",
+   "column_name": "created_by",
+   "ordinal_position": 3,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "users",
+   "column_name": "name",
+   "ordinal_position": 4,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "users",
+   "column_name": "email",
+   "ordinal_position": 5,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "users",
+   "column_name": "email_verified_at",
+   "ordinal_position": 6,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "users",
+   "column_name": "password",
+   "ordinal_position": 7,
+   "type": "varchar",
+   "nullable": false,
+   "column_default": null
+  },
+  {
+   "table_name": "users",
+   "column_name": "is_active",
+   "ordinal_position": 8,
+   "type": "boolean",
+   "nullable": false,
+   "column_default": "true"
+  },
+  {
+   "table_name": "users",
+   "column_name": "remember_token",
+   "ordinal_position": 9,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "users",
+   "column_name": "created_at",
+   "ordinal_position": 10,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "users",
+   "column_name": "updated_at",
+   "ordinal_position": 11,
+   "type": "timestamp",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "users",
+   "column_name": "company_id",
+   "ordinal_position": 12,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "users",
+   "column_name": "phone",
+   "ordinal_position": 13,
+   "type": "varchar",
+   "nullable": true,
+   "column_default": null
+  },
+  {
+   "table_name": "users",
+   "column_name": "service_center_id",
+   "ordinal_position": 14,
+   "type": "uuid",
+   "nullable": true,
+   "column_default": null
+  }
+ ],
+ "constraints": [
+  {
+   "conname": "assign_camps_camp_id_foreign",
+   "contype": "f",
+   "table_name": "assign_camps",
+   "columns": [
+    "camp_id"
+   ],
+   "ref_table": "camps",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (camp_id) REFERENCES camps(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "assign_camps_country_id_foreign",
+   "contype": "f",
+   "table_name": "assign_camps",
+   "columns": [
+    "country_id"
+   ],
+   "ref_table": "countries",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (country_id) REFERENCES countries(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "assign_camps_service_center_id_foreign",
+   "contype": "f",
+   "table_name": "assign_camps",
+   "columns": [
+    "service_center_id"
+   ],
+   "ref_table": "service_centers",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (service_center_id) REFERENCES service_centers(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "assign_camps_transport_type_id_foreign",
+   "contype": "f",
+   "table_name": "assign_camps",
+   "columns": [
+    "transport_type_id"
+   ],
+   "ref_table": "transport_types",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (transport_type_id) REFERENCES transport_types(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "assign_camps_user_id_foreign",
+   "contype": "f",
+   "table_name": "assign_camps",
+   "columns": [
+    "user_id"
+   ],
+   "ref_table": "users",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "fk_assign_data_created_by",
+   "contype": "f",
+   "table_name": "assign_camps",
+   "columns": [
+    "created_by"
+   ],
+   "ref_table": "users",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (created_by) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "assign_camps_pkey",
+   "contype": "p",
+   "table_name": "assign_camps",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "assign_residences_residence_id_foreign",
+   "contype": "f",
+   "table_name": "assign_residences",
+   "columns": [
+    "residence_id"
+   ],
+   "ref_table": "residences",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (residence_id) REFERENCES residences(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "assign_residences_service_center_id_foreign",
+   "contype": "f",
+   "table_name": "assign_residences",
+   "columns": [
+    "service_center_id"
+   ],
+   "ref_table": "service_centers",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (service_center_id) REFERENCES service_centers(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "assign_residences_user_id_foreign",
+   "contype": "f",
+   "table_name": "assign_residences",
+   "columns": [
+    "created_by"
+   ],
+   "ref_table": "users",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (created_by) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "assign_residences_pkey",
+   "contype": "p",
+   "table_name": "assign_residences",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "bus_stops_pkey",
+   "contype": "p",
+   "table_name": "bus_stops",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "bus_warehouses_pkey",
+   "contype": "p",
+   "table_name": "bus_warehouses",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "cache_pkey",
+   "contype": "p",
+   "table_name": "cache",
+   "columns": [
+    "key"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (key)"
+  },
+  {
+   "conname": "cache_locks_pkey",
+   "contype": "p",
+   "table_name": "cache_locks",
+   "columns": [
+    "key"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (key)"
+  },
+  {
+   "conname": "camps_drop_off_area_id_fkey",
+   "contype": "f",
+   "table_name": "camps",
+   "columns": [
+    "drop_off_area_id"
+   ],
+   "ref_table": "drop_off_areas",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (drop_off_area_id) REFERENCES drop_off_areas(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "camps_entrance_id_foreign",
+   "contype": "f",
+   "table_name": "camps",
+   "columns": [
+    "entrance_id"
+   ],
+   "ref_table": "entrances",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (entrance_id) REFERENCES entrances(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "camps_platform_id_foreign",
+   "contype": "f",
+   "table_name": "camps",
+   "columns": [
+    "platform_id"
+   ],
+   "ref_table": "platforms",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (platform_id) REFERENCES platforms(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "camps_transport_type_id_foreign",
+   "contype": "f",
+   "table_name": "camps",
+   "columns": [
+    "transport_type_id"
+   ],
+   "ref_table": "transport_types",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (transport_type_id) REFERENCES transport_types(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "fk_camps_path_camps",
+   "contype": "f",
+   "table_name": "camps",
+   "columns": [
+    "path_camp_id"
+   ],
+   "ref_table": "paths",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (path_camp_id) REFERENCES paths(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "fk_camps_path_dropoff",
+   "contype": "f",
+   "table_name": "camps",
+   "columns": [
+    "path_dropoff_id"
+   ],
+   "ref_table": "paths",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (path_dropoff_id) REFERENCES paths(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "fk_camps_path_entrance",
+   "contype": "f",
+   "table_name": "camps",
+   "columns": [
+    "path_entrance_id"
+   ],
+   "ref_table": "paths",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (path_entrance_id) REFERENCES paths(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "fk_camps_path_residence",
+   "contype": "f",
+   "table_name": "camps",
+   "columns": [
+    "path_residence_id"
+   ],
+   "ref_table": "paths",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (path_residence_id) REFERENCES paths(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "camps_pkey",
+   "contype": "p",
+   "table_name": "camps",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "countries_pkey",
+   "contype": "p",
+   "table_name": "countries",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "countries_name_ar_unique",
+   "contype": "u",
+   "table_name": "countries",
+   "columns": [
+    "name_ar"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "UNIQUE (name_ar)"
+  },
+  {
+   "conname": "countries_name_unique",
+   "contype": "u",
+   "table_name": "countries",
+   "columns": [
+    "name"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "UNIQUE (name)"
+  },
+  {
+   "conname": "drop_off_areas_pkey",
+   "contype": "p",
+   "table_name": "drop_off_areas",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "entrances_platform_id_foreign",
+   "contype": "f",
+   "table_name": "entrances",
+   "columns": [
+    "platform_id"
+   ],
+   "ref_table": "platforms",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (platform_id) REFERENCES platforms(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "entrances_pkey",
+   "contype": "p",
+   "table_name": "entrances",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "failed_jobs_pkey",
+   "contype": "p",
+   "table_name": "failed_jobs",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "failed_jobs_uuid_unique",
+   "contype": "u",
+   "table_name": "failed_jobs",
+   "columns": [
+    "uuid"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "UNIQUE (uuid)"
+  },
+  {
+   "conname": "general_points_pkey",
+   "contype": "p",
+   "table_name": "general_points",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "import_jobs_pkey",
+   "contype": "p",
+   "table_name": "import_jobs",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "job_batches_pkey",
+   "contype": "p",
+   "table_name": "job_batches",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "jobs_pkey",
+   "contype": "p",
+   "table_name": "jobs",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "mashaers_trips_created_by_fkey",
+   "contype": "f",
+   "table_name": "mashaers_trips",
+   "columns": [
+    "created_by"
+   ],
+   "ref_table": "users",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (created_by) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "mashaers_trips_service_center_id_fkey",
+   "contype": "f",
+   "table_name": "mashaers_trips",
+   "columns": [
+    "service_center_id"
+   ],
+   "ref_table": "service_centers",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "c",
+   "def": "FOREIGN KEY (service_center_id) REFERENCES service_centers(id) ON UPDATE CASCADE ON DELETE CASCADE"
+  },
+  {
+   "conname": "mashaers_trips_transport_type_id_fkey",
+   "contype": "f",
+   "table_name": "mashaers_trips",
+   "columns": [
+    "transport_type_id"
+   ],
+   "ref_table": "transport_types",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (transport_type_id) REFERENCES transport_types(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "mashaers_trips_pkey",
+   "contype": "p",
+   "table_name": "mashaers_trips",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "migrations_pkey",
+   "contype": "p",
+   "table_name": "migrations",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "model_has_permissions_permission_id_foreign",
+   "contype": "f",
+   "table_name": "model_has_permissions",
+   "columns": [
+    "permission_id"
+   ],
+   "ref_table": "permissions",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "c",
+   "def": "FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE"
+  },
+  {
+   "conname": "model_has_permissions_pkey",
+   "contype": "p",
+   "table_name": "model_has_permissions",
+   "columns": [
+    "permission_id",
+    "model_id",
+    "model_type"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (permission_id, model_id, model_type)"
+  },
+  {
+   "conname": "model_has_roles_role_id_foreign",
+   "contype": "f",
+   "table_name": "model_has_roles",
+   "columns": [
+    "role_id"
+   ],
+   "ref_table": "roles",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "c",
+   "def": "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE"
+  },
+  {
+   "conname": "model_has_roles_pkey",
+   "contype": "p",
+   "table_name": "model_has_roles",
+   "columns": [
+    "role_id",
+    "model_id",
+    "model_type"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (role_id, model_id, model_type)"
+  },
+  {
+   "conname": "organizers_pkey",
+   "contype": "p",
+   "table_name": "organizers",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "parking_pkey",
+   "contype": "p",
+   "table_name": "parking",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "password_reset_tokens_pkey",
+   "contype": "p",
+   "table_name": "password_reset_tokens",
+   "columns": [
+    "email"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (email)"
+  },
+  {
+   "conname": "fk_paths_transport_type",
+   "contype": "f",
+   "table_name": "paths",
+   "columns": [
+    "transport_type_id"
+   ],
+   "ref_table": "transport_types",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (transport_type_id) REFERENCES transport_types(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "paths_pkey",
+   "contype": "p",
+   "table_name": "paths",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "periods_pkey",
+   "contype": "p",
+   "table_name": "periods",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "permissions_pkey",
+   "contype": "p",
+   "table_name": "permissions",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "permissions_name_guard_name_unique",
+   "contype": "u",
+   "table_name": "permissions",
+   "columns": [
+    "name",
+    "guard_name"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "UNIQUE (name, guard_name)"
+  },
+  {
+   "conname": "personal_access_tokens_pkey",
+   "contype": "p",
+   "table_name": "personal_access_tokens",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "personal_access_tokens_token_unique",
+   "contype": "u",
+   "table_name": "personal_access_tokens",
+   "columns": [
+    "token"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "UNIQUE (token)"
+  },
+  {
+   "conname": "plan_desires_pkey",
+   "contype": "p",
+   "table_name": "plan_desires",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "plan_logs_plan_id_foreign",
+   "contype": "f",
+   "table_name": "plan_logs",
+   "columns": [
+    "plan_id"
+   ],
+   "ref_table": "plans",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "c",
+   "def": "FOREIGN KEY (plan_id) REFERENCES plans(id) ON DELETE CASCADE"
+  },
+  {
+   "conname": "plan_logs_user_id_foreign",
+   "contype": "f",
+   "table_name": "plan_logs",
+   "columns": [
+    "user_id"
+   ],
+   "ref_table": "users",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "c",
+   "def": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+  },
+  {
+   "conname": "plan_logs_pkey",
+   "contype": "p",
+   "table_name": "plan_logs",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "plan_types_pkey",
+   "contype": "p",
+   "table_name": "plan_types",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "fk_plans_timing_id",
+   "contype": "f",
+   "table_name": "plans",
+   "columns": [
+    "timing_id"
+   ],
+   "ref_table": "timing",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (timing_id) REFERENCES timing(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "plans_creator_id_foreign",
+   "contype": "f",
+   "table_name": "plans",
+   "columns": [
+    "creator_id"
+   ],
+   "ref_table": "users",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (creator_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "plans_entrance_id_foreign",
+   "contype": "f",
+   "table_name": "plans",
+   "columns": [
+    "entrance_id"
+   ],
+   "ref_table": "entrances",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (entrance_id) REFERENCES entrances(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "plans_owner_id_foreign",
+   "contype": "f",
+   "table_name": "plans",
+   "columns": [
+    "owner_id"
+   ],
+   "ref_table": "service_centers",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (owner_id) REFERENCES service_centers(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "plans_path_id_foreign",
+   "contype": "f",
+   "table_name": "plans",
+   "columns": [
+    "path_id"
+   ],
+   "ref_table": "paths",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (path_id) REFERENCES paths(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "plans_plan_desire_id_foreign",
+   "contype": "f",
+   "table_name": "plans",
+   "columns": [
+    "plan_desire_id"
+   ],
+   "ref_table": "plan_desires",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (plan_desire_id) REFERENCES plan_desires(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "plans_plan_type_id_foreign",
+   "contype": "f",
+   "table_name": "plans",
+   "columns": [
+    "plan_type_id"
+   ],
+   "ref_table": "plan_types",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (plan_type_id) REFERENCES plan_types(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "plans_residence_id_foreign",
+   "contype": "f",
+   "table_name": "plans",
+   "columns": [
+    "residence_id"
+   ],
+   "ref_table": "residences",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (residence_id) REFERENCES residences(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "plans_transport_type_id_foreign",
+   "contype": "f",
+   "table_name": "plans",
+   "columns": [
+    "transport_type_id"
+   ],
+   "ref_table": "transport_types",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (transport_type_id) REFERENCES transport_types(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "plans_pkey",
+   "contype": "p",
+   "table_name": "plans",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "platforms_pkey",
+   "contype": "p",
+   "table_name": "platforms",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "residences_pkey",
+   "contype": "p",
+   "table_name": "residences",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "role_has_permissions_permission_id_foreign",
+   "contype": "f",
+   "table_name": "role_has_permissions",
+   "columns": [
+    "permission_id"
+   ],
+   "ref_table": "permissions",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "c",
+   "def": "FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE"
+  },
+  {
+   "conname": "role_has_permissions_role_id_foreign",
+   "contype": "f",
+   "table_name": "role_has_permissions",
+   "columns": [
+    "role_id"
+   ],
+   "ref_table": "roles",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "c",
+   "def": "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE"
+  },
+  {
+   "conname": "role_has_permissions_pkey",
+   "contype": "p",
+   "table_name": "role_has_permissions",
+   "columns": [
+    "permission_id",
+    "role_id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (permission_id, role_id)"
+  },
+  {
+   "conname": "roles_pkey",
+   "contype": "p",
+   "table_name": "roles",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "roles_code_unique",
+   "contype": "u",
+   "table_name": "roles",
+   "columns": [
+    "code"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "UNIQUE (code)"
+  },
+  {
+   "conname": "roles_name_guard_name_unique",
+   "contype": "u",
+   "table_name": "roles",
+   "columns": [
+    "name",
+    "guard_name"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "UNIQUE (name, guard_name)"
+  },
+  {
+   "conname": "round_trips_plan_type_id_foreign",
+   "contype": "f",
+   "table_name": "round_trips",
+   "columns": [
+    "plan_type_id"
+   ],
+   "ref_table": "plan_types",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "c",
+   "def": "FOREIGN KEY (plan_type_id) REFERENCES plan_types(id) ON DELETE CASCADE"
+  },
+  {
+   "conname": "round_trips_transport_type_id_foreign",
+   "contype": "f",
+   "table_name": "round_trips",
+   "columns": [
+    "transport_type_id"
+   ],
+   "ref_table": "transport_types",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (transport_type_id) REFERENCES transport_types(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "round_trips_pkey",
+   "contype": "p",
+   "table_name": "round_trips",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "service_centers_pkey",
+   "contype": "p",
+   "table_name": "service_centers",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "service_companies_pkey",
+   "contype": "p",
+   "table_name": "service_companies",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "sessions_user_id_foreign",
+   "contype": "f",
+   "table_name": "sessions",
+   "columns": [
+    "user_id"
+   ],
+   "ref_table": "users",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL"
+  },
+  {
+   "conname": "sessions_pkey",
+   "contype": "p",
+   "table_name": "sessions",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "spatial_ref_sys_srid_check",
+   "contype": "c",
+   "table_name": "spatial_ref_sys",
+   "columns": [
+    "srid"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "CHECK (((srid > 0) AND (srid <= 998999)))"
+  },
+  {
+   "conname": "spatial_ref_sys_pkey",
+   "contype": "p",
+   "table_name": "spatial_ref_sys",
+   "columns": [
+    "srid"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (srid)"
+  },
+  {
+   "conname": "timing_period_id_foreign",
+   "contype": "f",
+   "table_name": "timing",
+   "columns": [
+    "period_id"
+   ],
+   "ref_table": "periods",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (period_id) REFERENCES periods(id) ON DELETE SET NULL"
+  },
+  {
+   "conname": "timing_plan_type_id_foreign",
+   "contype": "f",
+   "table_name": "timing",
+   "columns": [
+    "plan_type_id"
+   ],
+   "ref_table": "plan_types",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "c",
+   "def": "FOREIGN KEY (plan_type_id) REFERENCES plan_types(id) ON DELETE CASCADE"
+  },
+  {
+   "conname": "timing_pkey",
+   "contype": "p",
+   "table_name": "timing",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "transport_companies_pkey",
+   "contype": "p",
+   "table_name": "transport_companies",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "transport_companies_name_unique",
+   "contype": "u",
+   "table_name": "transport_companies",
+   "columns": [
+    "name"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "UNIQUE (name)"
+  },
+  {
+   "conname": "transport_types_pkey",
+   "contype": "p",
+   "table_name": "transport_types",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "transport_types_code_key",
+   "contype": "u",
+   "table_name": "transport_types",
+   "columns": [
+    "code"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "UNIQUE (code)"
+  },
+  {
+   "conname": "types_pkey",
+   "contype": "p",
+   "table_name": "types",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "conname": "users_company_id_foreign",
+   "contype": "f",
+   "table_name": "users",
+   "columns": [
+    "company_id"
+   ],
+   "ref_table": "service_companies",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (company_id) REFERENCES service_companies(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "users_created_by_foreign",
+   "contype": "f",
+   "table_name": "users",
+   "columns": [
+    "created_by"
+   ],
+   "ref_table": "users",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (created_by) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "users_service_center_id_foreign",
+   "contype": "f",
+   "table_name": "users",
+   "columns": [
+    "service_center_id"
+   ],
+   "ref_table": "service_centers",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "n",
+   "def": "FOREIGN KEY (service_center_id) REFERENCES service_centers(id) ON UPDATE CASCADE ON DELETE SET NULL"
+  },
+  {
+   "conname": "users_type_id_foreign",
+   "contype": "f",
+   "table_name": "users",
+   "columns": [
+    "type_id"
+   ],
+   "ref_table": "types",
+   "ref_columns": [
+    "id"
+   ],
+   "on_delete": "c",
+   "def": "FOREIGN KEY (type_id) REFERENCES types(id) ON UPDATE CASCADE ON DELETE CASCADE"
+  },
+  {
+   "conname": "users_pkey",
+   "contype": "p",
+   "table_name": "users",
+   "columns": [
+    "id"
+   ],
+   "ref_table": null,
+   "ref_columns": null,
+   "on_delete": " ",
+   "def": "PRIMARY KEY (id)"
+  }
+ ],
+ "counts": {
+  "assign_camps": 1136,
+  "assign_residences": 4296,
+  "bus_stops": 12,
+  "bus_warehouses": 54,
+  "cache": 0,
+  "cache_locks": 0,
+  "camps": 1333,
+  "countries": 104,
+  "drop_off_areas": 14,
+  "entrances": 29,
+  "failed_jobs": 1,
+  "general_points": 4,
+  "import_jobs": 54,
+  "job_batches": 0,
+  "jobs": 0,
+  "mashaers_trips": 85,
+  "migrations": 69,
+  "model_has_permissions": 0,
+  "model_has_roles": 15566,
+  "organizers": 541,
+  "parking": 45,
+  "password_reset_tokens": 1,
+  "paths": 4974,
+  "periods": 4,
+  "permissions": 118,
+  "personal_access_tokens": 0,
+  "plan_desires": 4,
+  "plan_logs": 24,
+  "plan_types": 5,
+  "plans": 4772,
+  "platforms": 3,
+  "residences": 1879,
+  "role_has_permissions": 536,
+  "roles": 10,
+  "round_trips": 19,
+  "service_centers": 724,
+  "service_companies": 29,
+  "sessions": 12,
+  "spatial_ref_sys": 8500,
+  "timing": 18,
+  "transport_companies": 89,
+  "transport_companies_bak": 614,
+  "transport_company_user_bak": 0,
+  "transport_types": 4,
+  "types": 4,
+  "users": 758
+ },
+ "viewDefs": {
+  "camps_geometries": " WITH geometries AS (\n         SELECT c.id,\n            c.name AS camp_label,\n            c.gis AS geom,\n            p.name AS platform_name\n           FROM camps c\n             LEFT JOIN platforms p ON c.platform_id = p.id\n        ), distinct_geom AS (\n         SELECT p.start_point_id AS geom_id\n           FROM plans p\n        UNION\n         SELECT p.end_point_id AS geom_id\n           FROM plans p\n        ), join_geoms AS (\n         SELECT dg.geom_id,\n            g.camp_label,\n            g.platform_name,\n            st_boundary(g.geom) AS geom\n           FROM distinct_geom dg\n             LEFT JOIN geometries g ON dg.geom_id = g.id\n        ), explode_multilinestring AS (\n         SELECT j.geom_id,\n            j.camp_label,\n            j.platform_name,\n            COALESCE(line_dp.path[1], 1) AS polygon_no,\n            line_dp.geom AS polygon_geom\n           FROM join_geoms j,\n            LATERAL st_dump(st_transform(st_simplifyvw(st_transform(j.geom, 32637), 4::double precision), 4326)) line_dp(path, geom)\n        )\n SELECT camp_label,\n    platform_name,\n    polygon_no,\n    st_asgeojson(polygon_geom) AS st_asgeojson\n   FROM explode_multilinestring;",
+  "final_plan_view": " WITH trip_point AS (\n         SELECT r.id,\n            st_envelope(st_transform(st_buffer(st_transform(st_setsrid(st_makepoint(r.longitude, r.latitude), 4326), 32637), 50::double precision), 4326)) AS polygon_geom,\n            st_setsrid(st_makepoint(r.longitude, r.latitude), 4326) AS point_geom,\n            r.name,\n            r.area AS district\n           FROM residences r\n        UNION ALL\n         SELECT doa.id,\n            doa.gis AS polygon_geom,\n            st_centroid(doa.gis) AS point_geom,\n            doa.name,\n            NULL::character varying AS district\n           FROM drop_off_areas doa\n        UNION ALL\n         SELECT c.id,\n            c.gis AS polygon_geom,\n            st_setsrid(st_makepoint(c.gate_lon, c.gate_lat), 4326) AS point_geom,\n            c.name,\n            NULL::character varying AS district\n           FROM camps c\n        ), parking AS (\n         SELECT bw.id,\n            bw.name,\n            bw.gis AS geom\n           FROM bus_warehouses bw\n        UNION ALL\n         SELECT p.id,\n            p.name,\n            p.gis AS geom\n           FROM public.parking p\n        ), master_plan AS (\n         SELECT p.id AS plan_id,\n                CASE\n                    WHEN p.start_point_type::text = 'camp'::text THEN sp.name\n                    WHEN p.end_point_type::text = 'camp'::text THEN ep.name\n                    ELSE NULL::character varying\n                END AS camp_label,\n            p.number_of_buses,\n            p.number_of_haj,\n            p.number_of_late_haj,\n            p.number_of_early_haj,\n            p.residence_id,\n            r.license_number,\n            r.area AS district,\n            p.get_parking_id,\n            p.get_type_parking,\n            getp.name AS get_parking_name,\n            getp.geom AS get_parking_geom,\n            p.set_parking_id,\n            p.set_type_parking,\n            setp.name AS set_parking_name,\n            setp.geom AS set_parking_geom,\n            p.start_point_id,\n            sp.name AS start_point_name,\n            p.start_point_type,\n            sp.point_geom AS start_point_geom,\n            sp.polygon_geom AS start_geom,\n            p.end_point_id,\n            ep.name AS end_point_name,\n            p.end_point_type,\n            ep.point_geom AS end_point_geom,\n            ep.polygon_geom AS end_geom,\n            st_asgeojson(st_reduceprecision(st_transform(st_simplifyvw(st_transform(p.path_gis, 32637), 50::double precision), 4326), 0.0001::double precision)) AS path_geom,\n            p.owner_id,\n            sc.office_number AS owner_office_number,\n            c.name AS owner_company_name,\n            pr.name AS timing_name,\n            t.start_at AS timing_start_at,\n            t.start_at_hijri AS timing_start_at_hijri,\n            t.end_at AS timing_end_at,\n            t.end_at_hijri AS timing_end_at_hijri,\n            pt.name AS plan_type_name,\n            pt.code AS plan_type_code,\n            tt.name AS transport_type_name,\n            p.entrance_id,\n            e.name AS entrance_name,\n            e.asm_code AS entrance_asm_code,\n            st_geometryn(e.gis, 1) AS entrance_polygon,\n            st_setsrid(st_makepoint(e.longitude, e.latitude), 4326) AS entrance_point_geom,\n            pth.name AS internal_path_name,\n            st_asgeojson(st_reduceprecision(st_transform(st_simplifyvw(st_transform(p.path_gis, 32637), 50::double precision), 4326), 0.0001::double precision)) AS internal_path_geom,\n                CASE\n                    WHEN p.start_point_type::text = 'camp'::text THEN p.start_point_id\n                    WHEN p.end_point_type::text = 'camp'::text THEN p.end_point_id\n                    ELSE NULL::uuid\n                END AS camp_id,\n            p.updated_at,\n            p.created_at\n           FROM plans p\n             LEFT JOIN parking getp ON p.get_parking_id = getp.id\n             LEFT JOIN parking setp ON p.set_parking_id = setp.id\n             LEFT JOIN trip_point sp ON p.start_point_id = sp.id\n             LEFT JOIN trip_point ep ON p.end_point_id = ep.id\n             LEFT JOIN service_centers sc ON p.owner_id = sc.id\n             LEFT JOIN service_companies c ON sc.company_id = c.id\n             LEFT JOIN timing t ON p.timing_id = t.id\n             LEFT JOIN periods pr ON t.period_id = pr.id\n             LEFT JOIN plan_types pt ON p.plan_type_id = pt.id\n             LEFT JOIN transport_types tt ON p.transport_type_id = tt.id\n             LEFT JOIN entrances e ON p.entrance_id = e.id\n             LEFT JOIN paths pth ON p.path_id = pth.id\n             LEFT JOIN residences r ON p.start_point_id = r.id\n        ), hajj_count_added AS (\n         SELECT ad.haj_count AS allocated_haj,\n            ac.haj_count AS residence_haj,\n            ac.tarwia,\n            ac.direct_taseed,\n            mp.plan_id,\n            mp.camp_label,\n            mp.number_of_buses,\n            mp.number_of_haj,\n            mp.number_of_late_haj,\n            mp.number_of_early_haj,\n            mp.residence_id,\n            mp.license_number,\n            mp.district,\n            mp.get_parking_id,\n            mp.get_type_parking,\n            mp.get_parking_name,\n            mp.get_parking_geom,\n            mp.set_parking_id,\n            mp.set_type_parking,\n            mp.set_parking_name,\n            mp.set_parking_geom,\n            mp.start_point_id,\n            mp.start_point_name,\n            mp.start_point_type,\n            mp.start_point_geom,\n            mp.start_geom,\n            mp.end_point_id,\n            mp.end_point_name,\n            mp.end_point_type,\n            mp.end_point_geom,\n            mp.end_geom,\n            mp.path_geom,\n            mp.owner_id,\n            mp.owner_office_number,\n            mp.owner_company_name,\n            mp.timing_name,\n            mp.timing_start_at,\n            mp.timing_start_at_hijri,\n            mp.timing_end_at,\n            mp.timing_end_at_hijri,\n            mp.plan_type_name,\n            mp.plan_type_code,\n            mp.transport_type_name,\n            mp.entrance_id,\n            mp.entrance_name,\n            mp.entrance_asm_code,\n            mp.entrance_polygon,\n            mp.entrance_point_geom,\n            mp.internal_path_name,\n            mp.internal_path_geom,\n            mp.camp_id,\n            mp.updated_at,\n            mp.created_at\n           FROM master_plan mp\n             LEFT JOIN assign_camps ad ON mp.camp_id = ad.camp_id AND mp.owner_id = ad.service_center_id\n             LEFT JOIN assign_residences ac ON mp.start_point_id = ac.residence_id AND mp.owner_id = ac.service_center_id\n        )\n SELECT plan_id,\n    camp_label,\n    allocated_haj,\n    number_of_buses,\n    number_of_late_haj,\n    number_of_early_haj,\n    license_number,\n    district,\n    residence_haj,\n    tarwia,\n    direct_taseed,\n    get_type_parking,\n    get_parking_name,\n    set_type_parking,\n    set_parking_name,\n    entrance_asm_code,\n    entrance_name,\n    st_astext(entrance_point_geom) AS entrance_point_geom,\n    start_point_name,\n    start_point_type,\n    st_astext(start_point_geom) AS start_point_geom,\n    end_point_name,\n    end_point_type,\n    st_astext(end_point_geom) AS end_point_geom,\n    path_geom,\n    internal_path_name,\n    internal_path_geom,\n    owner_company_name,\n    owner_office_number,\n    timing_name,\n    timing_start_at,\n    timing_start_at_hijri,\n    timing_end_at,\n    timing_end_at_hijri,\n    plan_type_name,\n    plan_type_code,\n    transport_type_name\n   FROM hajj_count_added h;",
+  "geography_columns": " SELECT current_database() AS f_table_catalog,\n    n.nspname AS f_table_schema,\n    c.relname AS f_table_name,\n    a.attname AS f_geography_column,\n    postgis_typmod_dims(a.atttypmod) AS coord_dimension,\n    postgis_typmod_srid(a.atttypmod) AS srid,\n    postgis_typmod_type(a.atttypmod) AS type\n   FROM pg_class c,\n    pg_attribute a,\n    pg_type t,\n    pg_namespace n\n  WHERE t.typname = 'geography'::name AND a.attisdropped = false AND a.atttypid = t.oid AND a.attrelid = c.oid AND c.relnamespace = n.oid AND (c.relkind = ANY (ARRAY['r'::\"char\", 'v'::\"char\", 'm'::\"char\", 'f'::\"char\", 'p'::\"char\"])) AND NOT pg_is_other_temp_schema(c.relnamespace) AND has_table_privilege(c.oid, 'SELECT'::text);",
+  "geometry_columns": " SELECT current_database()::character varying(256) AS f_table_catalog,\n    n.nspname AS f_table_schema,\n    c.relname AS f_table_name,\n    a.attname AS f_geometry_column,\n    COALESCE(postgis_typmod_dims(a.atttypmod), sn.ndims, 2) AS coord_dimension,\n    COALESCE(NULLIF(postgis_typmod_srid(a.atttypmod), 0), sr.srid, 0) AS srid,\n    replace(replace(COALESCE(NULLIF(upper(postgis_typmod_type(a.atttypmod)), 'GEOMETRY'::text), st.type, 'GEOMETRY'::text), 'ZM'::text, ''::text), 'Z'::text, ''::text)::character varying(30) AS type\n   FROM pg_class c\n     JOIN pg_attribute a ON a.attrelid = c.oid AND NOT a.attisdropped\n     JOIN pg_namespace n ON c.relnamespace = n.oid\n     JOIN pg_type t ON a.atttypid = t.oid\n     LEFT JOIN ( SELECT s.connamespace,\n            s.conrelid,\n            s.conkey,\n            (regexp_match(s.consrc, 'geometrytype\\(\\w+\\)\\s*=\\s*''(\\w+)'''::text, 'i'::text))[1] AS type\n           FROM ( SELECT pg_constraint.connamespace,\n                    pg_constraint.conrelid,\n                    pg_constraint.conkey,\n                    pg_get_constraintdef(pg_constraint.oid) AS consrc\n                   FROM pg_constraint) s\n          WHERE s.consrc ~* 'geometrytype\\(\\w+\\)\\s*=\\s*''\\w+'''::text) st ON st.connamespace = n.oid AND st.conrelid = c.oid AND (a.attnum = ANY (st.conkey))\n     LEFT JOIN ( SELECT s.connamespace,\n            s.conrelid,\n            s.conkey,\n            (regexp_match(s.consrc, 'ndims\\(\\w+\\)\\s*=\\s*(\\d+)'::text, 'i'::text))[1]::integer AS ndims\n           FROM ( SELECT pg_constraint.connamespace,\n                    pg_constraint.conrelid,\n                    pg_constraint.conkey,\n                    pg_get_constraintdef(pg_constraint.oid) AS consrc\n                   FROM pg_constraint) s\n          WHERE s.consrc ~* 'ndims\\(\\w+\\)\\s*=\\s*\\d+'::text) sn ON sn.connamespace = n.oid AND sn.conrelid = c.oid AND (a.attnum = ANY (sn.conkey))\n     LEFT JOIN ( SELECT s.connamespace,\n            s.conrelid,\n            s.conkey,\n            (regexp_match(s.consrc, 'srid\\(\\w+\\)\\s*=\\s*(\\d+)'::text, 'i'::text))[1]::integer AS srid\n           FROM ( SELECT pg_constraint.connamespace,\n                    pg_constraint.conrelid,\n                    pg_constraint.conkey,\n                    pg_get_constraintdef(pg_constraint.oid) AS consrc\n                   FROM pg_constraint) s\n          WHERE s.consrc ~* 'srid\\(\\w+\\)\\s*=\\s*\\d+'::text) sr ON sr.connamespace = n.oid AND sr.conrelid = c.oid AND (a.attnum = ANY (sr.conkey))\n  WHERE (c.relkind = ANY (ARRAY['r'::\"char\", 'v'::\"char\", 'm'::\"char\", 'f'::\"char\", 'p'::\"char\"])) AND NOT c.relname = 'raster_columns'::name AND t.typname = 'geometry'::name AND NOT pg_is_other_temp_schema(c.relnamespace) AND has_table_privilege(c.oid, 'SELECT'::text);",
+  "paths_powerbi": " SELECT id,\n    name,\n    transport_type_id,\n    st_asgeojson(gis) AS gis,\n    created_at,\n    updated_at\n   FROM paths;",
+  "plan_show_view": " SELECT p.id,\n    p.period,\n    p.number_of_buses,\n    p.number_of_haj,\n    p.number_of_late_haj,\n    p.number_of_early_haj,\n    p.plan_type_id,\n    p.transport_type_id,\n    p.entrance_id,\n    p.path_id,\n    p.get_type_parking,\n    p.get_parking_id,\n    p.set_type_parking,\n    p.set_parking_id,\n    p.plan_desire_id,\n    p.transport_company_id,\n    p.start_point_type,\n    p.start_point_id,\n    p.end_point_type,\n    p.end_point_id,\n    p.owner_id,\n    p.creator_id,\n    p.timing_id,\n        CASE\n            WHEN p.path_gis IS NOT NULL THEN st_asgeojson(p.path_gis)::jsonb\n            ELSE NULL::jsonb\n        END AS path_gis,\n    p.created_at,\n    p.updated_at,\n    creator.id AS creator_id_ref,\n    creator.name AS creator_name,\n    creator.email AS creator_email,\n    creator.phone AS creator_phone,\n    creator.is_active AS creator_is_active,\n    creator.type_id AS creator_type_id,\n    creator.company_id AS creator_company_id,\n    creator.service_center_id AS creator_service_center_id,\n    creator.created_by AS creator_created_by,\n    creator.created_at AS creator_created_at,\n    creator.updated_at AS creator_updated_at,\n    owner_sc.id AS owner_service_center_id,\n    owner_sc.center_name AS owner_center_name,\n    owner_sc.office_number AS owner_office_number,\n    owner_sc.company_id AS owner_company_id,\n    owner_sc.created_by AS owner_created_by,\n    owner_sc.created_at AS owner_created_at,\n    owner_sc.updated_at AS owner_updated_at,\n    owner_company.id AS owner_company_ref_id,\n    owner_company.name AS owner_company_name,\n    timing_tbl.id AS timing_ref_id,\n    timing_tbl.plan_type_id AS timing_plan_type_id,\n    timing_tbl.start_at AS timing_start_at,\n    timing_tbl.start_at_hijri AS timing_start_at_hijri,\n    timing_tbl.end_at AS timing_end_at,\n    timing_tbl.end_at_hijri AS timing_end_at_hijri,\n    timing_tbl.period_id AS timing_period_id,\n    timing_tbl.created_at AS timing_created_at,\n    timing_tbl.updated_at AS timing_updated_at,\n    plan_type_tbl.id AS plan_type_ref_id,\n    plan_type_tbl.name AS plan_type_name,\n    plan_type_tbl.code AS plan_type_code,\n    plan_type_tbl.created_at AS plan_type_created_at,\n    plan_type_tbl.updated_at AS plan_type_updated_at,\n    transport_type_tbl.id AS transport_type_ref_id,\n    transport_type_tbl.name AS transport_type_name,\n    transport_type_tbl.created_at AS transport_type_created_at,\n    transport_type_tbl.updated_at AS transport_type_updated_at,\n    entrance_tbl.id AS entrance_ref_id,\n    entrance_tbl.name AS entrance_name,\n    entrance_tbl.shape_area AS entrance_shape_area,\n    entrance_tbl.shape_length AS entrance_shape_length,\n    entrance_tbl.gis_data_type AS entrance_gis_data_type,\n        CASE\n            WHEN entrance_tbl.gis IS NOT NULL THEN st_asgeojson(entrance_tbl.gis)::jsonb\n            ELSE NULL::jsonb\n        END AS entrance_gis,\n    entrance_tbl.longitude AS entrance_longitude,\n    entrance_tbl.latitude AS entrance_latitude,\n    entrance_tbl.asm_code AS entrance_asm_code,\n    entrance_tbl.created_at AS entrance_created_at,\n    entrance_tbl.updated_at AS entrance_updated_at,\n    path_tbl.id AS path_ref_id,\n    path_tbl.name AS path_name,\n    path_tbl.objectid AS path_objectid,\n        CASE\n            WHEN path_tbl.gis IS NOT NULL THEN st_asgeojson(path_tbl.gis)::jsonb\n            ELSE NULL::jsonb\n        END AS path_relation_gis,\n    path_tbl.created_at AS path_created_at,\n    path_tbl.updated_at AS path_updated_at,\n    plan_desire_tbl.id AS plan_desire_ref_id,\n    plan_desire_tbl.name AS plan_desire_name,\n    plan_desire_tbl.created_at AS plan_desire_created_at,\n    plan_desire_tbl.updated_at AS plan_desire_updated_at,\n    p.number_of_trips\n   FROM plans p\n     LEFT JOIN users creator ON creator.id = p.creator_id\n     LEFT JOIN service_centers owner_sc ON owner_sc.id = p.owner_id\n     LEFT JOIN service_companies owner_company ON owner_company.id = owner_sc.company_id\n     LEFT JOIN timing timing_tbl ON timing_tbl.id = p.timing_id\n     LEFT JOIN plan_types plan_type_tbl ON plan_type_tbl.id = p.plan_type_id\n     LEFT JOIN transport_types transport_type_tbl ON transport_type_tbl.id = p.transport_type_id\n     LEFT JOIN entrances entrance_tbl ON entrance_tbl.id = p.entrance_id\n     LEFT JOIN paths path_tbl ON path_tbl.id = p.path_id\n     LEFT JOIN plan_desires plan_desire_tbl ON plan_desire_tbl.id = p.plan_desire_id;",
+  "simulation_data_view": " WITH routing_points AS (\n         SELECT r.id,\n            st_transform(st_buffer(st_transform(st_setsrid(st_makepoint(r.longitude, r.latitude), 4326), 32637), 30::double precision), 4326) AS geom,\n            r.name,\n            'residence'::text AS source,\n            r.area AS district\n           FROM residences r\n        UNION ALL\n         SELECT bs.id,\n            bs.gis AS geom,\n            bs.name,\n            'bus_stop'::text AS source,\n            NULL::character varying AS district\n           FROM bus_stops bs\n        UNION ALL\n         SELECT doa.id,\n            doa.gis AS geom,\n            doa.name,\n            'dropoff'::text AS source,\n            NULL::character varying AS district\n           FROM drop_off_areas doa\n        UNION ALL\n         SELECT c.id,\n            c.gis AS geom,\n            c.name,\n            'camp'::text AS source,\n            NULL::character varying AS district\n           FROM camps c\n        ), parking AS (\n         SELECT bw.id,\n            bw.name,\n            bw.gis AS geom\n           FROM bus_warehouses bw\n        UNION ALL\n         SELECT p.id,\n            p.name,\n            p.gis AS geom\n           FROM public.parking p\n        ), plan AS (\n         SELECT psv.id AS plan_id,\n            c.name AS camp_label,\n            ad.haj_count AS allocated_haj,\n            psv.number_of_buses,\n            psv.number_of_haj,\n            psv.number_of_late_haj,\n            psv.number_of_early_haj,\n            psv.get_type_parking,\n            getp.name AS get_parking_name,\n            getp.geom AS get_parking_geom,\n            psv.set_type_parking,\n            setp.name AS set_parking_name,\n            setp.geom AS set_parking_geom,\n            sp.name AS start_point_name,\n            psv.start_point_type,\n            st_startpoint(st_geomfromgeojson(psv.path_gis::text)) AS start_point_geom,\n            sp.geom AS start_geom,\n            sp.district AS start_point_district,\n            ep.name AS end_point_name,\n            psv.end_point_type,\n            st_endpoint(st_geomfromgeojson(psv.path_gis::text)) AS end_point_geom,\n            ep.geom AS end_geom,\n            psv.owner_id,\n            st_geomfromgeojson(psv.path_gis::text) AS path_geom,\n            psv.owner_office_number,\n            psv.owner_company_name,\n            p.name AS period,\n            psv.timing_start_at,\n            psv.timing_start_at_hijri,\n            psv.timing_end_at,\n            psv.timing_end_at_hijri,\n            psv.plan_type_name,\n            psv.plan_type_code,\n            psv.transport_type_name,\n            psv.entrance_name,\n            st_geometryn(st_geomfromgeojson(psv.entrance_gis::text), 1) AS entrance_polygon,\n            st_setsrid(st_makepoint(psv.entrance_longitude, psv.entrance_latitude), 4326) AS entrance_point_geom,\n            psv.entrance_asm_code,\n            psv.path_name,\n            st_geomfromgeojson(psv.path_relation_gis::text) AS internal_path,\n            psv.updated_at,\n            psv.created_at\n           FROM plan_show_view psv\n             LEFT JOIN routing_points sp ON psv.start_point_id = sp.id\n             LEFT JOIN routing_points ep ON psv.end_point_id = ep.id\n             LEFT JOIN parking getp ON psv.get_parking_id = getp.id\n             LEFT JOIN parking setp ON psv.set_parking_id = setp.id\n             LEFT JOIN assign_camps ad ON psv.owner_service_center_id = ad.service_center_id\n             LEFT JOIN camps c ON ad.camp_id = c.id\n             LEFT JOIN periods p ON psv.timing_period_id = p.id\n        )\n SELECT DISTINCT ON (plan_id, camp_label) plan_id,\n    camp_label,\n    allocated_haj,\n    number_of_buses,\n    number_of_haj,\n    number_of_late_haj,\n    number_of_early_haj,\n    get_type_parking,\n    get_parking_name,\n    get_parking_geom,\n    set_type_parking,\n    set_parking_name,\n    set_parking_geom,\n    start_point_name,\n    start_point_type,\n    start_point_geom,\n    start_geom,\n    start_point_district,\n    end_point_name,\n    end_point_type,\n    end_point_geom,\n    end_geom,\n    owner_id,\n    path_geom,\n    owner_office_number,\n    owner_company_name,\n    period,\n    timing_start_at,\n    timing_start_at_hijri,\n    timing_end_at,\n    timing_end_at_hijri,\n    plan_type_name,\n    plan_type_code,\n    transport_type_name,\n    entrance_name,\n    entrance_polygon,\n    entrance_point_geom,\n    entrance_asm_code,\n    path_name,\n    internal_path,\n    updated_at,\n    created_at\n   FROM plan\n  ORDER BY plan_id, camp_label, updated_at DESC;"
+ }
+}

@@ -75,16 +75,17 @@ WITH routing_points AS (
     SELECT DISTINCT ON (ac.service_center_id)
            ac.service_center_id, ac.id, ac.haj_count, ac.tarwia, ac.direct_taseed,
            r.license_number
-    FROM assign_camps ac
+    FROM assign_residences ac
     LEFT JOIN residences r ON ac.residence_id = r.id
     ORDER BY ac.service_center_id, ac.id
 ), plan AS (
     SELECT psv.id AS plan_id,
         ad.id AS camp_assign_id,
         ra.id AS residence_assign_id,
-        c.name AS camp_label,
+        ad.camp_label AS camp_label,
         ad.haj_count AS allocated_haj,
         psv.number_of_buses, psv.number_of_haj, psv.number_of_late_haj, psv.number_of_early_haj,
+        psv.number_of_trips,
         ra.license_number,
         ra.haj_count AS residence_haj, ra.tarwia, ra.direct_taseed,
         psv.get_type_parking, getp.name AS get_parking_name, ST_AsText(getp.geom) AS get_parking_geom,
@@ -104,21 +105,57 @@ WITH routing_points AS (
         psv.owner_company_name, psv.owner_office_number, p.name AS period,
         psv.timing_start_at, psv.timing_start_at_hijri, psv.timing_end_at, psv.timing_end_at_hijri,
         psv.plan_type_name, psv.plan_type_code, psv.transport_type_name,
+        tc.transport_company_name, tc.transport_company_count, tc.transport_bus_count, tc.transport_companies,
         psv.updated_at
     FROM plan_show_view psv
     LEFT JOIN routing_points sp ON psv.start_point_id = sp.id
     LEFT JOIN routing_points ep ON psv.end_point_id = ep.id
     LEFT JOIN parking getp ON psv.get_parking_id = getp.id
     LEFT JOIN parking setp ON psv.set_parking_id = setp.id
-    LEFT JOIN assign_data ad ON psv.owner_service_center_id = ad.service_center_id
-    LEFT JOIN camps c ON ad.camp_id = c.id
+    -- One allocation row per plan, preferring the assignment whose camp matches
+    -- the plan's own camp (its end point, or its start point for outbound-from-camp
+    -- phases). Without this, a centre with several assigned camps fanned every
+    -- plan out to one row per camp, duplicating plans in the dashboard.
+    LEFT JOIN LATERAL (
+        SELECT a.id, a.haj_count, adc.name AS camp_label
+        FROM assign_camps a
+        JOIN camps adc ON a.camp_id = adc.id
+        WHERE a.service_center_id = psv.owner_service_center_id
+        ORDER BY (adc.name = COALESCE(
+                     CASE WHEN ep.source = 'camp' THEN ep.name END,
+                     CASE WHEN sp.source = 'camp' THEN sp.name END)) DESC NULLS LAST,
+                 a.id
+        LIMIT 1
+    ) ad ON TRUE
     LEFT JOIN residence_assign ra ON psv.owner_service_center_id = ra.service_center_id
     LEFT JOIN periods p ON psv.timing_period_id = p.id
+    -- The centre's bus roster (mashaers_trips: one row per dispatched bus) summed
+    -- per transport company. A plan is not tied to a specific bus, so it shows
+    -- the centre's supplier mix: the lead company (most buses, preferring this
+    -- plan's transport type), how many companies, total buses, and the list
+    -- with each company's bus count.
+    LEFT JOIN LATERAL (
+        SELECT
+            (array_agg(s.name ORDER BY s.matches_type DESC, s.buses DESC, s.name))[1] AS transport_company_name,
+            count(*) AS transport_company_count,
+            sum(s.buses) AS transport_bus_count,
+            string_agg(s.name || ' (' || s.buses || ')', '، ' ORDER BY s.matches_type DESC, s.buses DESC, s.name)
+                AS transport_companies
+        FROM (
+            SELECT mt.transport_company_name_ar AS name,
+                   count(*) AS buses,
+                   bool_or(mt.transport_type_id = psv.transport_type_id) AS matches_type
+            FROM mashaers_trips mt
+            WHERE mt.service_center_id = psv.owner_service_center_id
+              AND mt.transport_company_name_ar IS NOT NULL
+            GROUP BY mt.transport_company_name_ar
+        ) s
+    ) tc ON TRUE
     WHERE ${where}
 )
 SELECT DISTINCT ON (plan_id, camp_label)
     plan_id, camp_assign_id, residence_assign_id, camp_label, allocated_haj,
-    number_of_buses, number_of_haj, number_of_late_haj, number_of_early_haj,
+    number_of_buses, number_of_haj, number_of_late_haj, number_of_early_haj, number_of_trips,
     license_number, residence_haj, tarwia, direct_taseed,
     get_type_parking, get_parking_name, get_parking_geom,
     set_type_parking, set_parking_name, set_parking_geom,
@@ -128,7 +165,8 @@ SELECT DISTINCT ON (plan_id, camp_label)
     path_geom, path_name, internal_path,
     owner_company_name, owner_office_number, period,
     timing_start_at, timing_start_at_hijri, timing_end_at, timing_end_at_hijri,
-    plan_type_name, plan_type_code, transport_type_name
+    plan_type_name, plan_type_code, transport_type_name,
+    transport_company_name, transport_company_count, transport_bus_count, transport_companies
 FROM plan
 ORDER BY plan_id, camp_label, updated_at DESC`;
 
@@ -142,10 +180,10 @@ SELECT c.name        AS camp_label,
        tt.name       AS "transport_mode ",
        pl.name       AS platform_name,
        ad.haj_count  AS number_of_piligrim
-FROM assign_data ad
+FROM assign_camps ad
 LEFT JOIN camps c            ON ad.camp_id = c.id
 LEFT JOIN service_centers sc ON ad.service_center_id = sc.id
-LEFT JOIN companies comp     ON sc.company_id = comp.id
+LEFT JOIN service_companies comp ON sc.company_id = comp.id
 LEFT JOIN countries co       ON ad.country_id = co.id
 LEFT JOIN transport_types tt ON ad.transport_type_id = tt.id
 LEFT JOIN platforms pl       ON c.platform_id = pl.id
@@ -161,10 +199,10 @@ SELECT r.license_number  AS "License Number",
        sc.office_number  AS "Service_center_number",
        ac.tarwia         AS "Tarwiyah_count",
        ac.direct_taseed  AS "Taseed_count"
-FROM assign_camps ac
+FROM assign_residences ac
 LEFT JOIN residences r       ON ac.residence_id = r.id
 LEFT JOIN service_centers sc ON ac.service_center_id = sc.id
-LEFT JOIN companies comp     ON sc.company_id = comp.id
+LEFT JOIN service_companies comp ON sc.company_id = comp.id
 WHERE ${where}
 ORDER BY r.license_number`;
 
@@ -202,7 +240,7 @@ ORDER BY n.name`;
 
 // A camp belongs to a scope if it is assigned to one of that scope's centres.
 const campScopeExists = (inner) => `EXISTS (
-    SELECT 1 FROM assign_data ad
+    SELECT 1 FROM assign_camps ad
     JOIN service_centers sc ON ad.service_center_id = sc.id
     WHERE ad.camp_id = n.id AND ${inner}
 )`;

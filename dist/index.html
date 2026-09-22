@@ -11,7 +11,7 @@
     <!-- FontAwesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Custom CSS -->
-  <link rel="stylesheet" crossorigin href="/maan-dashboard/assets/index-Di8DTWtY.css">
+  <link rel="stylesheet" crossorigin href="/maan-dashboard/assets/index-CX7O0pIo.css">
 </head>
 <body class="dark-mode auth-required">
 
@@ -75,6 +75,9 @@
                 </div>
             </div>
 
+            <!-- Edit mode: replaces the filters + recent plans with the data nav -->
+            <nav class="entity-nav" id="entityNav" aria-label="البيانات المرجعية" hidden></nav>
+
             <div class="plan-list-section">
                 <h3><i class="fa-solid fa-clock-rotate-left"></i> الخطط الأخيرة</h3>
                 <div class="plan-list" id="planList">
@@ -100,8 +103,20 @@
                         <i class="fa-solid fa-magnifying-glass search-icon"></i>
                         <input type="text" placeholder="البحث في الخطط...">
                     </div>
+                    <!-- One control, two modes: the label and knob show which
+                         mode is on, the tooltip says what a click switches to. -->
+                    <button class="mode-toggle" id="modeToggle" type="button" role="switch" aria-checked="false" hidden>
+                        <span class="mode-toggle-track">
+                            <span class="mode-toggle-knob"><i class="fa-solid fa-chart-line" id="modeToggleIcon" aria-hidden="true"></i></span>
+                        </span>
+                        <span class="mode-toggle-label" id="modeToggleLabel">عرض</span>
+                    </button>
                     <button id="themeToggleBtn" class="theme-toggle-btn" type="button" aria-label="تبديل الوضع الداكن">
                         <i class="fa-solid fa-moon"></i>
+                    </button>
+                    <button id="planImportBtn" class="plan-import-btn" type="button" title="إنشاء خطة" aria-label="إنشاء خطة" hidden>
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span>إنشاء خطة</span>
                     </button>
                 </div>
                 <div class="header-logos">
@@ -135,6 +150,7 @@
                 </section>
 
             <!-- KPIs -->
+            <!-- View mode only: edit mode gives the whole row to the workspace -->
             <div class="metrics-row">
                 <div class="kpi-cards">
                     <div class="kpi-card glass">
@@ -190,11 +206,47 @@
             </div>
 
 
+                <!-- Edit mode: records beside the map, selecting one opens its form -->
+                <section class="entity-workspace" id="entityWorkspace" hidden>
+                    <div class="entity-records glass">
+                        <div class="entity-records-head">
+                            <h3 id="entityTitle">البيانات</h3>
+                            <!-- Map shows the records as geometry; grid shows the
+                                 same rows as a sortable, filterable table. -->
+                            <div class="entity-view-switch" id="entityViewSwitch" role="group" aria-label="طريقة العرض">
+                                <button type="button" class="entity-view-btn is-active" data-view="map" aria-pressed="true" title="عرض السجلات على الخريطة">
+                                    <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i><span>خريطة</span>
+                                </button>
+                                <button type="button" class="entity-view-btn" data-view="grid" aria-pressed="false" title="عرض السجلات كجدول قابل للفرز والتصفية">
+                                    <i class="fa-solid fa-table-cells" aria-hidden="true"></i><span>جدول</span>
+                                </button>
+                            </div>
+                            <button class="entity-create-btn" id="entityCreateBtn" type="button">
+                                <i class="fa-solid fa-plus" aria-hidden="true"></i><span>إضافة</span>
+                            </button>
+                        </div>
+                        <div class="entity-search">
+                            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                            <input type="search" id="entitySearch" placeholder="بحث…" autocomplete="off" aria-label="بحث في السجلات">
+                        </div>
+                        <div class="entity-list" id="entityList"></div>
+                        <div class="entity-list-foot" id="entityListFoot"></div>
+                        <!-- Grid view: the same rows as a table (CSS decides which of
+                             the two is on, keyed off body[data-entity-view]) -->
+                        <div class="entity-grid" id="entityGrid"></div>
+                        <div class="entity-grid-foot" id="entityGridFoot"></div>
+                    </div>
+                    <div class="entity-detail glass" id="entityDetail"></div>
+                </section>
+
                 <!-- Map -->
                 <div class="card glass map-container-card">
                     <div id="mapStatus" class="map-status" hidden></div>
                     <div id="mapSelectionTitle" class="map-selection-title" hidden></div>
                     <div id="map"></div>
+
+                    <!-- Edit mode: what the colours and icons on the map mean -->
+                    <div class="map-legend glass" id="mapLegend" hidden></div>
 
                     <!-- Floating District Chart Overlay - Top Right -->
                     <div class="map-overlay-card glass">
@@ -258,6 +310,111 @@
                 </div>
             </div><!-- /.main-body -->
         </main>
+    </div>
+
+    <!-- Plan import modal -->
+    <div id="planImportModal" class="plan-modal-overlay" hidden>
+        <div class="plan-modal glass" role="dialog" aria-modal="true" aria-labelledby="planModalTitle">
+            <div class="plan-modal-header">
+                <h2 id="planModalTitle"><i class="fa-solid fa-wand-magic-sparkles"></i> إنشاء خطة من الملفات</h2>
+                <button id="planModalClose" class="plan-modal-close" type="button" aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <p class="plan-modal-intro">
+                ارفع ملفات مركز الخدمة، ثم حلّل قبل الإنشاء. لا يُكتب أي شيء في قاعدة البيانات
+                حتى تضغط «اعتماد وإنشاء الخطط».
+            </p>
+
+            <!-- Three steps: choose files, review the analysis, then commit -->
+            <ol class="plan-steps" id="planSteps">
+                <li class="plan-step is-active" data-step="files">
+                    <span class="plan-step-num">1</span>
+                    <span class="plan-step-text"><b>الملفات</b><em>اختر ملفات CSV</em></span>
+                </li>
+                <li class="plan-step" data-step="analyze">
+                    <span class="plan-step-num">2</span>
+                    <span class="plan-step-text"><b>التحليل</b><em>مراجعة الملخص</em></span>
+                </li>
+                <li class="plan-step" data-step="commit">
+                    <span class="plan-step-num">3</span>
+                    <span class="plan-step-text"><b>الإنشاء</b><em>كتابة الخطط</em></span>
+                </li>
+            </ol>
+
+            <div class="plan-modal-body">
+                <label class="plan-file-card" for="fileAssignCampUsers">
+                    <span class="plan-file-icon"><i class="fa-solid fa-tent" aria-hidden="true"></i></span>
+                    <span class="plan-file-main">
+                        <span class="plan-file-head">
+                            <b>تعيين الحجاج للمخيمات</b>
+                            <code>assign_camp_users</code>
+                            <span class="plan-file-req">مطلوب</span>
+                        </span>
+                        <span class="plan-file-hint">عدد الحجاج لكل مخيم وجنسية ونوع الحاج — الأعمدة: camp_label، nationality، piligrim_type، number_of_piligrim</span>
+                        <span class="plan-file-state" data-for="fileAssignCampUsers">لم يُختر ملف</span>
+                    </span>
+                    <input type="file" id="fileAssignCampUsers" accept=".csv,text/csv">
+                    <span class="plan-file-pick"><i class="fa-solid fa-folder-open" aria-hidden="true"></i> اختيار</span>
+                </label>
+
+                <label class="plan-file-card" for="fileAssignResidences">
+                    <span class="plan-file-icon"><i class="fa-solid fa-house" aria-hidden="true"></i></span>
+                    <span class="plan-file-main">
+                        <span class="plan-file-head">
+                            <b>تعيين المساكن</b>
+                            <code>assign_residences</code>
+                            <span class="plan-file-req">مطلوب</span>
+                        </span>
+                        <span class="plan-file-hint">المساكن وتوزيع حجّاجها على التروية والتصعيد المباشر — الأعمدة: License Number، Pilgrims_count، Tarwiyah_count، Taseed_count</span>
+                        <span class="plan-file-state" data-for="fileAssignResidences">لم يُختر ملف</span>
+                    </span>
+                    <input type="file" id="fileAssignResidences" accept=".csv,text/csv">
+                    <span class="plan-file-pick"><i class="fa-solid fa-folder-open" aria-hidden="true"></i> اختيار</span>
+                </label>
+
+                <label class="plan-file-card" for="filePeriodPreferences">
+                    <span class="plan-file-icon"><i class="fa-solid fa-clock" aria-hidden="true"></i></span>
+                    <span class="plan-file-main">
+                        <span class="plan-file-head">
+                            <b>تفضيلات الفترات</b>
+                            <code>PeriodPreferences</code>
+                            <span class="plan-file-req">مطلوب</span>
+                        </span>
+                        <span class="plan-file-hint">المخيم المستهدف وتوزيع الفترات الذي يحدد الخطط — الأعمدة: camp_label، MAKMINT1..3، MAKARFT1..3، MAKMIN Count، MAKARF Count</span>
+                        <span class="plan-file-state" data-for="filePeriodPreferences">لم يُختر ملف</span>
+                    </span>
+                    <input type="file" id="filePeriodPreferences" accept=".csv,text/csv">
+                    <span class="plan-file-pick"><i class="fa-solid fa-folder-open" aria-hidden="true"></i> اختيار</span>
+                </label>
+
+                <label class="plan-file-card" for="fileMashaersTrips">
+                    <span class="plan-file-icon"><i class="fa-solid fa-bus" aria-hidden="true"></i></span>
+                    <span class="plan-file-main">
+                        <span class="plan-file-head">
+                            <b>رحلات المشاعر</b>
+                            <code>mashaers_trips</code>
+                            <span class="plan-file-opt">مستحسن</span>
+                        </span>
+                        <span class="plan-file-hint">الحافلات المُخصّصة للمركز وشركة النقل لكل حافلة؛ منها يُحدَّد نمط النقل وعدد الرحلات — الأعمدة: bus_id، transport_type، tc_name_ar</span>
+                        <span class="plan-file-state" data-for="fileMashaersTrips">لم يُختر ملف</span>
+                    </span>
+                    <input type="file" id="fileMashaersTrips" accept=".csv,text/csv">
+                    <span class="plan-file-pick"><i class="fa-solid fa-folder-open" aria-hidden="true"></i> اختيار</span>
+                </label>
+
+                <p class="plan-modal-note">
+                    <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                    تُنشئ العملية خطط <b>التروية</b> و<b>التصعيد المباشر</b> و<b>تصعيد التروية</b> و<b>الإفاضة</b>،
+                    وتستبدل خطط المركز السابقة من هذه الأنواع. خطط <b>النفرة</b> والخطط المُدخلة يدوياً لا تُحذف.
+                </p>
+            </div>
+
+            <div id="planImportMessage" class="plan-modal-message" hidden></div>
+            <div id="planImportSummary" class="plan-modal-summary" hidden></div>
+            <div class="plan-modal-footer">
+                <button id="planAnalyzeBtn" class="plan-btn plan-btn-secondary" type="button">تحليل الملفات</button>
+                <button id="planCommitBtn" class="plan-btn plan-btn-primary" type="button" hidden>اعتماد وإنشاء الخطط</button>
+            </div>
+        </div>
     </div>
 
     <!-- Scripts -->
