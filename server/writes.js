@@ -233,10 +233,13 @@ Object.assign(RESOURCES, {
         geom: 'gis',
         anchor: { lon: centroid('X'), lat: centroid('Y') },
         readOnly: ['objectid'],
+        // transport_type_id is deliberately not editable here: it is NULL on all
+        // 4,974 rows and nothing reads it. A path is a drawn line shared by up to
+        // three camps, and the plans that run over it carry their own transport
+        // type — so a single type on the path could only ever contradict them.
         columns: {
             name: { validate: requiredText(200), label: 'الاسم', type: 'text', required: true },
             code: { validate: text(120), label: 'الرمز', type: 'text' },
-            transport_type_id: { validate: uuid, label: 'نمط النقل', type: 'select', options: 'transport_types', check: fk('transport_types') },
         },
     }),
     entrances: referenceResource({
