@@ -450,12 +450,25 @@ function buildModel(prep, entranceLimit) {
     console.log(`residence limit ${args['residence-max']} per slot; raised to the even-spread need in ${raised} of ${residenceTerms.size} residence-slots`);
 
     // Entrance arrivals per slot, softened so a tight entrance never makes the
-    // model infeasible; each bus over the limit costs 10 hours.
+    // model infeasible. The cost per bus over the limit rises with each tier of
+    // overflow, up to 8× the limit: with a flat price (or tiers that stop short
+    // of the real overflow — some entrances get several times their capacity),
+    // an entrance already over its limit cost the same however its overflow was
+    // bunched, and the solver piled it into a few slots. The steps are gentle on
+    // purpose: doubling prices up to 38,400 bus-min left the solver without a
+    // first solution in 5 minutes; only the rise matters, not its steepness.
     let sCount = 0;
+    const OVERFLOW = [                                             // [share of limit, bus-min per bus]
+        [0.25, 600], [0.25, 800], [0.5, 1000], [1, 1200], [2, 1400], [4, 1600], [null, 1800],
+    ];
     for (const [, { limit, vars }] of entranceTerms) {
-        const s = `s${sCount++}`;
-        obj.push(`600 ${s}`);
-        cons.push(`ent_${cons.length}: ${vars.join(' + ')} - ${s} <= ${limit}`);
+        const parts = OVERFLOW.map(([share, cost]) => {
+            const sv = `s${sCount++}`;
+            obj.push(`${cost} ${sv}`);
+            if (share !== null) bounds.push(`0 <= ${sv} <= ${(share * limit).toFixed(3)}`);
+            return sv;
+        });
+        cons.push(`ent_${cons.length}: ${vars.join(' + ')} - ${parts.join(' - ')} <= ${limit}`);
     }
 
     // LP files are line based; long sums are wrapped rather than written as one line.
@@ -616,8 +629,10 @@ async function main() {
     const solveSeconds = (Date.now() - solveStart) / 1000;
     console.log(`solver (${result.engine}): ${result.status} in ${solveSeconds.toFixed(0)} s, ` +
                 `objective ${Math.round(result.objective)} bus-min, gap ${result.gap ?? '?'}`);
-    if (!result.values || !['Optimal', 'Time limit reached', 'Solution limit reached'].includes(result.status)) {
-        throw new Error(`No usable solution: ${result.status}`);
+    // "Time limit reached" is only usable if the solver found a solution by then.
+    if (!result.values || !result.values.size || !Number.isFinite(result.objective)
+        || !['Optimal', 'Time limit reached', 'Solution limit reached'].includes(result.status)) {
+        throw new Error(`No usable solution (${result.status}, objective ${result.objective}); nothing saved`);
     }
     const optimized = roundDispatch(model.xVars, result.values);
     const optimizedKpis = evaluate(optimized, prep);
@@ -644,7 +659,8 @@ async function main() {
             INSERT INTO routing.optimization_run (generation_run_id, params, solver_status, mip_gap, solve_seconds,
                                                   baseline_kpis, optimized_kpis, finished_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, clock_timestamp()) RETURNING id`,
-            [inputs.generationRunId, args, result.Status, result.Info?.mip_gap ?? null, solveSeconds,
+            [inputs.generationRunId, args, result.status,
+             result.gap && result.gap.endsWith('%') ? Number(result.gap.slice(0, -1)) / 100 : null, solveSeconds,
              baselineKpis, optimizedKpis]);
         for (const [scenario, list] of [['baseline', baseline], ['optimized', optimized]]) {
             const rows = list.map(a => ({ ...a, ...slotLabel(a.slot) }));

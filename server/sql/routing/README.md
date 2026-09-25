@@ -16,6 +16,9 @@ databases, so no cross-database link (postgres_fdw/dblink) is needed.
 | `scripts/optimize-routes.js` | both | ro_user reads, PGW_USER writes | route + departure slots per plan (MILP, HiGHS) |
 | `05_edge_flow.sql` | your_db | postgres | distinct 1446 buses per edge, direction and slot (`routing.edge_flow`, ~8 min, run on the VM) |
 | `scripts/calibrate-congestion.js` | your_db | ro_user | fits the BPR congestion curve to 1446 speeds vs bus flow |
+| `06_entrance_flow.sql` | your_db | postgres | buses entering each entrance per 15-min slot in 1446 (`routing.entrance_entry`, `entrance_flow_slot`; run on the VM) |
+| `scripts/estimate-entrance-capacity.js` | both | PGW_USER | `--step prepare` writes entrance zones to your_db; `--step estimate` writes `transport.routing.entrance_capacity_estimate` for review (never `entrances.capacity`) |
+| `scripts/h3-cluster-analysis.js` | both | ro_user | read-only: how residences group into H3 cells and what a cell-level route would cost (needs the `h3` extension in transport) |
 
 ```sh
 psql -h 127.0.0.1 -p 5431 -U postgres -d your_db   -f sql/routing/01_network.sql
