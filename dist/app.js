@@ -4142,7 +4142,23 @@ const NUMERIC_COLUMNS = new Set([
     'owner_office_number'
 ]);
 
+// Everything derived from the plans is cached under a key made of the row count
+// and the first and last plan id, which an edit does not change. A reload must
+// drop it all, or the map, heatmap, charts and camera counts keep drawing the
+// plans as they were before the edit.
+function invalidateDerivedCaches() {
+    cachedDashboardRenderKey = null;
+    cachedMapRenderKey = null;
+    cachedDashboardStats = null;
+    cachedDashboardStatsKey = null;
+    cachedFilteredGeometries = null;
+    cachedFilteredGeometriesKey = null;
+    cameraCacheKey = null;
+    cameraPlanCache = new Map();
+}
+
 function applyPlansRows(rows, source = '') {
+    invalidateDerivedCaches();
     rawData = normalizePlanRows(rows);
     buildDerivedDataSources(rawData);
     planTypeBaseData = [...rawData];
@@ -5692,6 +5708,17 @@ function setupEventListeners() {
         optimizationBtn.style.opacity = '0.4';
         optimizationBtn.addEventListener('click', toggleOptimizationView);
         toolbarAnchor.parentNode.insertBefore(optimizationBtn, heatmapBtn);
+
+        const reloadBtn = document.createElement('button');
+        reloadBtn.id = 'reloadDataBtn';
+        reloadBtn.className = 'theme-toggle-btn dashboard-tool';
+        reloadBtn.type = 'button';
+        reloadBtn.title = 'تحديث البيانات من قاعدة البيانات';
+        reloadBtn.setAttribute('aria-label', 'تحديث البيانات');
+        reloadBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i>';
+        reloadBtn.style.marginRight = '4px';
+        reloadBtn.addEventListener('click', reloadDashboardData);
+        toolbarAnchor.parentNode.insertBefore(reloadBtn, optimizationBtn);
 
         console.log('Cameras toggle button added');
     } else {
@@ -7275,6 +7302,34 @@ function renderPlanHeatLegend(cap) {
     });
 }
 
+// Picks up changes made outside this browser: another planner's edits, an
+// import, or a script such as the optimizer. Admins first clear the server's
+// dataset cache so even direct database changes show at once; for others the
+// server cache expires within DATA_CACHE_TTL (5 min), and edits made through
+// the app clear it anyway.
+async function reloadDashboardData() {
+    const btn = document.getElementById('reloadDataBtn');
+    const icon = btn?.querySelector('i');
+    if (btn?.disabled) return;
+    if (btn) btn.disabled = true;
+    icon?.classList.add('fa-spin');
+    try {
+        if (dbPermissions.isAdmin) {
+            await fetch('/maan-dashboard/api/db-refresh', { method: 'POST', headers: authHeaders() }).catch(() => {});
+        }
+        if (!await loadDatasetsFromDatabase()) return;
+        loadData();
+        if (optView.active) {
+            // A new optimization run may have been saved; keep the one on screen.
+            optView.runs = await optFetch('/maan-dashboard/api/routing/runs').catch(() => optView.runs);
+            if (optView.runId) await selectOptimizationRun(optView.runId);
+        }
+    } finally {
+        icon?.classList.remove('fa-spin');
+        if (btn) btn.disabled = false;
+    }
+}
+
 function togglePlanHeatmap() {
     showPlanHeatmap = !showPlanHeatmap;
     const btn = document.getElementById('heatmapToggleBtn');
@@ -7305,7 +7360,7 @@ const OPT_SCENARIOS = [
 ];
 // Fuchsia for changed routes: orange is taken by the Arafat path overlay and
 // red by the heatmap.
-const OPT_COLORS = { baseline: '#64748b', changed: '#d946ef', same: '#10b981' };
+const OPT_COLORS = { baseline: '#64748b', changed: '#d946ef', same: '#10b981', current: '#fbbf24' };
 const optCandidateCellCache = new Map(); // candidateId → { base, exit }
 
 async function optFetch(url) {
@@ -7514,6 +7569,24 @@ function renderOptimizationRoutes() {
         });
         bounds.extend(layer.getBounds());
     });
+    // The plan's own stored path (rank 0, from the OSM route generator, no
+    // traffic), for the plan the detail section describes: for comparison only.
+    const currentId = detailPlanId && plans[detailPlanId].current;
+    const currentLatLngs = currentId ? optLatLngs(candidates[currentId]?.geometry) : [];
+    if (currentLatLngs.length) {
+        const layer = L.polyline(currentLatLngs, {
+            renderer: getOverviewRenderer(),
+            color: OPT_COLORS.current,
+            weight: 3.5,
+            opacity: 0.95,
+            dashArray: '2 7',
+            lineCap: 'round',
+        }).addTo(routeLayerGroup);
+        layer.bindTooltip(
+            `المسار الحالي في الخطة<br>مولّد من OSM بدون حركة المرور · ${(candidates[currentId].length_m / 1000).toFixed(1)} كم`,
+            { sticky: true, direction: 'top' });
+        bounds.extend(layer.getBounds());
+    }
     if (bounds.isValid() && (selectedPlanId || hasActiveMapFilter())) fitMapToGeometry(bounds);
 }
 
@@ -7568,13 +7641,12 @@ function optPlanDetail() {
             <tbody>
                 <tr><th>خط الأساس</th>${cell(plan.baseline)}</tr>
                 <tr><th>المحسّن</th>${cell(plan.optimized)}</tr>
+                ${plan.current && optView.data.candidates[plan.current] ? `
+                <tr><th>الحالي (OSM)</th><td>0</td>
+                    <td>${(optView.data.candidates[plan.current].length_m / 1000).toFixed(1)}</td><td>—</td></tr>` : ''}
             </tbody>
         </table>
         <div class="map-legend-hint">${changed ? 'غيّر التحسين مسار هذه الخطة وتوقيت انطلاقها.' : 'المسار نفسه؛ غيّر التحسين توقيت الانطلاق فقط.'}</div>
-        <div class="opt-departures">
-            <div><span>انطلاق خط الأساس</span>${escapeHtml(optDepartureText(plan.baseline))}</div>
-            <div><span>انطلاق المحسّن</span>${escapeHtml(optDepartureText(plan.optimized))}</div>
-        </div>
         <div class="opt-chart"><canvas id="optScheduleChart" aria-label="جدول انطلاق الحافلات"></canvas></div>`;
 }
 
@@ -7654,6 +7726,7 @@ function renderOptimizationPanel() {
                 <span><i style="background:${OPT_COLORS.same}"></i>المسار نفسه</span>
                 <span><i style="background:${OPT_COLORS.changed}"></i>مسار جديد</span>
                 <span><i class="opt-dash" style="border-color:${OPT_COLORS.baseline}"></i>خط الأساس</span>
+                <span><i class="opt-dot" style="border-color:${OPT_COLORS.current}"></i>المسار الحالي (OSM، للخطة المختارة)</span>
                 ${optView.hour !== 'all' ? `<span><i class="opt-dot" style="border-color:${OPT_COLORS.same}"></i>لا انطلاق في هذه الساعة</span>` : ''}
             </div>
             <div class="map-legend-sub opt-count">${inView.length.toLocaleString()} خطة معروضة · ${changed.toLocaleString()} تغيّر مسارها</div>

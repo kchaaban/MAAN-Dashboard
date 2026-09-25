@@ -6031,23 +6031,6 @@ body.opt-view-on .map-overlay-card { display: none; }
 
 .opt-count { display: block; margin-top: 0.3rem; }
 
-.opt-departures {
-    margin-top: 0.3rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-    color: var(--text-primary);
-    font-size: 0.64rem;
-    font-variant-numeric: tabular-nums;
-    line-height: 1.4;
-}
-
-.opt-departures span {
-    display: inline-block;
-    min-width: 6.5rem;
-    color: var(--text-muted);
-}
-
 .opt-chart {
     position: relative;
     height: 150px;
