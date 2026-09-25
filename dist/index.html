@@ -13,7 +13,7 @@
     <!-- FontAwesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Custom CSS -->
-  <link rel="stylesheet" crossorigin href="/maan-dashboard/assets/index-Dmm33Ig9.css">
+  <link rel="stylesheet" crossorigin href="/maan-dashboard/assets/index-BdOTTDRa.css">
 </head>
 <body class="dark-mode auth-required">
 
@@ -274,6 +274,12 @@
                     <!-- Edit mode: what the colours and icons on the map mean -->
                     <div class="map-legend glass" id="mapLegend" hidden></div>
 
+                    <!-- View mode heatmap: density scale, metric and hottest spots -->
+                    <div class="map-legend heat-legend glass" id="heatLegend" hidden></div>
+
+                    <!-- Route optimization: run, scenario, departure hour, selected plan -->
+                    <div class="map-legend opt-panel glass" id="optPanel" hidden></div>
+
                     <!-- Floating District Chart Overlay - Top Right -->
                     <div class="map-overlay-card glass">
                         <h3><i class="fa-solid fa-chart-pie"></i> <span id="districtChartTitle">الحجاج حسب الحي</span></h3>
@@ -498,6 +504,7 @@
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Turf.js for geometric operations -->

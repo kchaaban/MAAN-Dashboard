@@ -530,8 +530,9 @@ function getCampAssignmentStats() {
     // not their planned pilgrims — otherwise selecting a phase reads X/X. With no
     // phase selected the rows are Tarwiya + direct Taseed, whose targets sum to
     // the total pilgrims (every pilgrim does exactly one of the two).
-    const targetPilgrims = Object.values(buildCompletionStats(totalRows).completionByPlanType)
-        .reduce((sum, row) => sum + (row.target || 0), 0);
+    // The union across the phases in play. Adding the per-phase targets together
+    // double-counts any camp that more than one phase draws on.
+    const targetPilgrims = buildCompletionStats(totalRows).overallTarget;
 
     return {
         ...stats,
@@ -848,6 +849,9 @@ const entityState = {
     creating: false,
     colorBy: null,
     icons: null,
+    // Clicking a legend row narrows the map to that group:
+    // { type: 'color' | 'icon' | 'entity', value }
+    legendFilter: null,
     // discriminant value -> palette colour, built per entity from the rows
     colors: new Map(),
     groupCounts: new Map(),
@@ -892,6 +896,33 @@ function buildEntityColors(rows) {
     entityState.groupCounts = counts;
     entityState.otherGroups = Math.max(0, ranked.length - ENTITY_COLOR_SLOTS);
     return colors;
+}
+
+// Does this record survive the legend click? The two synthetic groups —
+// "بقية المجموعات" and "بدون قيمة" — are not single values, so they match by
+// predicate rather than by equality.
+const LEGEND_OTHER = '__legend_other__';
+const LEGEND_NONE = '__legend_none__';
+
+function entityPassesLegend(row) {
+    const f = entityState.legendFilter;
+    if (!f) return true;
+    if (f.type === 'color') {
+        const key = entityColorKey(row);
+        if (f.value === LEGEND_NONE) return key === null;
+        if (f.value === LEGEND_OTHER) return key !== null && !entityState.colors.has(key);
+        return key === f.value;
+    }
+    if (f.type === 'icon') return String(row.icon_key ?? '') === f.value;
+    return true;
+}
+
+function setLegendFilter(type, value) {
+    const f = entityState.legendFilter;
+    // Clicking the row that is already applied clears it.
+    entityState.legendFilter = (f && f.type === type && f.value === value) ? null : { type, value };
+    renderEntityLegend();
+    drawEntityLayer({ fit: false });
 }
 
 function entityColorFor(row) {
@@ -1146,6 +1177,7 @@ function renderEntityNav() {
 }
 
 function selectEntity(resource) {
+    entityState.legendFilter = null;
     if (geometryEdit.active) finishGeometryEdit(false);
     pendingGeometry = undefined;
     entityState.overview = false;
@@ -1428,6 +1460,7 @@ function getOverviewRenderer() {
 }
 
 async function loadOverview() {
+    entityState.legendFilter = null;
     entityState.overview = true;
     entityState.resource = null;
     entityState.rows = [];
@@ -1536,7 +1569,11 @@ function drawOverviewLayer() {
     const cullPins = pinCount > ENTITY_PIN_CULL_AFTER;
     const viewport = cullPins ? map.getBounds().pad(0.3) : null;
 
+    const only = entityState.legendFilter && entityState.legendFilter.type === 'entity'
+        ? entityState.legendFilter.value : null;
+
     sets.forEach((set) => {
+        if (only && set.entry.name !== only) return;
         const { color } = set;
         const withIcons = set.entry.mapIcon !== false;
         // The small entities all get badges; the big ones would be a wall of them.
@@ -2001,6 +2038,39 @@ function renderEntityGrid() {
 // how its records are drawn, then each colour group with its count. Groups past
 // the three coloured slots are named here too, so folding them into one neutral
 // hides no information.
+// Active row is highlighted; the rest dim, so the applied group is unmistakable.
+function legendRowClass(type, value) {
+    const f = entityState.legendFilter;
+    if (!f) return '';
+    return (f.type === type && f.value === value) ? ' is-active' : ' is-dimmed';
+}
+
+function bindLegendRows(host) {
+    host.querySelectorAll('.entity-legend-item[data-legend]').forEach((el) => {
+        el.addEventListener('click', () => setLegendFilter(el.dataset.legend, el.dataset.value));
+    });
+    host.querySelector('#mapLegendClear')?.addEventListener('click', () => {
+        entityState.legendFilter = null;
+        renderEntityLegend();
+        drawEntityLayer({ fit: false });
+    });
+}
+
+// A one-line banner naming the applied group, with a way out of it.
+function legendClearRow() {
+    if (!entityState.legendFilter) return '';
+    const f = entityState.legendFilter;
+    const shown = entityState.overview
+        ? (entityState.overviewSets || [])
+            .filter((set) => f.type !== 'entity' || set.entry.name === f.value)
+            .reduce((n, set) => n + set.rows.length, 0)
+        : entityState.rows.filter(entityPassesLegend).length;
+    return `<button type="button" class="map-legend-clear" id="mapLegendClear">
+        <i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i>
+        عرض الكل (${shown.toLocaleString()} معروضة)
+    </button>`;
+}
+
 function renderEntityLegend() {
     const host = document.getElementById('mapLegend');
     if (!host) return;
@@ -2024,14 +2094,18 @@ function renderEntityLegend() {
             </div>
             <div class="map-legend-items">
                 ${sets.map((set) => `
-                    <span class="entity-legend-item" title="${escapeHtml(set.entry.label)} — ${set.rows.length.toLocaleString()} سجل">
+                    <button type="button" class="entity-legend-item${legendRowClass('entity', set.entry.name)}"
+                            data-legend="entity" data-value="${escapeHtml(set.entry.name)}"
+                            title="${escapeHtml(set.entry.label)} — ${set.rows.length.toLocaleString()} سجل — اضغط لعرضه وحده">
                         <span class="entity-legend-dot" style="background:${escapeHtml(set.color)}"></span>
                         <i class="fa-solid ${escapeHtml(set.entry.icon)} entity-legend-icon" aria-hidden="true"></i>
                         <span class="entity-legend-text">${escapeHtml(set.entry.label)}</span>
                         <span class="entity-legend-count">${set.rows.length.toLocaleString()}</span>
-                    </span>`).join('')}
+                    </button>`).join('')}
             </div>
-            <div class="map-legend-hint">اللون يميّز أكبر ${ENTITY_COLOR_SLOTS} عناصر؛ البقية بلون محايد وتتميّز بأيقوناتها</div>`;
+            <div class="map-legend-hint">اللون يميّز أكبر ${ENTITY_COLOR_SLOTS} عناصر؛ البقية بلون محايد وتتميّز بأيقوناتها</div>
+            ${legendClearRow()}`;
+        bindLegendRows(host);
         return;
     }
     if (!entityState.resource || !entityState.rows.length) {
@@ -2051,20 +2125,21 @@ function renderEntityLegend() {
         [...entityState.colors.entries()]
             .map(([value, color]) => ({ value, color, n: entityState.groupCounts.get(value) || 0 }))
             .sort((a, b) => b.n - a.n)
-            .forEach((e) => rows.push(e));
+            .forEach((e) => rows.push({ ...e, key: e.value }));
 
         if (entityState.otherGroups > 0) {
             const rest = [...entityState.groupCounts.entries()]
                 .filter(([value]) => !entityState.colors.has(value))
                 .sort((a, b) => b[1] - a[1]);
             rows.push({
+                key: LEGEND_OTHER,
                 value: `بقية المجموعات · ${entityState.otherGroups}`,
                 color: palette.other,
                 n: rest.reduce((sum, [, n]) => sum + n, 0),
                 hint: rest.map(([v, n]) => `${v} (${n})`).join('، '),
             });
         }
-        if (missing) rows.push({ value: 'بدون قيمة', color: palette.other, n: missing });
+        if (missing) rows.push({ key: LEGEND_NONE, value: 'بدون قيمة', color: palette.other, n: missing });
     }
 
     // Icon key: only the glyphs actually present on this page.
@@ -2090,24 +2165,31 @@ function renderEntityLegend() {
         ${entityState.colorBy ? `<div class="map-legend-by">${escapeHtml(entityState.colorBy.label)}</div>` : ''}
         <div class="map-legend-items">
             ${rows.map((e) => `
-                <span class="entity-legend-item" title="${escapeHtml(e.hint || `${e.value} — ${e.n} سجل`)}">
+                <button type="button" class="entity-legend-item${legendRowClass('color', e.key)}"
+                        data-legend="color" data-value="${escapeHtml(e.key)}"
+                        title="${escapeHtml(e.hint || `${e.value} — ${e.n} سجل`)} — اضغط لعرضها وحدها">
                     <span class="entity-legend-dot" style="background:${escapeHtml(e.color)}"></span>
                     <span class="entity-legend-text">${escapeHtml(e.value)}</span>
                     <span class="entity-legend-count">${e.n.toLocaleString()}</span>
-                </span>`).join('')}
+                </button>`).join('')}
         </div>
         ${iconRows.length ? `
             <div class="map-legend-by">${escapeHtml(entityState.icons.label)}</div>
             <div class="map-legend-items">
                 ${iconRows.map((e) => `
-                    <span class="entity-legend-item" title="${escapeHtml(e.value)} — ${e.n} سجل">
+                    <button type="button" class="entity-legend-item${legendRowClass('icon', e.value)}"
+                            data-legend="icon" data-value="${escapeHtml(e.value)}"
+                            title="${escapeHtml(e.value)} — ${e.n} سجل — اضغط لعرضها وحدها">
                         <i class="fa-solid ${escapeHtml(e.icon)} entity-legend-icon" aria-hidden="true"></i>
                         <span class="entity-legend-text">${escapeHtml(e.value)}</span>
                         <span class="entity-legend-count">${e.n.toLocaleString()}</span>
-                    </span>`).join('')}
+                    </button>`).join('')}
             </div>` : ''}
         ${entityState.otherGroups ? `<div class="map-legend-hint">اللون يميّز أكبر ${ENTITY_COLOR_SLOTS} مجموعات فقط؛ البقية بلون محايد — مرّر عليها لعرضها</div>` : ''}
-        ${entityState.filter ? '<div class="map-legend-note">تصفية مطبّقة</div>' : ''}`;
+        ${entityState.filter ? '<div class="map-legend-note">تصفية مطبّقة</div>' : ''}
+        ${legendClearRow()}`;
+
+    bindLegendRows(host);
 }
 
 // ── Drawing a record's geometry ────────────────────────────────────────────
@@ -2642,11 +2724,14 @@ function drawEntityLayer({ fit = true } = {}) {
 
     // Records drawn as a pin rather than a shape; only these need culling.
     const pinCount = entityState.rows.reduce(
-        (n, r) => n + (!r.geojson && Number.isFinite(r.lon) && Number.isFinite(r.lat) ? 1 : 0), 0);
+        (n, r) => n + (entityPassesLegend(r) && !r.geojson && Number.isFinite(r.lon) && Number.isFinite(r.lat) ? 1 : 0), 0);
     const cullPins = pinCount > ENTITY_PIN_CULL_AFTER;
     const viewport = cullPins ? map.getBounds().pad(0.3) : null;
 
     entityState.rows.forEach((row) => {
+        // Narrowed by a legend click; the selected record always stays drawn so
+        // the form and the map cannot disagree about what is being edited.
+        if (!entityPassesLegend(row) && row.id !== entityState.selectedId) return;
         const selected = row.id === entityState.selectedId;
         const label = String(row[titleColumn] ?? '');
         const color = entityColorFor(row);
@@ -3965,6 +4050,36 @@ function getPlanTypeTarget(planTypeCode, assignment) {
     return assignment.byPlanType?.get(planTypeCode) || assignment.total;
 }
 
+// The target for a SET of phases, counting each camp assignment once even when
+// several phases draw on it.
+//
+// Summing per-phase targets is wrong across phases: a mixed centre sends part of
+// a camp's pilgrims out on tarwia and the rest on direct taseed, so that camp's
+// whole haj_count lands in both phase targets. For الراجحي that inflated the
+// denominator from 152,141 to 185,485 — 33,344 too many, all of it from the 10
+// camps served by both phases. Every pilgrim does exactly one outbound phase,
+// but a camp can appear in more than one, and the target is per camp.
+function getPlanTypeTargetForPhases(assignment, phaseCodes) {
+    if (!assignment) return 0;
+    const codes = Array.isArray(phaseCodes) ? phaseCodes.filter(Boolean) : [];
+    if (!codes.length || !assignment.assignmentsByPlanType) return assignment.total;
+
+    const wanted = new Set(codes);
+    const keys = new Set();
+    assignment.assignmentsByPlanType.forEach((_value, typedKey) => {
+        const sep = typedKey.indexOf('|');
+        if (sep < 0) return;
+        if (wanted.has(typedKey.slice(0, sep))) keys.add(typedKey.slice(sep + 1));
+    });
+    // No typed breakdown for these phases: fall back to the centre's own total,
+    // which is already de-duplicated by camp.
+    if (!keys.size) return assignment.total;
+
+    let sum = 0;
+    keys.forEach((key) => { sum += assignment.assignments?.get(key) || 0; });
+    return sum;
+}
+
 function normalizePlanTypeCode(value) {
     const normalized = normalizeTextKey(value);
     if (!normalized) return '';
@@ -5091,10 +5206,31 @@ function ownerShareBar(value, max) {
     return value > 0 ? Math.max(3, pct) : 0;
 }
 
+// The exact count, with thousands separators. Rounding to "152 ألف" hid the
+// difference between the figure on the button and the one in the KPI, which is
+// exactly what these numbers are for.
 function formatPilgrims(n) {
-    const v = Number(n) || 0;
-    if (v >= 1000) return `${Math.round(v / 1000).toLocaleString()}\u00a0ألف`;
-    return v.toLocaleString();
+    return (Number(n) || 0).toLocaleString();
+}
+
+// Planned pilgrims per owner, over exactly the phases the KPI counts — by
+// default tarwia + direct taseed, or whichever phase is filtered to. Computed
+// from rawData rather than filteredData so every owner keeps its figure while
+// one of them is selected.
+function plannedPilgrimsByOwner() {
+    const byCompany = new Map();
+    const byCenter = new Map();
+    rawData.forEach((row) => {
+        if (!isKpiDenominatorPlanType(row)) return;
+        const haj = toNumber(row['number_of_haj']);
+        if (!haj) return;
+        const company = row['owner_company_name'];
+        const ck = companyKey(company);
+        const ctr = centerKey(company, row['owner_office_number']);
+        byCompany.set(ck, (byCompany.get(ck) || 0) + haj);
+        byCenter.set(ctr, (byCenter.get(ctr) || 0) + haj);
+    });
+    return { byCompany, byCenter };
 }
 
 function renderOwnerButtons() {
@@ -5107,18 +5243,10 @@ function renderCompanyButtons() {
     const host = document.getElementById('companyButtons');
     if (!host) return;
 
-    const totals = collectAssignmentMetrics(rawData).companyMetrics;
-    const planned = collectPlannedMetrics(rawData).companyMetrics;
+    const { byCompany } = plannedPilgrimsByOwner();
     const items = serviceCompaniesCatalog.map((c) => {
-        const t = totals.get(c.key);
-        const p = planned.get(c.key);
-        const pilgrims = (t && t.totalPilgrims) || 0;
-        return {
-            key: c.key,
-            label: c.name,
-            pilgrims,
-            hasPlans: Boolean(p && p.plannedPilgrims > 0),
-        };
+        const pilgrims = byCompany.get(c.key) || 0;
+        return { key: c.key, label: c.name, pilgrims, hasPlans: pilgrims > 0 };
     }).sort((a, b) => b.pilgrims - a.pilgrims || a.label.localeCompare(b.label, 'ar'));
 
     const max = items.reduce((m, i) => Math.max(m, i.pilgrims), 0);
@@ -5166,15 +5294,17 @@ function renderCenterButtons() {
     group.hidden = false;
 
     // buildServiceCenterRows already restricts itself to the selected company.
-    const all = buildServiceCenterRows(rawData);
+    const { byCenter } = plannedPilgrimsByOwner();
+    const all = buildServiceCenterRows(rawData)
+        .map((r) => ({ ...r, plannedPilgrims: byCenter.get(r.centerKey) || 0 }));
     const term = centerButtonFilterText.trim().toLowerCase();
     const items = (term
         ? all.filter((r) => `${r.centerNumber} ${r.label}`.toLowerCase().includes(term))
         : all
-    ).sort((a, b) => b.totalPilgrims - a.totalPilgrims
+    ).sort((a, b) => b.plannedPilgrims - a.plannedPilgrims
         || String(a.centerNumber).localeCompare(String(b.centerNumber), 'ar'));
 
-    const max = items.reduce((m, i) => Math.max(m, i.totalPilgrims || 0), 0);
+    const max = items.reduce((m, i) => Math.max(m, i.plannedPilgrims || 0), 0);
 
     const chosen = selectedServiceCenters.size > 0;
     const shown = chosen ? items.filter((i) => selectedServiceCenters.has(i.centerKey)) : items;
@@ -5199,15 +5329,16 @@ function renderCenterButtons() {
 
     host.innerHTML = shown.map((i) => {
         const on = selectedServiceCenters.has(i.centerKey);
-        const fill = ownerShareBar(i.totalPilgrims || 0, max);
+        const value = i.plannedPilgrims || 0;
+        const fill = ownerShareBar(value, max);
         const name = i.centerNumber ? `${i.centerNumber} — ${i.label}` : i.label;
         return `
-            <button type="button" class="owner-btn${on ? ' is-active' : ''}"
+            <button type="button" class="owner-btn${on ? ' is-active' : ''}${value ? '' : ' is-empty'}"
                     data-key="${escapeHtml(i.centerKey)}" aria-pressed="${on ? 'true' : 'false'}"
-                    title="${escapeHtml(name)} — ${escapeHtml(formatPilgrims(i.totalPilgrims || 0))}">
+                    title="${escapeHtml(name)} — ${escapeHtml(value ? formatPilgrims(value) : 'لا توجد خطط')}">
                 <span class="owner-btn-fill" style="inline-size:${fill.toFixed(1)}%"></span>
                 <span class="owner-btn-name">${escapeHtml(name)}</span>
-                <span class="owner-btn-value">${escapeHtml(formatPilgrims(i.totalPilgrims || 0))}</span>
+                <span class="owner-btn-value">${escapeHtml(value ? formatPilgrims(value) : 'لا توجد خطط')}</span>
             </button>`;
     }).join('');
 
@@ -5535,6 +5666,32 @@ function setupEventListeners() {
         exitPathsBtn.style.opacity = showTarwiaExitPaths ? '1' : '0.4';
         exitPathsBtn.addEventListener('click', toggleTarwiaExitPaths);
         toolbarAnchor.parentNode.insertBefore(exitPathsBtn, camerasBtn);
+
+        const heatmapBtn = document.createElement('button');
+        heatmapBtn.id = 'heatmapToggleBtn';
+        heatmapBtn.className = 'theme-toggle-btn dashboard-tool';
+        heatmapBtn.type = 'button';
+        heatmapBtn.title = 'الخريطة الحرارية: كثافة الخطط على المسارات والمناطق';
+        heatmapBtn.setAttribute('aria-label', 'تبديل الخريطة الحرارية');
+        heatmapBtn.setAttribute('aria-pressed', 'false');
+        heatmapBtn.innerHTML = '<i class="fa-solid fa-fire"></i>';
+        heatmapBtn.style.marginRight = '4px';
+        heatmapBtn.style.opacity = '0.4';
+        heatmapBtn.addEventListener('click', togglePlanHeatmap);
+        toolbarAnchor.parentNode.insertBefore(heatmapBtn, exitPathsBtn);
+
+        const optimizationBtn = document.createElement('button');
+        optimizationBtn.id = 'optimizationToggleBtn';
+        optimizationBtn.className = 'theme-toggle-btn dashboard-tool';
+        optimizationBtn.type = 'button';
+        optimizationBtn.title = 'تحسين المسارات: خط الأساس مقابل المحسّن لكل خطة';
+        optimizationBtn.setAttribute('aria-label', 'تبديل عرض تحسين المسارات');
+        optimizationBtn.setAttribute('aria-pressed', 'false');
+        optimizationBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i>';
+        optimizationBtn.style.marginRight = '4px';
+        optimizationBtn.style.opacity = '0.4';
+        optimizationBtn.addEventListener('click', toggleOptimizationView);
+        toolbarAnchor.parentNode.insertBefore(optimizationBtn, heatmapBtn);
 
         console.log('Cameras toggle button added');
     } else {
@@ -6747,6 +6904,9 @@ function renderMakafPaths() {
     if (!makafPathsLayerGroup) return;
     makafPathsLayerGroup.clearLayers();
     if (isEntityWorkspaceActive()) return;
+    // The heatmap and the optimization view replace the plans' own paths; this
+    // entrance→camp overlay is one of them, so it would only be noise there.
+    if (showPlanHeatmap || optView.active) return;
     if (typeof MAKAF_PATHS_DATA === 'undefined') return;
 
     // Static fallback only: camps whose direct_taseed plans already carry a
@@ -6829,6 +6989,697 @@ function toggleTarwiaExitPaths() {
     updateMap();
 }
 
+// ══ Plan density heatmap ═════════════════════════════════════════════════
+// Every filtered plan (not the render-limited sample) is rasterised onto a
+// fine grid once; each zoom level then merges those cells into bins about the
+// size of the heat kernel, so a plan counts once per bin however long its path
+// runs through it, and overlapping routes read as hot corridors.
+let showPlanHeatmap = false;
+let planHeatLayer = null;
+let planHeatMetric = 'plans';
+let planHeatHotspots = [];
+const planHeatCellCache = new WeakMap(); // row → { base: number[], exit: number[] }
+
+const HEAT_BASE_CELL_M = 20;
+const HEAT_REF_LAT = 21.42;
+const HEAT_LAT_STEP = HEAT_BASE_CELL_M / 111320;
+const HEAT_LNG_STEP = HEAT_BASE_CELL_M / (111320 * Math.cos(HEAT_REF_LAT * Math.PI / 180));
+const HEAT_KEY_STRIDE = 1e6;
+const HEAT_RADIUS = 16;
+const HEAT_BLUR = 14;
+const HEAT_HOTSPOT_BIN = 10; // base cells per hotspot bin, ~200 m
+const HEAT_HOTSPOT_COUNT = 5;
+const HEAT_METRICS = [
+    { key: 'plans', label: 'الخطط' },
+    { key: 'pilgrims', label: 'الحجاج' },
+    { key: 'buses', label: 'الحافلات' }
+];
+const HEAT_GRADIENT = { 0.2: '#2c7bb6', 0.4: '#00a6ca', 0.55: '#90eb9d', 0.7: '#f9d057', 0.85: '#f29e2e', 1: '#d7191c' };
+const HEAT_ZONE_NAMES = { ARF: 'عرفات', MNA: 'منى', MZD: 'مزدلفة', MKZ: 'مكة المكرمة' };
+const HEAT_LINE_TYPES = new Set(['internal', 'external', 'tarwia_exit']);
+const HEAT_EXIT_TYPES = new Set(['tarwia_exit', 'tarwia_exit_point']);
+
+function heatCellKey(lng, lat) {
+    return Math.floor(lat / HEAT_LAT_STEP) * HEAT_KEY_STRIDE + Math.floor(lng / HEAT_LNG_STEP);
+}
+
+function heatSampleLine(coords, cells) {
+    const stepM = HEAT_BASE_CELL_M / 2;
+    for (let i = 0; i < coords.length; i++) {
+        const [lng, lat] = coords[i];
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+        cells.add(heatCellKey(lng, lat));
+        const next = coords[i + 1];
+        if (!next) continue;
+        const dx = (next[0] - lng) / HEAT_LNG_STEP;
+        const dy = (next[1] - lat) / HEAT_LAT_STEP;
+        const steps = Math.ceil(Math.hypot(dx, dy) * HEAT_BASE_CELL_M / stepM);
+        for (let s = 1; s < steps; s++) {
+            const t = s / steps;
+            cells.add(heatCellKey(lng + (next[0] - lng) * t, lat + (next[1] - lat) * t));
+        }
+    }
+}
+
+function heatSampleGeometry(geojson, asLine, cells) {
+    const { type, coordinates } = geojson || {};
+    if (!coordinates) return;
+    if (type === 'Point') cells.add(heatCellKey(coordinates[0], coordinates[1]));
+    else if (type === 'MultiPoint') coordinates.forEach(c => cells.add(heatCellKey(c[0], c[1])));
+    else if (type === 'LineString') heatSampleLine(coordinates, cells);
+    else if (type === 'MultiLineString') coordinates.forEach(line => heatSampleLine(line, cells));
+    else if (type === 'Polygon' || type === 'MultiPolygon') {
+        // Areas (entrances) are destinations, not corridors: one cell at the centre.
+        if (asLine) return;
+        const at = getRepresentativeLatLngFromGeojson(geojson);
+        if (at) cells.add(heatCellKey(at[1], at[0]));
+    }
+}
+
+function getPlanHeatCells(row) {
+    let entry = planHeatCellCache.get(row);
+    if (entry) return entry;
+    const base = new Set();
+    const exit = new Set();
+    try {
+        getRowGeojsons(row).forEach(item => {
+            const target = HEAT_EXIT_TYPES.has(item.type) ? exit : base;
+            heatSampleGeometry(item.geojson, HEAT_LINE_TYPES.has(item.type), target);
+        });
+    } catch (e) {
+        // A malformed geometry leaves the plan out of the heatmap only.
+    }
+    entry = { base: Array.from(base), exit: Array.from(exit) };
+    planHeatCellCache.set(row, entry);
+    return entry;
+}
+
+function planHeatWeight(row) {
+    if (planHeatMetric === 'plans') return 1;
+    return getChartMetricValue(row, planHeatMetric);
+}
+
+// What each plan contributes: its cells and weight. In the optimization view
+// these come from the chosen scenario's route instead of the plan's own paths.
+function planHeatItems(rows) {
+    if (optView.active && optView.data) return optHeatItems(rows);
+    return rows.map(row => ({ cells: getPlanHeatCells(row), weight: planHeatWeight(row) }));
+}
+
+// Sums each plan's weight into bins of `factor` base cells, counting a plan
+// once per bin. Returns Map(binKey → { value, plans }).
+function aggregatePlanHeat(rows, factor) {
+    const bins = new Map();
+    const seen = new Set();
+    planHeatItems(rows).forEach(({ cells, weight }) => {
+        if (!(weight > 0)) return;
+        const { base, exit } = cells;
+        seen.clear();
+        const addCell = (key) => {
+            const iy = Math.floor(key / HEAT_KEY_STRIDE);
+            const ix = key - iy * HEAT_KEY_STRIDE;
+            const bin = Math.floor(iy / factor) * HEAT_KEY_STRIDE + Math.floor(ix / factor);
+            if (seen.has(bin)) return;
+            seen.add(bin);
+            const cell = bins.get(bin);
+            if (cell) { cell.value += weight; cell.plans += 1; }
+            else bins.set(bin, { value: weight, plans: 1 });
+        };
+        base.forEach(addCell);
+        if (showTarwiaExitPaths) exit.forEach(addCell);
+    });
+    return bins;
+}
+
+function heatBinCenter(bin, factor) {
+    const iy = Math.floor(bin / HEAT_KEY_STRIDE);
+    const ix = bin - iy * HEAT_KEY_STRIDE;
+    return L.latLng((iy + 0.5) * factor * HEAT_LAT_STEP, (ix + 0.5) * factor * HEAT_LNG_STEP);
+}
+
+function heatBinFactorForZoom(zoom) {
+    // leaflet.heat merges points on a grid of half its kernel; bins no smaller
+    // than that keep one bin per heat cell, so intensities are not double counted.
+    const metersPerPixel = 156543.03 * Math.cos(HEAT_REF_LAT * Math.PI / 180) / Math.pow(2, zoom);
+    return Math.max(1, Math.round(((HEAT_RADIUS + HEAT_BLUR) / 2) * metersPerPixel / HEAT_BASE_CELL_M));
+}
+
+function heatPercentile(values, p) {
+    if (!values.length) return 0;
+    const sorted = values.slice().sort((a, b) => a - b);
+    return sorted[Math.min(sorted.length - 1, Math.floor(p * (sorted.length - 1)))];
+}
+
+function heatPlaceName(latlng) {
+    const point = turf.point([latlng.lng, latlng.lat]);
+    if (typeof DISTRICTS_DATA !== 'undefined' && Array.isArray(DISTRICTS_DATA.features)) {
+        const district = DISTRICTS_DATA.features.find(f => {
+            try { return f.geometry && turf.booleanPointInPolygon(point, f); } catch (e) { return false; }
+        });
+        if (district) return getDistrictNameFromFeature(district);
+    }
+    let nearest = null;
+    let nearestKm = Infinity;
+    HAJJ_ZONE_CENTERS.forEach(zone => {
+        const km = turf.distance(point, turf.point(zone.coords), { units: 'kilometers' });
+        if (km < nearestKm) { nearestKm = km; nearest = zone; }
+    });
+    return nearest ? `قرب ${HEAT_ZONE_NAMES[nearest.prefix] || nearest.prefix}` : '';
+}
+
+function buildPlanHeatHotspots(bins) {
+    const ranked = Array.from(bins.entries()).sort((a, b) => b[1].value - a[1].value);
+    const picked = [];
+    for (const [bin, cell] of ranked) {
+        if (picked.length >= HEAT_HOTSPOT_COUNT) break;
+        const iy = Math.floor(bin / HEAT_KEY_STRIDE);
+        const ix = bin - iy * HEAT_KEY_STRIDE;
+        // Neighbouring bins of one corridor would fill the list with the same place.
+        if (picked.some(p => Math.abs(p.iy - iy) <= 2 && Math.abs(p.ix - ix) <= 2)) continue;
+        const latlng = heatBinCenter(bin, HEAT_HOTSPOT_BIN);
+        picked.push({ iy, ix, latlng, ...cell, name: heatPlaceName(latlng) });
+    }
+    return picked;
+}
+
+function redrawPlanHeatLayer() {
+    if (!planHeatLayer || !map) return;
+    const factor = heatBinFactorForZoom(map.getZoom());
+    const bins = aggregatePlanHeat(filteredData, factor);
+    const values = Array.from(bins.values(), c => c.value);
+    // Cap at a high percentile so one saturated node does not wash out every corridor.
+    const cap = Math.max(heatPercentile(values, 0.97), 1);
+    const points = [];
+    bins.forEach((cell, bin) => {
+        const at = heatBinCenter(bin, factor);
+        points.push([at.lat, at.lng, Math.min(1, cell.value / cap)]);
+    });
+    planHeatLayer.setLatLngs(points);
+    renderPlanHeatLegend(cap);
+}
+
+function renderPlanHeatmap() {
+    if (typeof L.heatLayer !== 'function') {
+        showNotification('تعذّر تحميل مكتبة الخريطة الحرارية', 'error');
+        return;
+    }
+    if (!planHeatLayer) {
+        planHeatLayer = L.heatLayer([], {
+            radius: HEAT_RADIUS,
+            blur: HEAT_BLUR,
+            max: 1,
+            maxZoom: 0, // intensities are already per zoom; stop the library rescaling them
+            minOpacity: 0.25,
+            gradient: HEAT_GRADIENT
+        });
+        map.on('zoomend', () => { if (showPlanHeatmap) redrawPlanHeatLayer(); });
+    }
+    if (!map.hasLayer(planHeatLayer)) planHeatLayer.addTo(map);
+    const hotspotBins = aggregatePlanHeat(filteredData, HEAT_HOTSPOT_BIN);
+    planHeatHotspots = buildPlanHeatHotspots(hotspotBins);
+    redrawPlanHeatLayer();
+
+    if (hasActiveMapFilter()) {
+        const bounds = L.latLngBounds([]);
+        hotspotBins.forEach((_cell, bin) => bounds.extend(heatBinCenter(bin, HEAT_HOTSPOT_BIN)));
+        fitMapToGeometry(bounds);
+    }
+}
+
+function clearPlanHeatmap() {
+    if (planHeatLayer && map?.hasLayer(planHeatLayer)) map.removeLayer(planHeatLayer);
+    const legend = document.getElementById('heatLegend');
+    if (legend) { legend.hidden = true; legend.innerHTML = ''; }
+}
+
+function formatHeatValue(value) {
+    return planHeatMetric === 'pilgrims' ? formatPilgrims(value) : Math.round(value).toLocaleString();
+}
+
+function renderPlanHeatLegend(cap) {
+    const host = document.getElementById('heatLegend');
+    if (!host) return;
+    const metricLabel = HEAT_METRICS.find(m => m.key === planHeatMetric)?.label || '';
+    const stops = Object.entries(HEAT_GRADIENT).map(([at, color]) => `${color} ${Number(at) * 100}%`).join(', ');
+    host.hidden = false;
+    host.innerHTML = `
+        <div class="map-legend-head">
+            <i class="fa-solid fa-fire" aria-hidden="true"></i>
+            <span class="map-legend-title">كثافة الخطط${optView.active && optView.data
+                ? ` — ${optView.scenario === 'baseline' ? 'خط الأساس' : 'المحسّن'}${optView.hour === 'all' ? '' : ` (${optHourLabel(optView.hour)})`}`
+                : ''}</span>
+            <span class="map-legend-sub">${(optView.active && optView.data ? optPlansInView().length : filteredData.length).toLocaleString()} خطة</span>
+        </div>
+        <div class="heat-metric-tabs" role="tablist" aria-label="مقياس الكثافة">
+            ${HEAT_METRICS.map(m => `
+                <button type="button" role="tab" class="heat-metric-tab${m.key === planHeatMetric ? ' active' : ''}"
+                        aria-selected="${m.key === planHeatMetric}" data-heat-metric="${m.key}">${m.label}</button>
+            `).join('')}
+        </div>
+        <div class="heat-scale" style="background: linear-gradient(to left, ${stops})" aria-hidden="true"></div>
+        <div class="heat-scale-labels">
+            <span>منخفضة</span>
+            <span>≥ ${formatHeatValue(cap)} ${metricLabel}</span>
+        </div>
+        ${planHeatHotspots.length ? `
+            <div class="map-legend-by">أعلى نقاط الكثافة</div>
+            <ol class="heat-hotspots">
+                ${planHeatHotspots.map((h, i) => `
+                    <li>
+                        <button type="button" class="heat-hotspot" data-hotspot="${i}"
+                                title="تكبير إلى النقطة — ${h.plans.toLocaleString()} خطة تمر بها">
+                            <span class="heat-hotspot-rank">${i + 1}</span>
+                            <span class="heat-hotspot-name">${escapeHtml(h.name || 'نقطة كثيفة')}</span>
+                            <span class="heat-hotspot-value">${formatHeatValue(h.value)}</span>
+                        </button>
+                    </li>
+                `).join('')}
+            </ol>` : ''}
+        <div class="map-legend-hint">${optView.active && optView.data
+            ? 'مسارات السيناريو المختار من السكن إلى المدخل، موزونة بحافلات كل خطة.'
+            : 'تُحتسب كل خطة مرة واحدة في كل خلية تمر بها مساراتها أو نقاط بدايتها ونهايتها.'}</div>
+    `;
+    host.querySelectorAll('[data-heat-metric]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.heatMetric === planHeatMetric) return;
+            planHeatMetric = btn.dataset.heatMetric;
+            planHeatHotspots = buildPlanHeatHotspots(aggregatePlanHeat(filteredData, HEAT_HOTSPOT_BIN));
+            redrawPlanHeatLayer();
+        });
+    });
+    host.querySelectorAll('[data-hotspot]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const spot = planHeatHotspots[Number(btn.dataset.hotspot)];
+            if (spot) map.flyTo(spot.latlng, Math.max(map.getZoom(), 16));
+        });
+    });
+}
+
+function togglePlanHeatmap() {
+    showPlanHeatmap = !showPlanHeatmap;
+    const btn = document.getElementById('heatmapToggleBtn');
+    if (btn) {
+        btn.classList.toggle('active', showPlanHeatmap);
+        btn.setAttribute('aria-pressed', String(showPlanHeatmap));
+        btn.style.opacity = showPlanHeatmap ? '1' : '0.4';
+    }
+    if (!showPlanHeatmap) clearPlanHeatmap();
+    renderMakafPaths();
+    cachedMapRenderKey = null;
+    updateMap();
+}
+
+// ══ Route optimization view ═══════════════════════════════════════════════
+// Shows a saved run of server/scripts/optimize-routes.js: for each plan the
+// route and departure slots of the baseline (fastest route, buses spread over
+// the window) and of the optimized plan. Times are Hajj-relative (Hijri day +
+// local time); the heatmap, when on, draws the chosen scenario's routes.
+const optView = {
+    active: false, runs: null, runId: null, data: null, error: '',
+    scenario: 'optimized', hour: 'all', chart: null,
+};
+const OPT_SCENARIOS = [
+    { key: 'baseline', label: 'خط الأساس' },
+    { key: 'optimized', label: 'المحسّن' },
+    { key: 'compare', label: 'مقارنة' },
+];
+// Fuchsia for changed routes: orange is taken by the Arafat path overlay and
+// red by the heatmap.
+const OPT_COLORS = { baseline: '#64748b', changed: '#d946ef', same: '#10b981' };
+const optCandidateCellCache = new Map(); // candidateId → { base, exit }
+
+async function optFetch(url) {
+    const response = await fetch(url, { headers: authHeaders() });
+    if (response.status === 401 || response.status === 403) {
+        returnToLogin();
+        throw new Error('unauthorized');
+    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+}
+
+async function toggleOptimizationView() {
+    optView.active = !optView.active;
+    const btn = document.getElementById('optimizationToggleBtn');
+    if (btn) {
+        btn.classList.toggle('active', optView.active);
+        btn.setAttribute('aria-pressed', String(optView.active));
+        btn.style.opacity = optView.active ? '1' : '0.4';
+    }
+    document.body.classList.toggle('opt-view-on', optView.active);
+    renderMakafPaths();
+    if (!optView.active) {
+        clearOptimizationPanel();
+    } else if (!optView.runs) {
+        renderOptimizationPanel();
+        try {
+            optView.runs = await optFetch('/maan-dashboard/api/routing/runs');
+            // Open on the run marked as recommended, else the newest.
+            const preferred = optView.runs.find(r => /^recommended/i.test(r.notes || '')) || optView.runs[0];
+            if (preferred) await selectOptimizationRun(preferred.id);
+            else optView.error = 'لا توجد نتائج تحسين محفوظة بعد';
+        } catch (error) {
+            optView.error = 'تعذّر تحميل نتائج التحسين';
+            console.error('optimization runs:', error.message);
+        }
+    }
+    cachedMapRenderKey = null;
+    updateMap();
+}
+
+async function selectOptimizationRun(runId) {
+    optView.runId = runId;
+    optView.data = null;
+    optView.hour = 'all';
+    optView.error = '';
+    optCandidateCellCache.clear();
+    renderOptimizationPanel();
+    try {
+        optView.data = await optFetch(`/maan-dashboard/api/routing/runs/${runId}`);
+    } catch (error) {
+        optView.error = 'تعذّر تحميل تفاصيل التشغيل';
+        console.error('optimization run:', error.message);
+    }
+    cachedMapRenderKey = null;
+    updateMap();
+}
+
+function optSlotKey(slot) {
+    return `${slot[0]}|${slot[1].slice(0, 2)}`;
+}
+
+function optHourLabel(key) {
+    const [day, hour] = key.split('|');
+    return `${day} ذو الحجة ${hour}:00`;
+}
+
+// Buses of one scenario side within the chosen departure hour (or all).
+function optBuses(side) {
+    if (!side) return 0;
+    return side.slots.reduce((n, s) => n + (optView.hour === 'all' || optSlotKey(s) === optView.hour ? s[2] : 0), 0);
+}
+
+function optTripMinutes(side) {
+    const buses = side.slots.reduce((n, s) => n + s[2], 0);
+    return buses ? side.slots.reduce((t, s) => t + s[2] * s[3], 0) / buses / 60 : 0;
+}
+
+// The plan the detail section describes: the selected one, or the only plan
+// left in view (e.g. after picking a single service centre).
+function optDetailPlanId() {
+    if (!optView.data) return null;
+    if (selectedPlanId && optView.data.plans[selectedPlanId]) return selectedPlanId;
+    const inView = optPlansInView();
+    return inView.length === 1 ? inView[0]['plan_id'] : null;
+}
+
+// "00:15 ×20، 02:15 ×14" — when a scenario's buses leave (day shown if it varies).
+function optDepartureText(side) {
+    if (!side) return '—';
+    const days = new Set(side.slots.map(s => s[0]));
+    return side.slots.map(s => `${days.size > 1 ? `${s[0]}/` : ''}${s[1]} ×${s[2]}`).join('، ');
+}
+
+function optPlansInView() {
+    if (!optView.data) return [];
+    return filteredData.filter(row => optView.data.plans[row['plan_id']]);
+}
+
+function optHourOptions() {
+    const keys = new Set();
+    for (const row of optPlansInView()) {
+        const plan = optView.data.plans[row['plan_id']];
+        for (const side of [plan.baseline, plan.optimized]) side?.slots.forEach(s => keys.add(optSlotKey(s)));
+    }
+    return [...keys].sort();
+}
+
+function optCandidateCells(candidateId) {
+    let entry = optCandidateCellCache.get(candidateId);
+    if (entry) return entry;
+    const cells = new Set();
+    const candidate = optView.data?.candidates[candidateId];
+    if (candidate) heatSampleGeometry(candidate.geometry, true, cells);
+    entry = { base: Array.from(cells), exit: [] };
+    optCandidateCellCache.set(candidateId, entry);
+    return entry;
+}
+
+// Heat contributions of the chosen scenario: each plan's route, weighted by the
+// buses it sends in the chosen hour (pilgrims pro rata, or one per plan).
+function optHeatItems(rows) {
+    const scenario = optView.scenario === 'baseline' ? 'baseline' : 'optimized';
+    const items = [];
+    for (const row of rows) {
+        const side = optView.data.plans[row['plan_id']]?.[scenario];
+        const buses = optBuses(side);
+        if (!buses) continue;
+        const total = side.slots.reduce((n, s) => n + s[2], 0);
+        const weight = planHeatMetric === 'plans' ? 1
+            : planHeatMetric === 'buses' ? buses
+            : (Number(row['number_of_haj']) || 0) * buses / total;
+        items.push({ cells: optCandidateCells(side.candidate), weight });
+    }
+    return items;
+}
+
+function optLatLngs(geometry) {
+    if (!geometry) return [];
+    if (geometry.type === 'LineString') return geometry.coordinates.map(([x, y]) => [y, x]);
+    if (geometry.type === 'MultiLineString') return geometry.coordinates.map(line => line.map(([x, y]) => [y, x]));
+    return [];
+}
+
+// Routes of the plans in view. Plans sharing a route are drawn as one line,
+// its width growing with the buses on it.
+function renderOptimizationRoutes() {
+    const { plans, candidates } = optView.data;
+    const lines = new Map();   // `${kind}|${candidate}` → { kind, candidate, buses, planIds }
+    for (const row of optPlansInView()) {
+        const id = row['plan_id'];
+        const plan = plans[id];
+        const changed = plan.baseline && plan.optimized && plan.baseline.candidate !== plan.optimized.candidate;
+        const sides = optView.scenario === 'compare'
+            ? [['baseline', plan.baseline], ['optimized', plan.optimized]].filter(([kind]) => kind === 'optimized' || changed)
+            : [[optView.scenario, plan[optView.scenario]]];
+        for (const [scenario, side] of sides) {
+            if (!side) continue;
+            // A route with no departures in the chosen hour is still drawn, faded,
+            // so the scenario never looks as if it had no route at all.
+            const buses = optBuses(side);
+            const kind = scenario === 'baseline' ? 'baseline' : (changed ? 'changed' : 'same');
+            const key = `${kind}|${side.candidate}`;
+            const line = lines.get(key) || { kind, candidate: side.candidate, buses: 0, planIds: [] };
+            line.buses += buses;
+            line.planIds.push(id);
+            lines.set(key, line);
+        }
+    }
+    const maxBuses = Math.max(1, ...[...lines.values()].map(l => l.buses));
+    const detailPlanId = optDetailPlanId();
+    const bounds = L.latLngBounds();
+    const order = { baseline: 0, same: 1, changed: 2 };
+    [...lines.values()].sort((a, b) => order[a.kind] - order[b.kind]).forEach(line => {
+        const candidate = candidates[line.candidate];
+        const latlngs = optLatLngs(candidate?.geometry);
+        if (!latlngs.length) return;
+        const selected = detailPlanId && line.planIds.includes(detailPlanId);
+        const idle = line.buses === 0;
+        const layer = L.polyline(latlngs, {
+            renderer: getOverviewRenderer(),
+            color: OPT_COLORS[line.kind],
+            // Idle (no departures in the chosen hour): thin and dotted, still readable.
+            weight: idle ? 2.5 : 1.5 + 6 * Math.sqrt(line.buses / maxBuses) + (selected ? 2 : 0),
+            opacity: idle ? 0.6 : (line.kind === 'baseline' ? 0.75 : 0.85),
+            dashArray: idle ? '1 6' : (line.kind === 'baseline' && optView.scenario === 'compare' ? '6 6' : null),
+            lineCap: 'round',
+        }).addTo(routeLayerGroup);
+        const label = line.kind === 'baseline' ? 'خط الأساس' : (line.kind === 'changed' ? 'المحسّن — مسار جديد' : 'المحسّن — المسار نفسه');
+        const scenario = line.kind === 'baseline' ? 'baseline' : 'optimized';
+        const onlyPlan = line.planIds.length === 1 ? optView.data.plans[line.planIds[0]][scenario] : null;
+        layer.bindTooltip(
+            `${label}<br>${line.planIds.length.toLocaleString()} خطة · ` +
+            (idle ? 'لا انطلاق في هذه الساعة' : `${line.buses.toLocaleString()} حافلة`) +
+            `<br>المسار ${candidate.rank} · ${(candidate.length_m / 1000).toFixed(1)} كم` +
+            (onlyPlan ? `<br>الانطلاق: ${optDepartureText(onlyPlan)}` : ''),
+            { sticky: true, direction: 'top' });
+        layer.on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
+            if (line.planIds.length === 1) {
+                selectedPlanId = selectedPlanId === line.planIds[0] ? null : line.planIds[0];
+                applyFilters();
+            } else {
+                map.fitBounds(layer.getBounds(), { padding: [40, 40] });
+            }
+        });
+        bounds.extend(layer.getBounds());
+    });
+    if (bounds.isValid() && (selectedPlanId || hasActiveMapFilter())) fitMapToGeometry(bounds);
+}
+
+function clearOptimizationPanel() {
+    const host = document.getElementById('optPanel');
+    if (host) { host.hidden = true; host.innerHTML = ''; }
+    if (optView.chart) { optView.chart.destroy(); optView.chart = null; }
+}
+
+function optKpiRows() {
+    const run = optView.data?.run;
+    if (!run?.baseline_kpis) return '';
+    const base = run.baseline_kpis.reference || run.baseline_kpis;
+    const opt = run.optimized_kpis.reference || run.optimized_kpis;
+    const row = (label, key, digits = 0) => {
+        const a = Number(base[key]);
+        const b = Number(opt[key]);
+        const change = a ? Math.round((b - a) / a * 100) : 0;
+        return `<tr><th>${label}</th><td>${a.toLocaleString(undefined, { maximumFractionDigits: digits })}</td>
+                <td>${b.toLocaleString(undefined, { maximumFractionDigits: digits })}</td>
+                <td class="${change < 0 ? 'opt-better' : change > 0 ? 'opt-worse' : ''}">${change > 0 ? '+' : ''}${change}%</td></tr>`;
+    };
+    return `
+        <table class="opt-kpis">
+            <thead><tr><th></th><th>خط الأساس</th><th>المحسّن</th><th>التغيّر</th></tr></thead>
+            <tbody>
+                ${row('ساعات الحافلات', 'total_bus_hours')}
+                ${row('متوسط الرحلة (دقيقة)', 'avg_trip_min', 1)}
+                ${row('ساعات الازدحام', 'congestion_bus_hours')}
+            </tbody>
+        </table>
+        <div class="map-legend-hint">لكل الخطط${run.baseline_kpis.reference ? '، مقيّمة بنموذج الازدحام المعاير على بيانات 1446' : ''}.</div>`;
+}
+
+function optPlanDetail() {
+    const planId = optDetailPlanId();
+    const plan = planId && optView.data.plans[planId];
+    if (!plan) {
+        return `<div class="map-legend-hint">اختر خطة من القائمة أو بالنقر على مسار لعرض مساريها وجدول انطلاق حافلاتها.</div>`;
+    }
+    const row = rawData.find(r => r['plan_id'] === planId) || {};
+    const cell = (side) => {
+        if (!side) return '<td>—</td><td>—</td><td>—</td>';
+        const c = optView.data.candidates[side.candidate];
+        return `<td>${c ? c.rank : '—'}</td><td>${c ? (c.length_m / 1000).toFixed(1) : '—'}</td><td>${optTripMinutes(side).toFixed(0)}</td>`;
+    };
+    const changed = plan.baseline && plan.optimized && plan.baseline.candidate !== plan.optimized.candidate;
+    return `
+        <div class="map-legend-by">${escapeHtml([row['start_point_name'], row['entrance_name']].filter(Boolean).join(' ← ') || 'الخطة المختارة')}</div>
+        <table class="opt-kpis">
+            <thead><tr><th></th><th>المسار</th><th>كم</th><th>دقيقة</th></tr></thead>
+            <tbody>
+                <tr><th>خط الأساس</th>${cell(plan.baseline)}</tr>
+                <tr><th>المحسّن</th>${cell(plan.optimized)}</tr>
+            </tbody>
+        </table>
+        <div class="map-legend-hint">${changed ? 'غيّر التحسين مسار هذه الخطة وتوقيت انطلاقها.' : 'المسار نفسه؛ غيّر التحسين توقيت الانطلاق فقط.'}</div>
+        <div class="opt-departures">
+            <div><span>انطلاق خط الأساس</span>${escapeHtml(optDepartureText(plan.baseline))}</div>
+            <div><span>انطلاق المحسّن</span>${escapeHtml(optDepartureText(plan.optimized))}</div>
+        </div>
+        <div class="opt-chart"><canvas id="optScheduleChart" aria-label="جدول انطلاق الحافلات"></canvas></div>`;
+}
+
+function renderOptimizationSchedule() {
+    if (optView.chart) { optView.chart.destroy(); optView.chart = null; }
+    const canvas = document.getElementById('optScheduleChart');
+    const planId = optDetailPlanId();
+    const plan = planId && optView.data.plans[planId];
+    if (!canvas || !plan || typeof Chart === 'undefined') return;
+    const key = (s) => `${s[0]}|${s[1]}`;
+    const labels = [...new Set([...(plan.baseline?.slots || []), ...(plan.optimized?.slots || [])].map(key))].sort();
+    const series = (side) => labels.map(l => side?.slots.find(s => key(s) === l)?.[2] || 0);
+    const theme = getThemeColors();
+    optView.chart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels.map(l => l.split('|')[1]),
+            datasets: [
+                { label: 'خط الأساس', data: series(plan.baseline), backgroundColor: OPT_COLORS.baseline },
+                { label: 'المحسّن', data: series(plan.optimized), backgroundColor: OPT_COLORS.same },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+                legend: { labels: { boxWidth: 10, font: { size: 10 } } },
+                tooltip: { callbacks: { title: (items) => {
+                    const [day, time] = labels[items[0].dataIndex].split('|');
+                    return `${day} ذو الحجة ${time}`;
+                } } },
+            },
+            scales: {
+                x: { ticks: { font: { size: 9 }, maxRotation: 60, color: theme.text }, grid: { display: false } },
+                y: { beginAtZero: true, ticks: { precision: 0, font: { size: 9 }, color: theme.text }, grid: { color: theme.grid },
+                     title: { display: true, text: 'حافلات', font: { size: 9 } } },
+            },
+        },
+    });
+}
+
+function renderOptimizationPanel() {
+    const host = document.getElementById('optPanel');
+    if (!host || !optView.active) return;
+    host.hidden = false;
+    const runs = optView.runs || [];
+    const runOptions = runs.map(r => `
+        <option value="${r.id}"${r.id === optView.runId ? ' selected' : ''} title="${escapeHtml(r.notes || '')}">
+            #${r.id}${/^recommended/i.test(r.notes || '') ? ' ★ موصى به' : ''} — β ${r.params.beta} · سعة ${r.params['capacity-share']}
+        </option>`).join('');
+    let body;
+    if (optView.error) body = `<div class="map-legend-hint">${escapeHtml(optView.error)}</div>`;
+    else if (!optView.data) body = `<div class="map-legend-hint">جارٍ التحميل…</div>`;
+    else {
+        const inView = optPlansInView();
+        const changed = inView.filter(r => {
+            const p = optView.data.plans[r['plan_id']];
+            return p.baseline && p.optimized && p.baseline.candidate !== p.optimized.candidate;
+        }).length;
+        const hours = optHourOptions();
+        body = `
+            ${optKpiRows()}
+            <div class="heat-metric-tabs" role="tablist" aria-label="السيناريو">
+                ${OPT_SCENARIOS.map(s => `
+                    <button type="button" role="tab" class="heat-metric-tab${s.key === optView.scenario ? ' active' : ''}"
+                            aria-selected="${s.key === optView.scenario}" data-opt-scenario="${s.key}">${s.label}</button>`).join('')}
+            </div>
+            <label class="opt-field">
+                <span>ساعة الانطلاق</span>
+                <select id="optHourSelect">
+                    <option value="all">كل الأوقات</option>
+                    ${hours.map(h => `<option value="${h}"${h === optView.hour ? ' selected' : ''}>${optHourLabel(h)}</option>`).join('')}
+                </select>
+            </label>
+            <div class="opt-legend">
+                <span><i style="background:${OPT_COLORS.same}"></i>المسار نفسه</span>
+                <span><i style="background:${OPT_COLORS.changed}"></i>مسار جديد</span>
+                <span><i class="opt-dash" style="border-color:${OPT_COLORS.baseline}"></i>خط الأساس</span>
+                ${optView.hour !== 'all' ? `<span><i class="opt-dot" style="border-color:${OPT_COLORS.same}"></i>لا انطلاق في هذه الساعة</span>` : ''}
+            </div>
+            <div class="map-legend-sub opt-count">${inView.length.toLocaleString()} خطة معروضة · ${changed.toLocaleString()} تغيّر مسارها</div>
+            ${optPlanDetail()}`;
+    }
+    host.innerHTML = `
+        <div class="map-legend-head">
+            <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+            <span class="map-legend-title">تحسين المسارات</span>
+        </div>
+        ${runs.length ? `<label class="opt-field"><span>التشغيل</span><select id="optRunSelect">${runOptions}</select></label>` : ''}
+        ${body}`;
+    host.querySelector('#optRunSelect')?.addEventListener('change', (e) => selectOptimizationRun(Number(e.target.value)));
+    host.querySelector('#optHourSelect')?.addEventListener('change', (e) => {
+        optView.hour = e.target.value;
+        cachedMapRenderKey = null;
+        updateMap();
+    });
+    host.querySelectorAll('[data-opt-scenario]').forEach(btn => btn.addEventListener('click', () => {
+        optView.scenario = btn.dataset.optScenario;
+        cachedMapRenderKey = null;
+        updateMap();
+    }));
+    renderOptimizationSchedule();
+}
+
 function updateMapSelectionTitle() {
     const titleEl = document.getElementById('mapSelectionTitle');
     if (!titleEl) return;
@@ -6902,9 +7753,13 @@ function updateDashboard() {
 function buildCompletionStats(rows) {
     const stats = {
         completionByPlanType: {},
-        completionByCenterPlan: {}
+        completionByCenterPlan: {},
+        // Per-phase targets are right on their own but must not be added up;
+        // `overallTarget` is the de-duplicated union for the phases in `rows`.
+        overallTarget: 0
     };
     const countedTargets = new Set();
+    const phasesByCenter = new Map();
 
     rows.forEach(d => {
         const haj = Number(d['number_of_haj']) || 0;
@@ -6930,13 +7785,22 @@ function buildCompletionStats(rows) {
         }
         stats.completionByCenterPlan[centerCompletionKey].planned += haj;
 
-        const targetKey = completionKey + '|' + centerKey(d['owner_company_name'], d['owner_office_number']);
+        // Track which phases each centre contributes, for the union target.
+        const ck = centerKey(d['owner_company_name'], d['owner_office_number']);
+        if (!phasesByCenter.has(ck)) phasesByCenter.set(ck, { assignment, phases: new Set() });
+        if (planTypeCode) phasesByCenter.get(ck).phases.add(planTypeCode);
+
+        const targetKey = completionKey + '|' + ck;
         if (!countedTargets.has(targetKey)) {
             const target = getPlanTypeTarget(planTypeCode, assignment);
             stats.completionByPlanType[completionKey].target += target;
             stats.completionByCenterPlan[centerCompletionKey].target += target;
             countedTargets.add(targetKey);
         }
+    });
+
+    phasesByCenter.forEach(({ assignment, phases }) => {
+        stats.overallTarget += getPlanTypeTargetForPhases(assignment, [...phases]);
     });
 
     return stats;
@@ -7287,6 +8151,8 @@ function updateMap() {
     // The entity workspace owns the map; it draws the selected records itself.
     if (isEntityWorkspaceActive()) {
         clearDashboardMapLayers();
+        clearPlanHeatmap();
+        clearOptimizationPanel();
         renderDistrictReference();
         cachedMapRenderKey = null;
         return;
@@ -7297,6 +8163,8 @@ function updateMap() {
         filteredData.length ? filteredData[filteredData.length - 1]['plan_id'] : '',
         selectedPlanId, selectedEntranceName, selectedPathName, selectedDistrict,
         showTarwiaExitPaths ? 'exit-paths-on' : 'exit-paths-off',
+        showPlanHeatmap ? 'heat-on' : 'heat-off',
+        optView.active ? `opt:${optView.runId}:${optView.scenario}:${optView.hour}:${optView.data ? 'ready' : 'loading'}` : 'opt-off',
         Array.from(selectedServiceCompanies).sort().join(','),
         Array.from(selectedServiceCenters).sort().join(',')
     ].join('|');
@@ -7306,17 +8174,32 @@ function updateMap() {
     routeLayerGroup.clearLayers();
     districtsLayerGroup.clearLayers();
     const mapStatus = document.getElementById('mapStatus');
-    const bounds = L.latLngBounds();
-    const serviceEntitySelectionActive = hasServiceEntitySelection();
-    const shouldFitFilteredResults = hasActiveMapFilter();
-    const mapData = shouldFitFilteredResults ? filteredData : sampleAcrossPlanTypes(filteredData, MAP_RENDER_LIMIT);
-    const showDetailedMapLabels = Boolean(selectedPlanId || serviceEntitySelectionActive) || filteredData.length <= MAP_DETAIL_LABEL_LIMIT;
-
     if (mapStatus) {
         const noMatches = filteredData.length === 0 && rawData.length > 0;
         mapStatus.hidden = !noMatches;
         mapStatus.textContent = noMatches ? 'لا توجد خطط مطابقة للفلاتر الحالية' : '';
     }
+
+    if (optView.active) renderOptimizationPanel();
+
+    // Heatmap mode replaces the individual routes with the density of all of them.
+    if (showPlanHeatmap) {
+        renderPlanHeatmap();
+        return;
+    }
+    clearPlanHeatmap();
+
+    // The optimization view draws the run's routes instead of the plans' own paths.
+    if (optView.active) {
+        if (optView.data) renderOptimizationRoutes();
+        return;
+    }
+
+    const bounds = L.latLngBounds();
+    const serviceEntitySelectionActive = hasServiceEntitySelection();
+    const shouldFitFilteredResults = hasActiveMapFilter();
+    const mapData = shouldFitFilteredResults ? filteredData : sampleAcrossPlanTypes(filteredData, MAP_RENDER_LIMIT);
+    const showDetailedMapLabels = Boolean(selectedPlanId || serviceEntitySelectionActive) || filteredData.length <= MAP_DETAIL_LABEL_LIMIT;
 
     let selectedDistrictBounds = null;
 

@@ -10,6 +10,7 @@ const auth = require('./auth');
 const writes = require('./writes');
 const plansImport = require('./plans-import');
 const entityIo = require('./entity-io');
+const routingResults = require('./routing-results');
 
 const app = express();
 const PORT = process.env.PORT || 3100;
@@ -300,6 +301,35 @@ app.post('/maan-dashboard/api/plan-import/commit', authenticateToken, async (req
         return res.status(result.status || 400).json({ error: result.error, detail: result.detail });
     }
     res.json(result.summary);
+});
+
+// Route-optimization runs (read-only). Plan-level results follow the caller's scope.
+app.get('/maan-dashboard/api/routing/runs', authenticateToken, async (req, res) => {
+    try {
+        if (!req.user.scope) {
+            return res.status(401).json({ error: 'Session predates access scoping; please sign in again' });
+        }
+        res.json(await routingResults.listRuns(req.user.scope));
+    } catch (err) {
+        console.error('[api] routing runs failed:', err.message);
+        res.status(502).json({ error: 'Database unavailable', detail: err.message });
+    }
+});
+
+app.get('/maan-dashboard/api/routing/runs/:id', authenticateToken, async (req, res) => {
+    if (!req.user.scope) {
+        return res.status(401).json({ error: 'Session predates access scoping; please sign in again' });
+    }
+    const runId = Number(req.params.id);
+    if (!Number.isInteger(runId) || runId <= 0) return res.status(400).json({ error: 'Invalid run id' });
+    try {
+        const detail = await routingResults.runDetail(runId, req.user.scope);
+        if (!detail) return res.status(404).json({ error: 'Unknown run' });
+        res.json(detail);
+    } catch (err) {
+        console.error('[api] routing run failed:', err.message);
+        res.status(502).json({ error: 'Database unavailable', detail: err.message });
+    }
 });
 
 app.get('/maan-dashboard/api/db-health', async (req, res) => {

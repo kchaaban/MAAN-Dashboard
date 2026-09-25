@@ -382,4 +382,4 @@ function invalidate(name) {
     }
 }
 
-module.exports = { pool, writePool, getDataset, invalidate, DATASETS, scopeKey };
+module.exports = { pool, writePool, getDataset, invalidate, DATASETS, scopeKey, scopeClause };
