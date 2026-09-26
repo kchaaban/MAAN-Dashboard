@@ -200,7 +200,8 @@ async function hasSpeedProfile() {
     return speedProfileExists;
 }
 
-// Travel time, free-flow time, geometry and per-slot times for a path.
+// Travel time, free-flow time, geometry and search cost of a path (per-slot
+// times: slotTimes).
 async function describePath(path) {
     const { rows: [summary] } = await net.query(`
         WITH p AS (
@@ -221,6 +222,14 @@ async function describePath(path) {
         JOIN ${costColumns.table} c ON c.id = p.edge_id`,
         [path.edgeIds, path.edgeDirs]);
 
+    return summary;
+
+}
+
+// Travel time of a path for every departure slot. Only for routes that are
+// kept: it is the expensive part, and a route rejected by the checks above
+// used to pay for it anyway.
+async function slotTimes(path) {
     let slots = [];
     if (await hasSpeedProfile()) {
         ({ rows: slots } = await net.query(`
@@ -245,7 +254,7 @@ async function describePath(path) {
             GROUP BY s.slot`,
             [path.edgeIds, path.edgeDirs]));
     }
-    return { ...summary, slots };
+    return slots;
 }
 
 // Geodesic length of the plans' current path, for the dry-run comparison.
@@ -301,7 +310,7 @@ async function candidatesFor(od) {
         if (fastest === null) fastest = travel;
         else if (travel > fastest * (1 + args['max-detour'])) continue;
 
-        kept.push({ ...path, ...described, maxOverlap });
+        kept.push({ ...path, ...described, slots: await slotTimes(path), maxOverlap });
     }
     // Ranked by the weighted (road-type preferring) cost, not by the order the
     // penalty search found them: rank 1 is the preferred route.
