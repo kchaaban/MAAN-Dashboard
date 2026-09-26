@@ -13,6 +13,16 @@
 // when it shares at most --max-overlap of its length with every kept path and
 // is at most --max-detour slower than the fastest. k-shortest-path (Yen)
 // would return near-identical variants differing by one side street.
+//
+// --avoid <geojson>: zones to keep routes out of (the Mashaer: Mina, Arafat).
+// Default data/geofences_to_avoid.geojson; '' = off. Road segments touching
+// them cost --avoid-penalty × their time in the search and ranking (default 5):
+// routes cross only when going around costs more; --avoid-penalty 0 bans them
+// outright. Origins and destinations snap to junctions outside the zones.
+// --class-weights: the search prefers major roads by multiplying each road
+// type's time by a weight (links count as their road type). Travel times stored
+// stay real; the weights only decide which routes are found and their rank, so
+// rank 1 is the preferred major-road route.
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env'), quiet: true });
 const { Pool } = require('pg');
@@ -20,7 +30,39 @@ const { Pool } = require('pg');
 const args = parseArgs(process.argv.slice(2), {
     k: 5, cost: 'observed', penalty: 1.4, 'max-overlap': 0.7, 'max-detour': 0.5,
     'max-iterations': 12, 'max-snap': 400, limit: 0, 'dry-run': false,
+    avoid: 'data/geofences_to_avoid.geojson', 'avoid-penalty': 5,
+    'class-weights': 'motorway=1,trunk=1,primary=1,secondary=1.3,tertiary=1.6,other=2',
 });
+
+// Zones to avoid, as an SQL geometry expression (null when --avoid '').
+const AVOID_SQL = (() => {
+    if (!args.avoid) return null;
+    const file = require('path').resolve(__dirname, '..', args.avoid);
+    const gj = JSON.parse(require('fs').readFileSync(file, 'utf8'));
+    const geometry = gj.type === 'Feature' ? gj.geometry
+        : gj.type === 'FeatureCollection' ? { type: 'GeometryCollection', geometries: gj.features.map(f => f.geometry) }
+        : gj;
+    const json = JSON.stringify(geometry).replace(/'/g, "''");
+    return `ST_SetSRID(ST_GeomFromGeoJSON('${json}'), 4326)`;
+})();
+
+// Road-type weight as an SQL expression on a highway column.
+const CLASS_WEIGHTS = Object.fromEntries(String(args['class-weights']).split(',').map(kv => {
+    const [k, v] = kv.split('=');
+    if (!k || !(Number(v) > 0)) throw new Error(`bad --class-weights entry "${kv}"`);
+    return [k.trim(), Number(v)];
+}));
+// Search multiplier for the avoid zones on a geometry column: the penalty
+// inside, 1 outside (a ban is a WHERE filter instead, see edgesSql).
+const zoneSql = (geomCol) => AVOID_SQL && args['avoid-penalty'] > 0
+    ? `(CASE WHEN ST_Intersects(${geomCol}, ${AVOID_SQL}) THEN ${Number(args['avoid-penalty'])} ELSE 1 END)`
+    : '1';
+const weightSql = (col) => {
+    const cases = Object.entries(CLASS_WEIGHTS).filter(([k]) => k !== 'other')
+        .map(([k, v]) => `WHEN '${k.replace(/'/g, "''")}' THEN ${v}`).join(' ');
+    const other = CLASS_WEIGHTS.other ?? 1;
+    return cases ? `(CASE regexp_replace(${col}, '_link$', '') ${cases} ELSE ${other} END)` : `${other}`;
+};
 
 const common = {
     host: process.env.PGHOST || '127.0.0.1',
@@ -98,7 +140,7 @@ async function snap(lon, lat) {
     const { rows } = await net.query(`
         SELECT id, ST_Distance(geom::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) AS dist_m
         FROM routing.vertex
-        WHERE in_main
+        WHERE in_main ${AVOID_SQL ? `AND NOT ST_Intersects(geom, ${AVOID_SQL})` : ''}
         ORDER BY geom <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
         LIMIT 1`, [lon, lat]);
     return rows[0] || null;
@@ -111,18 +153,22 @@ const costColumns = args.cost === 'observed'
     : { table: 'routing.edge', cost: 'cost_s', reverse: 'reverse_cost_s' };
 
 // Edges within a box around the pair: routes never leave it in practice, and
-// pgRouting rebuilds its graph from this query on every call.
+// pgRouting rebuilds its graph from this query on every call. Search cost =
+// time × road-type weight × avoid-zone penalty × diversity penalty (or, with
+// --avoid-penalty 0, edges in the zones are left out).
 function edgesSql(bbox, penalties) {
     const [minX, minY, maxX, maxY] = bbox.map(Number);
     if (![minX, minY, maxX, maxY].every(Number.isFinite)) throw new Error('bad bbox');
-    const factor = (col) => {
-        if (!penalties.size) return col;
-        const cases = Array.from(penalties, ([id, n]) => `WHEN ${Number(id)} THEN ${Math.pow(args.penalty, n)}`).join(' ');
-        return `CASE WHEN ${col} < 0 THEN ${col} ELSE ${col} * (CASE id ${cases} ELSE 1 END) END`;
-    };
-    return `SELECT id, source, target, ${factor(costColumns.cost)} AS cost, ${factor(costColumns.reverse)} AS reverse_cost
-            FROM ${costColumns.table}
-            WHERE geom && ST_MakeEnvelope(${minX}, ${minY}, ${maxX}, ${maxY}, 4326)`;
+    const pen = penalties.size
+        ? `(CASE c.id ${Array.from(penalties, ([id, n]) => `WHEN ${Number(id)} THEN ${Math.pow(args.penalty, n)}`).join(' ')} ELSE 1 END)`
+        : '1';
+    const col = (name) => `CASE WHEN c.${name} < 0 THEN c.${name} ELSE c.${name} * ${weightSql('h.highway')} * ${zoneSql('c.geom')} * ${pen} END`;
+    const ban = AVOID_SQL && !(args['avoid-penalty'] > 0);
+    return `SELECT c.id, c.source, c.target, ${col(costColumns.cost)} AS cost, ${col(costColumns.reverse)} AS reverse_cost
+            FROM ${costColumns.table} c
+            JOIN routing.edge h ON h.id = c.id
+            WHERE c.geom && ST_MakeEnvelope(${minX}, ${minY}, ${maxX}, ${maxY}, 4326)
+              ${ban ? `AND NOT ST_Intersects(c.geom, ${AVOID_SQL})` : ''}`;
 }
 
 async function shortestPath(from, to, bbox, penalties) {
@@ -159,7 +205,11 @@ async function describePath(path) {
                    CASE WHEN p.dir = 1 THEN e.geom ELSE ST_Reverse(e.geom) END ORDER BY p.seq))) AS geom,
                sum(e.length_m) AS length_m,
                sum(CASE WHEN p.dir = 1 THEN e.cost_s ELSE e.reverse_cost_s END) AS freeflow_s,
-               sum(CASE WHEN p.dir = 1 THEN c.cost_s ELSE c.reverse_cost_s END) AS travel_s
+               sum(CASE WHEN p.dir = 1 THEN c.cost_s ELSE c.reverse_cost_s END) AS travel_s,
+               sum(CASE WHEN p.dir = 1 THEN c.cost_s ELSE c.reverse_cost_s END * ${weightSql('e.highway')} * ${zoneSql('e.geom')}) AS weighted_s,
+               ${AVOID_SQL ? `coalesce(sum(e.length_m) FILTER (WHERE ST_Intersects(e.geom, ${AVOID_SQL})), 0) / sum(e.length_m)` : '0'} AS zone_share,
+               sum(e.length_m) FILTER (WHERE regexp_replace(e.highway, '_link$', '') IN ('motorway', 'trunk', 'primary'))
+                   / sum(e.length_m) AS major_share
         FROM p
         JOIN routing.edge e ON e.id = p.edge_id
         JOIN ${costColumns.table} c ON c.id = p.edge_id`,
@@ -241,8 +291,9 @@ async function candidatesFor(od) {
 
         kept.push({ ...path, ...described, maxOverlap });
     }
-    // Ranked by travel time, not by the order the penalty search found them.
-    return kept.sort((a, b) => a.travel_s - b.travel_s);
+    // Ranked by the weighted (road-type preferring) cost, not by the order the
+    // penalty search found them: rank 1 is the preferred route.
+    return kept.sort((a, b) => a.weighted_s - b.weighted_s);
 }
 
 // ── Output ──────────────────────────────────────────────────────────────────
@@ -315,6 +366,8 @@ async function main() {
             console.log(`\n${od.residence_id} → ${od.entrance_id} (${current}, snap ${Math.round(od.origin_snap_m)}/${Math.round(od.destination_snap_m)} m)`);
             candidates.forEach((c, i) => console.log(
                 `  #${i + 1}  ${(c.length_m / 1000).toFixed(1)} km  ${(c.travel_s / 60).toFixed(1)} min` +
+                `  major roads ${Math.round((c.major_share || 0) * 100)}%` +
+                `  in avoid zones ${Math.round((c.zone_share || 0) * 100)}%` +
                 `  overlap ${Math.round((c.maxOverlap || 0) * 100)}%  slots ${c.slots.length}`));
         });
         return;

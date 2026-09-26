@@ -11,7 +11,7 @@ databases, so no cross-database link (postgres_fdw/dblink) is needed.
 | `02a_gps_bins.sql` | your_db | postgres | GPS points binned to ~20 m cell × heading × 15-min slot (`routing.gps_bin`, ~9 min) |
 | `02b_speed_profiles.sql` | your_db | postgres | bins matched to edges; observed speed per edge, direction and slot (`routing.edge_speed_profile`, ~2 min) |
 | `03_candidates.sql` | transport | postgres | `routing.od_pair`, `route_candidate`, `route_candidate_slot`, `plan_route` |
-| `scripts/generate-route-candidates.js` | both | ro_user reads, PGW_USER writes | up to k diverse routes per residence → entrance pair |
+| `scripts/generate-route-candidates.js` | both | ro_user reads, PGW_USER writes | up to k diverse routes per residence → entrance pair; keeps out of `data/geofences_to_avoid.geojson` (Mina, Arafat) with `--avoid-penalty` (default 5×; 0 = ban) and prefers major roads with `--class-weights` (default motorway/trunk/primary 1, secondary 1.3, tertiary 1.6, other 2) |
 | `04_optimizer.sql` | transport | postgres | `routing.optimization_run`, `routing.plan_dispatch` |
 | `scripts/optimize-routes.js` | both | ro_user reads, PGW_USER writes | route + departure slots per plan (MILP, HiGHS) |
 | `05_edge_flow.sql` | your_db | postgres | distinct 1446 buses per edge, direction and slot (`routing.edge_flow`, ~8 min, run on the VM) |
