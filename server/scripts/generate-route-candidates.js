@@ -56,17 +56,21 @@ const AVOID_SQL = (() => {
 
 // Search multiplier for the avoid zones on a geometry column: the penalty
 // inside, 1 outside (a ban is a WHERE filter instead, see edgesSql).
-const zoneSql = (geomCol) => AVOID_SQL && args['avoid-penalty'] > 0
-    ? `(CASE WHEN ST_Intersects(${geomCol}, ${AVOID_SQL}) THEN ${Number(args['avoid-penalty'])} ELSE 1 END)`
+// Edges touching the zones are listed once in routing.avoid_edge at startup
+// (refreshAvoidEdges): testing each edge against the polygon in every search
+// parsed the GeoJSON per edge and made a full run many times slower.
+const inZoneSql = (idCol) => `EXISTS (SELECT 1 FROM routing.avoid_edge a WHERE a.edge_id = ${idCol})`;
+const zoneSql = (idCol) => AVOID_SQL && args['avoid-penalty'] > 0
+    ? `(CASE WHEN ${inZoneSql(idCol)} THEN ${Number(args['avoid-penalty'])} ELSE 1 END)`
     : '1';
 const MAJOR_CLASSES = `(${String(args['major-classes']).split(',').map(c => `'${c.trim().replace(/'/g, "''")}'`).join(', ')})`;
 const isMajorSql = (highwayCol) => `(regexp_replace(${highwayCol}, '_link$', '') IN ${MAJOR_CLASSES})`;
 // Search cost of one direction of an edge: observed time on major roads,
 // free-flow time × --local-weight elsewhere; × the avoid-zone penalty.
-const searchCostSql = (observed, freeflow, highwayCol, geomCol) =>
+const searchCostSql = (observed, freeflow, highwayCol, idCol) =>
     `(CASE WHEN ${observed} < 0 THEN ${observed}
-           WHEN ${isMajorSql(highwayCol)} THEN ${observed} * ${zoneSql(geomCol)}
-           ELSE ${freeflow} * ${Number(args['local-weight'])} * ${zoneSql(geomCol)} END)`;
+           WHEN ${isMajorSql(highwayCol)} THEN ${observed}
+           ELSE ${freeflow} * ${Number(args['local-weight'])} END) * ${zoneSql(idCol)}`;
 
 const common = {
     host: process.env.PGHOST || '127.0.0.1',
@@ -82,6 +86,17 @@ const net = new Pool({
     password: process.env.ROUTING_PGPASSWORD || process.env.PGPASSWORD,
     statement_timeout: 120000,
 });
+// DEBUG_TIMING=1: log every network query slower than 0.5 s (for profiling).
+if (process.env.DEBUG_TIMING) {
+    const q = net.query.bind(net);
+    net.query = async (text, params) => {
+        const t = Date.now();
+        try { return await q(text, params); } finally {
+            const ms = Date.now() - t;
+            if (ms > 500) console.log(`[${(ms / 1000).toFixed(1)} s] ${String(text).replace(/\s+/g, ' ').slice(0, 90)}`);
+        }
+    };
+}
 const out = new Pool({
     ...common,
     database: process.env.PGDATABASE || 'transport',
@@ -167,13 +182,13 @@ function edgesSql(bbox, penalties) {
     const pen = penalties.size
         ? `(CASE c.id ${Array.from(penalties, ([id, n]) => `WHEN ${Number(id)} THEN ${Math.pow(args.penalty, n)}`).join(' ')} ELSE 1 END)`
         : '1';
-    const col = (obs, free) => `CASE WHEN c.${obs} < 0 THEN c.${obs} ELSE ${searchCostSql(`c.${obs}`, `h.${free}`, 'h.highway', 'c.geom')} * ${pen} END`;
+    const col = (obs, free) => `CASE WHEN c.${obs} < 0 THEN c.${obs} ELSE ${searchCostSql(`c.${obs}`, `h.${free}`, 'h.highway', 'c.id')} * ${pen} END`;
     const ban = AVOID_SQL && !(args['avoid-penalty'] > 0);
     return `SELECT c.id, c.source, c.target, ${col(costColumns.cost, 'cost_s')} AS cost, ${col(costColumns.reverse, 'reverse_cost_s')} AS reverse_cost
             FROM ${costColumns.table} c
             JOIN routing.edge h ON h.id = c.id
             WHERE c.geom && ST_MakeEnvelope(${minX}, ${minY}, ${maxX}, ${maxY}, 4326)
-              ${ban ? `AND NOT ST_Intersects(c.geom, ${AVOID_SQL})` : ''}`;
+              ${ban ? `AND NOT ${inZoneSql('c.id')}` : ''}`;
 }
 
 async function shortestPath(from, to, bbox, penalties) {
@@ -213,9 +228,9 @@ async function describePath(path) {
                sum(CASE WHEN p.dir = 1 THEN e.cost_s ELSE e.reverse_cost_s END) AS freeflow_s,
                sum(CASE WHEN p.dir = 1 THEN c.cost_s ELSE c.reverse_cost_s END) AS travel_s,
                sum(${searchCostSql('CASE WHEN p.dir = 1 THEN c.cost_s ELSE c.reverse_cost_s END',
-                                   'CASE WHEN p.dir = 1 THEN e.cost_s ELSE e.reverse_cost_s END', 'e.highway', 'e.geom')}) AS weighted_s,
+                                   'CASE WHEN p.dir = 1 THEN e.cost_s ELSE e.reverse_cost_s END', 'e.highway', 'e.id')}) AS weighted_s,
                coalesce(sum(e.length_m) FILTER (WHERE NOT ${isMajorSql('e.highway')}), 0) AS local_m,
-               ${AVOID_SQL ? `coalesce(sum(e.length_m) FILTER (WHERE ST_Intersects(e.geom, ${AVOID_SQL})), 0) / sum(e.length_m)` : '0'} AS zone_share,
+               ${AVOID_SQL ? `coalesce(sum(e.length_m) FILTER (WHERE ${inZoneSql('e.id')}), 0) / sum(e.length_m)` : '0'} AS zone_share,
                coalesce(sum(e.length_m) FILTER (WHERE ${isMajorSql('e.highway')}), 0) / sum(e.length_m) AS major_share
         FROM p
         JOIN routing.edge e ON e.id = p.edge_id
@@ -354,7 +369,27 @@ async function insertCandidate(client, runId, odPairId, rank, c) {
     }
 }
 
+// List the edges touching the avoid zones (writes routing.avoid_edge in the
+// network database, so it needs the write login there).
+async function refreshAvoidEdges() {
+    if (!AVOID_SQL) return;
+    const w = new Pool({ ...common, database: process.env.ROUTING_PGDATABASE || 'your_db',
+                         user: process.env.PGW_USER, password: process.env.PGW_PASSWORD });
+    try {
+        await w.query('CREATE TABLE IF NOT EXISTS routing.avoid_edge (edge_id bigint PRIMARY KEY)');
+        await w.query('BEGIN');
+        await w.query('TRUNCATE routing.avoid_edge');
+        const { rowCount } = await w.query(`INSERT INTO routing.avoid_edge SELECT id FROM routing.edge WHERE ST_Intersects(geom, ${AVOID_SQL})`);
+        await w.query('COMMIT');
+        await w.query('GRANT SELECT ON routing.avoid_edge TO ro_user').catch(() => {});
+        console.log(`avoid zones: ${rowCount} road segments listed in routing.avoid_edge`);
+    } finally {
+        await w.end();
+    }
+}
+
 async function main() {
+    await refreshAvoidEdges();
     const ods = await loadOdPairs();
     console.log(`${ods.length} residence → entrance pairs; cost basis: ${args.cost}`);
 
