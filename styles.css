@@ -588,15 +588,15 @@ body.charts-panel-collapsed .right-charts-panel {
 }
 
 .sidebar-clear-x-btn {
-    width: 20px;
-    height: 20px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
     border: 1px solid var(--border-color);
     background: var(--surface-soft);
     color: var(--text-muted);
     display: grid;
     place-items: center;
-    font-size: 0.6rem;
+    font-size: 0.75rem;
     cursor: pointer;
     flex-shrink: 0;
     transition: color 0.15s, border-color 0.15s, background 0.15s;
@@ -4844,7 +4844,7 @@ body[data-mode="edit"] .map-container-card { grid-column: 2; grid-row: 1; min-he
 .owner-buttons {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
     /* Only one list is ever expanded, so it can afford the height. */
     max-height: 32vh;
     overflow-y: auto;
@@ -4859,13 +4859,14 @@ body[data-mode="edit"] .map-container-card { grid-column: 2; grid-row: 1; min-he
 
 .owner-group-change {
     margin-inline-start: auto;
-    padding: 0.1rem 0.35rem;
+    min-height: 30px;
+    padding: 0.2rem 0.5rem;
     border: 0;
     border-radius: 5px;
     background: transparent;
     color: var(--accent-primary);
     font-family: inherit;
-    font-size: 0.66rem;
+    font-size: 0.72rem;
     font-weight: 700;
     cursor: pointer;
 }
@@ -4881,13 +4882,15 @@ body[data-mode="edit"] .map-container-card { grid-column: 2; grid-row: 1; min-he
     align-items: center;
     gap: 0.4rem;
     width: 100%;
-    padding: 0.32rem 0.5rem;
+    min-height: 30px;
+    flex-shrink: 0;
+    padding: 0.25rem 0.5rem;
     border: 1px solid var(--border-color);
     border-radius: 6px;
     background: var(--surface-soft);
     color: var(--text-primary);
     font-family: inherit;
-    font-size: 0.72rem;
+    font-size: 0.76rem;
     text-align: start;
     cursor: pointer;
     overflow: hidden;
@@ -4917,7 +4920,7 @@ body[data-mode="edit"] .map-container-card { grid-column: 2; grid-row: 1; min-he
     position: relative;
     flex: 0 0 auto;
     color: var(--text-secondary);
-    font-size: 0.66rem;
+    font-size: 0.7rem;
     font-weight: 700;
     /* Exact counts, so they must not wrap and should line up column-wise. */
     font-variant-numeric: tabular-nums;
