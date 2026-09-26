@@ -286,6 +286,10 @@ async function candidatesFor(od) {
 
         const described = await describePath(path);
         const travel = Number(described.travel_s);
+        // The search penalty keeps the preferred route out of the avoid zones;
+        // alternatives must not cross them at all (more than 200 m inside), or
+        // the optimizer, which picks by time, would take them.
+        if (kept.length && Number(described.zone_share) * Number(described.length_m) > 200) continue;
         if (fastest === null) fastest = travel;
         else if (travel > fastest * (1 + args['max-detour'])) continue;
 

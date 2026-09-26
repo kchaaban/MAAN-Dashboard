@@ -44,6 +44,10 @@ const args = parseArgs(process.argv.slice(2), {
     // Reference congestion model every scenario is scored with, so runs with
     // different model settings are compared on one yardstick (0 = same as model).
     'eval-alpha': 0, 'eval-beta': 0, 'eval-share': 0,
+    // Zones routes must keep out of (the Mashaer): candidates running more than
+    // --avoid-max-m inside them are dropped when their pair has another option.
+    // '' = off.
+    avoid: 'data/geofences_to_avoid.geojson', 'avoid-max-m': 200,
     // Score saved runs instead of solving: --score-runs 3,4,5 --score-models '4:0.4,1:1.83'
     // (β:capacity-share pairs, α from --alpha). Prints total bus-hours per run × model.
     'score-runs': '', 'score-models': '',
@@ -145,10 +149,30 @@ async function loadInputs() {
         JOIN routing.od_pair od   ON od.residence_id = p.start_point_id AND od.entrance_id = p.entrance_id
         WHERE p.start_point_type = 'residence' AND p.number_of_buses > 0`);
 
-    const { rows: candidates } = await db.query(`
-        SELECT id, od_pair_id, rank, edge_ids, edge_dirs, travel_s
+    // Metres each candidate runs inside the avoid zones.
+    let zoneExpr = '0';
+    if (args.avoid) {
+        const gj = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', args.avoid), 'utf8'));
+        const geometry = gj.type === 'Feature' ? gj.geometry : gj;
+        zoneExpr = `ST_Length(ST_Intersection(geom, ST_SetSRID(ST_GeomFromGeoJSON('${JSON.stringify(geometry).replace(/'/g, "''")}'), 4326))::geography)`;
+    }
+    const { rows: allCandidates } = await db.query(`
+        SELECT id, od_pair_id, rank, edge_ids, edge_dirs, travel_s, ${zoneExpr} AS zone_m
         FROM routing.route_candidate
         WHERE run_id = $1 AND rank >= 1 AND edge_ids IS NOT NULL`, [gen.id]);
+    // Keep candidates within the zone allowance; where none of a pair's are,
+    // keep the one running least inside, so no plan loses its last route.
+    const byOd = new Map();
+    allCandidates.forEach(c => { c.zone_m = Number(c.zone_m); if (!byOd.has(c.od_pair_id)) byOd.set(c.od_pair_id, []); byOd.get(c.od_pair_id).push(c); });
+    const candidates = [];
+    let dropped = 0;
+    for (const list of byOd.values()) {
+        const ok = list.filter(c => c.zone_m <= args['avoid-max-m']);
+        const keep = ok.length ? ok : [list.reduce((a, b) => (b.zone_m < a.zone_m ? b : a))];
+        dropped += list.length - keep.length;
+        candidates.push(...keep);
+    }
+    if (args.avoid) console.log(`avoid zones: dropped ${dropped} of ${allCandidates.length} candidates running > ${args['avoid-max-m']} m inside`);
 
     const minDay = Math.min(...plans.map(p => p.start_at_hijri));
     const maxDay = Math.max(...plans.map(p => p.end_at_hijri)) + 1; // trips may run past the window
