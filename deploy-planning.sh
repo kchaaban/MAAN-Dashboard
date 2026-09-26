@@ -1,136 +1,134 @@
 #!/usr/bin/env bash
+# Deploys the planning dashboard (frontend build + Express server) to the OCI VM.
+#
+#   ./deploy-planning.sh              build, upload, install, restart, health check
+#   ./deploy-planning.sh --dry-run    build and show what would be uploaded
+#
+# Run from a dev machine. The frontend is built locally (public/data/*.js are
+# not in git, so the build needs this working copy); the server code, the build
+# and server/data are rsynced to the VM, where PM2 runs server/index.js, which
+# serves both the API and dist/ under /maan-dashboard/ (nginx proxies to :3100).
+#
+# The VM keeps its own server/.env (never overwritten). On the first deploy it
+# is created from the local server/.env with the database pointed at the VM's
+# own Postgres (127.0.0.1:5432) and a fresh JWT_SECRET.
 set -euo pipefail
 
-# ── Configuration ────────────────────────────────────────────────────────────
-LOCAL_DIR="$(cd "$(dirname "$0")" && pwd)"   # repo root on this machine
-
-# Deployment mode:
-#   auto   -> local mode if LOCAL_LIVE_DIR exists (i.e. running on the prod VM),
-#             otherwise remote mode (the normal case from a MacBook/dev machine)
-#   local  -> deploy directly to LOCAL_LIVE_DIR (no SSH; run this on the VM)
-#   remote -> deploy via SSH/rsync to REMOTE_HOST (run this from your MacBook)
-DEPLOY_MODE="${DEPLOY_MODE:-auto}"
-
-# Production host: maan.firstcity.ai -> 130.110.108.187 (OCI, user "ubuntu").
-# Matches the "oci" entry in ~/.ssh/config.
-REMOTE_HOST="${REMOTE_HOST:-ubuntu@130.110.108.187}"
+# ── Configuration (override with env vars) ───────────────────────────────────
+REMOTE_HOST="${REMOTE_HOST:-ubuntu@130.110.108.187}"   # maan.firstcity.ai, "oci" in ~/.ssh/config
 REMOTE_DIR="${REMOTE_DIR:-/home/ubuntu/maan-dashboard}"
-REMOTE_DIST="${REMOTE_DIR}/dist"
-
-LOCAL_LIVE_DIR="${LOCAL_LIVE_DIR:-/home/ubuntu/maan-dashboard.bak}"
-LOCAL_LIVE_DIST="${LOCAL_LIVE_DIR}/dist"
-
+BACKUP_DIR="${BACKUP_DIR:-/home/ubuntu/maan-dashboard-backups}"
+SSH_KEY="${SSH_KEY:-$HOME/.ssh/bus-data-analysis_key.pem}"
+PM2_APP="${PM2_APP:-maan-dashboard}"
+APP_PORT="${APP_PORT:-3100}"
 BASE_PATH="/maan-dashboard/"
-PM2_APP="maan-dashboard"
-PM2_FE_APP="${PM2_FE_APP:-maan-dashboard-fe}"
-
-# SSH key (override with: SSH_KEY=~/.ssh/other_key ./deploy-planning.sh)
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/ssh-key-2025-07-21-traffic-analysis.key}"
-SSH_OPTS="-i ${SSH_KEY} -o StrictHostKeyChecking=accept-new"
+PUBLIC_URL="https://maan.firstcity.ai/maan-dashboard/"
 # ─────────────────────────────────────────────────────────────────────────────
 
-if [[ "${DEPLOY_MODE}" == "auto" ]]; then
-    if [[ -d "${LOCAL_LIVE_DIR}" ]]; then
-        DEPLOY_MODE="local"
-    else
-        DEPLOY_MODE="remote"
-    fi
+DRY_RUN=0
+[[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
+
+LOCAL_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "${LOCAL_DIR}"
+
+# ClearAllForwardings: the "oci" host entry opens DB tunnels we don't want here.
+SSH_OPTS=(-i "${SSH_KEY}" -o StrictHostKeyChecking=accept-new -o ClearAllForwardings=yes -o ConnectTimeout=15)
+RSYNC_SSH="ssh ${SSH_OPTS[*]}"
+remote() { ssh "${SSH_OPTS[@]}" "${REMOTE_HOST}" "$@"; }
+
+echo "==> Pre-flight checks"
+[[ -f "${SSH_KEY}" ]] || { echo "❌ SSH key not found: ${SSH_KEY} (set SSH_KEY=...)"; exit 1; }
+for f in public/data/cameras.js public/data/districts.js public/data/makaf_paths.js server/.env; do
+    [[ -f "$f" ]] || { echo "❌ Missing $f (not in git; copy it into this working copy first)"; exit 1; }
+done
+if [[ -n "$(git status --porcelain)" ]]; then
+    echo "⚠️  Uncommitted changes will be deployed:"
+    git status --short | sed 's/^/     /'
+fi
+echo "    deploying $(git rev-parse --abbrev-ref HEAD) @ $(git rev-parse --short HEAD)"
+remote true || { echo "❌ Cannot reach ${REMOTE_HOST}"; exit 1; }
+
+echo "==> Building frontend"
+# Build outside the repo so the tracked dist/ is left untouched.
+BUILD_DIR="$(mktemp -d)"
+trap 'rm -rf "${BUILD_DIR}"' EXIT
+npx vite build --base="${BASE_PATH}" --outDir "${BUILD_DIR}" --emptyOutDir --logLevel warn
+for f in index.html app.js auth.js min_minasm.js exit_points.js data/cameras.js data/districts.js data/makaf_paths.js; do
+    [[ -f "${BUILD_DIR}/$f" ]] || { echo "❌ Build is missing $f"; exit 1; }
+done
+echo "$(git rev-parse --short HEAD) $(date -u +%FT%TZ)" > "${BUILD_DIR}/version.txt"
+
+RSYNC_KEEP=(-az --exclude .DS_Store -e "${RSYNC_SSH}")   # add/update only
+[[ ${DRY_RUN} -eq 1 ]] && RSYNC_KEEP+=(--dry-run --itemize-changes)
+RSYNC_FLAGS=("${RSYNC_KEEP[@]}" --delete)    # mirror
+
+if [[ ${DRY_RUN} -eq 0 ]]; then
+    echo "==> Backing up current deployment on the VM"
+    STAMP="$(date +%Y%m%d-%H%M%S)"
+    remote "mkdir -p '${BACKUP_DIR}' && cd '${REMOTE_DIR}' && \
+        tar -czf '${BACKUP_DIR}/${STAMP}.tgz' --exclude=node_modules dist server && \
+        ls -1t '${BACKUP_DIR}'/*.tgz | tail -n +11 | xargs -r rm -f"
+    echo "    ${BACKUP_DIR}/${STAMP}.tgz"
 fi
 
-if [[ "${DEPLOY_MODE}" != "local" && "${DEPLOY_MODE}" != "remote" ]]; then
-    echo "❌ Invalid DEPLOY_MODE='${DEPLOY_MODE}'. Use: auto, local, or remote."
+echo "==> Uploading frontend build → ${REMOTE_DIR}/dist"
+rsync "${RSYNC_FLAGS[@]}" "${BUILD_DIR}/" "${REMOTE_HOST}:${REMOTE_DIR}/dist/"
+
+echo "==> Uploading server code → ${REMOTE_DIR}/server"
+# server/data is excluded here (and synced below without --delete) so files
+# that only exist on the VM are kept. .env and node_modules stay VM-specific.
+rsync "${RSYNC_FLAGS[@]}" \
+    --exclude node_modules --exclude .env --exclude data/ \
+    server/ "${REMOTE_HOST}:${REMOTE_DIR}/server/"
+rsync "${RSYNC_KEEP[@]}" server/data/ "${REMOTE_HOST}:${REMOTE_DIR}/server/data/"
+
+if [[ ${DRY_RUN} -eq 1 ]]; then
+    echo "Dry run: nothing changed on the VM."
+    exit 0
+fi
+
+echo "==> Checking server/.env on the VM"
+if remote "test -f '${REMOTE_DIR}/server/.env'"; then
+    echo "    present (kept as is)"
+else
+    echo "    missing: creating it from the local server/.env (database → 127.0.0.1:5432)"
+    sed -e 's/^PGHOST=.*/PGHOST=127.0.0.1/' -e 's/^PGPORT=.*/PGPORT=5432/' -e '/^JWT_SECRET=/d' server/.env \
+        | remote "umask 077 && cat > '${REMOTE_DIR}/server/.env'"
+fi
+# Without JWT_SECRET the server falls back to a hard-coded key.
+remote "grep -q '^JWT_SECRET=.' '${REMOTE_DIR}/server/.env' || \
+    { printf '\nJWT_SECRET=%s\n' \"\$(openssl rand -hex 32)\" >> '${REMOTE_DIR}/server/.env' && echo '    added JWT_SECRET (users must sign in again)'; }
+    chmod 600 '${REMOTE_DIR}/server/.env'"
+
+echo "==> Installing server dependencies and restarting PM2 app '${PM2_APP}'"
+# Login shell + nvm so node/npm/pm2 are on PATH.
+remote "bash -lc '
+    set -e
+    [ -s \"\$HOME/.nvm/nvm.sh\" ] && . \"\$HOME/.nvm/nvm.sh\" >/dev/null
+    cd \"${REMOTE_DIR}/server\"
+    npm ci --omit=dev --no-audit --no-fund --loglevel=error
+    pm2 restart \"${PM2_APP}\" --update-env >/dev/null
+    pm2 save >/dev/null
+'"
+
+echo "==> Health check"
+ok=0
+for _ in $(seq 1 15); do
+    if remote "curl -fsS http://127.0.0.1:${APP_PORT}/maan-dashboard/api/db-health >/dev/null && \
+               curl -fsS -o /dev/null http://127.0.0.1:${APP_PORT}/maan-dashboard/"; then
+        ok=1; break
+    fi
+    sleep 2
+done
+if [[ ${ok} -eq 1 ]]; then
+    echo "    app and database OK ($(remote "cat '${REMOTE_DIR}/dist/version.txt'"))"
+    echo ""
+    echo "Done. Live at: ${PUBLIC_URL}"
+else
+    echo "❌ Health check failed. Recent logs:"
+    remote "bash -lc '. \"\$HOME/.nvm/nvm.sh\" >/dev/null; pm2 logs \"${PM2_APP}\" --lines 30 --nostream'" || true
+    echo ""
+    echo "Roll back with:"
+    echo "  ssh oci 'cd ${REMOTE_DIR} && rm -rf dist server && tar -xzf ${BACKUP_DIR}/${STAMP}.tgz && cd server && npm ci --omit=dev && pm2 restart ${PM2_APP}'"
     exit 1
 fi
-
-echo "==> Deploy mode: ${DEPLOY_MODE}"
-
-echo "==> Regenerating data modules..."
-cd "${LOCAL_DIR}"
-npm run generate-data
-
-echo "==> Building locally..."
-npm run build -- --base="${BASE_PATH}"
-
-DIST_DIR="${LOCAL_DIR}/dist"
-
-echo "==> Copying extra assets into dist/..."
-cp "${LOCAL_DIR}/public/app.js"          "${DIST_DIR}/app.js"
-cp "${LOCAL_DIR}/public/auth.js"         "${DIST_DIR}/auth.js" 2>/dev/null || true
-cp "${LOCAL_DIR}/public/min_minasm.js"   "${DIST_DIR}/min_minasm.js"
-cp "${LOCAL_DIR}/public/exit_points.js"  "${DIST_DIR}/exit_points.js"
-mkdir -p "${DIST_DIR}/data"
-cp "${LOCAL_DIR}/server/data/data.js"         "${DIST_DIR}/data/data.js"
-cp "${LOCAL_DIR}/server/data/assign_camps.js" "${DIST_DIR}/data/assign_camps.js"
-cp "${LOCAL_DIR}/server/data/assign_residences.js" "${DIST_DIR}/data/assign_residences.js"
-cp "${LOCAL_DIR}/server/data/"*.png           "${DIST_DIR}/data/" 2>/dev/null || true
-
-echo "==> Patching asset paths in dist/index.html..."
-python3 - <<'PYDEPLOY'
-from pathlib import Path
-import re
-index_path = Path('dist/index.html')
-html = index_path.read_text()
-html = re.sub(r'/maan-dashboard/assets/%D8%B4%D8%B9%D8%A7%D8%B1%20%D8%A7%D9%84%D9%87%D9%8A%D8%A6%D8%A9%20%D8%A7%D9%84%D9%85%D9%84%D9%83%D9%8A%D8%A9-[^" ]+\.png', 'data/%D8%B4%D8%B9%D8%A7%D8%B1%20%D8%A7%D9%84%D9%87%D9%8A%D8%A6%D8%A9%20%D8%A7%D9%84%D9%85%D9%84%D9%83%D9%8A%D8%A9.png', html)
-html = re.sub(r'/maan-dashboard/assets/%D8%B4%D8%B9%D8%A7%D8%B1%20%D8%A7%D9%84%D9%85%D8%B1%D9%83%D8%B2%20%D8%A7%D9%84%D8%B9%D8%A7%D9%85%20%D9%84%D9%84%D9%86%D9%82%D9%84-[^" ]+\.png', 'data/%D8%B4%D8%B9%D8%A7%D8%B1%20%D8%A7%D9%84%D9%85%D8%B1%D9%83%D8%B2%20%D8%A7%D9%84%D8%B9%D8%A7%D9%85%20%D9%84%D9%84%D9%86%D9%82%D9%84.png', html)
-html = re.sub(r'/maan-dashboard/assets/alliance-logo-[^" ]+\.png', 'data/alliance-logo.png', html)
-index_path.write_text(html)
-print("  index.html patched.")
-PYDEPLOY
-
-if [[ "${DEPLOY_MODE}" == "local" ]]; then
-    echo "==> Syncing dist/ to local live path: ${LOCAL_LIVE_DIST} ..."
-    mkdir -p "${LOCAL_LIVE_DIST}"
-    rsync -az --delete "${DIST_DIR}/" "${LOCAL_LIVE_DIST}/"
-
-    if [[ "${LOCAL_DIR}" != "${LOCAL_LIVE_DIR}" ]]; then
-        echo "==> Syncing source to local frontend path: ${LOCAL_LIVE_DIR} ..."
-        rsync -az --delete \
-            --exclude '.git' \
-            --exclude 'node_modules' \
-            --exclude 'dist' \
-            --exclude 'dist.bak' \
-            "${LOCAL_DIR}/" "${LOCAL_LIVE_DIR}/"
-    fi
-
-    echo "==> Restarting local PM2 app '${PM2_APP}'..."
-    pm2 restart "${PM2_APP}"
-
-    if pm2 describe "${PM2_FE_APP}" >/dev/null 2>&1; then
-        echo "==> Restarting local PM2 frontend app '${PM2_FE_APP}'..."
-        pm2 restart "${PM2_FE_APP}"
-    fi
-
-    pm2 save
-else
-    if [[ ! -f "${SSH_KEY}" ]]; then
-        echo "❌ SSH key not found: ${SSH_KEY}"
-        echo "   Set a valid key, e.g.: SSH_KEY=~/.ssh/your_key ./deploy-planning.sh"
-        exit 1
-    fi
-
-    echo "==> Uploading dist/ to ${REMOTE_HOST}:${REMOTE_DIST} ..."
-    rsync -az --delete \
-        -e "ssh ${SSH_OPTS}" \
-        "${DIST_DIR}/" \
-        "${REMOTE_HOST}:${REMOTE_DIST}/"
-
-    echo "==> Restarting PM2 app '${PM2_APP}' on remote host..."
-    # Run via a login shell so nvm / npm-global bin dirs are on PATH; fall back
-    # to common install locations if 'pm2' still isn't found on PATH.
-    REMOTE_RESTART_CMD='
-        if ! command -v pm2 >/dev/null 2>&1 && [ -s "$HOME/.nvm/nvm.sh" ]; then
-            . "$HOME/.nvm/nvm.sh"
-        fi
-        PM2_BIN="$(command -v pm2 || true)"
-        for c in "$HOME"/.nvm/versions/node/*/bin/pm2 /usr/local/bin/pm2 /usr/bin/pm2; do
-            [ -n "$PM2_BIN" ] && break
-            [ -x "$c" ] && PM2_BIN="$c"
-        done
-        [ -z "$PM2_BIN" ] && { echo "pm2 not found on remote host" >&2; exit 1; }
-        "$PM2_BIN" restart '"${PM2_APP}"' && "$PM2_BIN" save
-    '
-    ssh ${SSH_OPTS} "${REMOTE_HOST}" "bash -l -c '${REMOTE_RESTART_CMD}'"
-fi
-
-echo ""
-echo "Done. Live at: http://maan.firstcity.ai/maan-dashboard/"

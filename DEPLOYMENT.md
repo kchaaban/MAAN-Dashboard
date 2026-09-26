@@ -1,95 +1,54 @@
 # Deployment Guide
 
-This project uses one script for production publishing:
+Production runs on the OCI VM (`maan.firstcity.ai`, `130.110.108.187`, user `ubuntu`):
 
-- `deploy-planning.sh`
+- PM2 app `maan-dashboard` runs `server/index.js` from `/home/ubuntu/maan-dashboard` on port 3100.
+- The server serves both the API (`/maan-dashboard/api/*`) and the built frontend (`dist/`).
+- nginx proxies `https://maan.firstcity.ai/maan-dashboard/` to `127.0.0.1:3100`.
+- The server reads the `transport` database on the same VM (`127.0.0.1:5432`).
 
-The script now supports both local-VM deployment and remote SSH deployment.
+## Deploy
 
-## Quick Start (This VM)
-
-Run from project root:
-
-```bash
-bash deploy-planning.sh
-```
-
-What this does:
-
-1. Regenerates data modules (`npm run generate-data`)
-2. Builds production assets with base path `/maan-dashboard/`
-3. Syncs `dist/` to local live path `/home/ubuntu/maan-dashboard.bak/dist`
-4. Restarts PM2 app `maan-dashboard`
-5. Saves PM2 process list
-
-Live URL:
-
-- `http://maan.firstcity.ai/maan-dashboard/`
-
-## Deploying from a MacBook / dev machine
-
-`auto` mode detects there is no local live directory and switches to `remote`
-mode automatically, so from your Mac you can just run:
+From a dev machine, in the repo root:
 
 ```bash
-bash deploy-planning.sh
+./deploy-planning.sh            # or: npm run deploy
+./deploy-planning.sh --dry-run  # build and list what would change on the VM
 ```
 
-This builds locally (needs Node + `npm install` first) and rsyncs `dist/` over
-SSH to the production host, then restarts PM2 there.
+The script:
 
-Remote target (defaults, override with env vars):
+1. Checks the SSH key, the untracked data files (`public/data/*.js`, `server/.env`) and warns about uncommitted changes.
+2. Builds the frontend into a temporary folder (the tracked `dist/` is not touched) and writes `version.txt` with the commit.
+3. Backs up the VM's `dist/` and `server/` to `~/maan-dashboard-backups/<timestamp>.tgz` (keeps the last 10).
+4. Rsyncs the build to `dist/` and the server code to `server/`. `server/data/` is only added to, never deleted from. `server/.env` and `node_modules` stay as they are on the VM.
+5. On the first deploy, creates the VM's `server/.env` from the local one, pointing the database at `127.0.0.1:5432`. Adds a random `JWT_SECRET` if there is none. The file is never overwritten afterwards, so edit it on the VM to change production settings.
+6. Runs `npm ci --omit=dev` in `server/`, restarts PM2 with `--update-env` and saves the process list.
+7. Checks `/maan-dashboard/api/db-health` and the page itself. If either fails, it prints the PM2 logs and the rollback command.
 
-- `REMOTE_HOST=ubuntu@130.110.108.187` (`maan.firstcity.ai`, OCI)
-- `REMOTE_DIR=/home/ubuntu/maan-dashboard`
-- `SSH_KEY=~/.ssh/ssh-key-2025-07-21-traffic-analysis.key`
+Settings (env vars): `REMOTE_HOST`, `REMOTE_DIR`, `BACKUP_DIR`, `SSH_KEY` (default `~/.ssh/bus-data-analysis_key.pem`), `PM2_APP`, `APP_PORT`.
 
-## Deployment Modes
-
-Default mode is `auto`.
-
-- `auto`: uses local mode if the local live directory exists (i.e. you are on
-  the prod VM), otherwise remote mode
-- `local`: deploy directly on the current VM (no SSH key needed)
-- `remote`: deploy to the production host over SSH
-
-Examples:
+## Verify
 
 ```bash
-# Auto-detect mode (recommended)
-bash deploy-planning.sh
-
-# Force remote mode with a different key
-DEPLOY_MODE=remote SSH_KEY=~/.ssh/your_key bash deploy-planning.sh
-
-# Force local mode (only on the VM)
-DEPLOY_MODE=local bash deploy-planning.sh
+curl -s https://maan.firstcity.ai/maan-dashboard/version.txt
+curl -s https://maan.firstcity.ai/maan-dashboard/api/db-health
 ```
 
-## Safe Usage Checklist
-
-1. Run from repo root: `/home/ubuntu/maan-dashboard`
-2. Confirm no failing changes before deploy:
+## Roll back
 
 ```bash
-git status --short
+ssh oci 'cd ~/maan-dashboard && rm -rf dist server && tar -xzf ~/maan-dashboard-backups/<timestamp>.tgz \
+  && cd server && npm ci --omit=dev && pm2 restart maan-dashboard'
 ```
 
-3. Deploy:
+## Not deployed by the script
 
-```bash
-bash deploy-planning.sh
-```
-
-4. Verify:
-
-```bash
-curl -I http://maan.firstcity.ai/maan-dashboard/
-curl -I "http://maan.firstcity.ai/maan-dashboard/data/cameras.js?v=20260610"
-```
+- Route generation and optimization are offline jobs (see `server/sql/routing/README.md`). Long runs go on the VM from `~/routegen`.
+- Database schema changes (`server/sql/`) are applied by hand.
 
 ## Troubleshooting
 
-- `SSH key not found`: use local mode on this VM or provide a valid `SSH_KEY` for remote mode.
-- `File not found` for GeoJSON exit paths: current behavior is warning-only in full generation unless `exit-paths` is explicitly requested.
-- PM2 process name mismatch: check running apps with `pm2 list` and update `PM2_APP` in `deploy-planning.sh` if needed.
+- `Missing public/data/...`: these GIS layers are not in git. Copy them into the working copy before deploying.
+- Health check fails with a database error: check `PGHOST`/`PGPORT`/credentials in the VM's `server/.env`.
+- `pm2 logs maan-dashboard` on the VM shows server errors.
