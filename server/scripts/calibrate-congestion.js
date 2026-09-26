@@ -1,6 +1,9 @@
 // Fits the optimizer's congestion model to the Hajj 1446 GPS history.
 //
-//   node scripts/calibrate-congestion.js [--min-length 300] [--interval 9]
+//   node scripts/calibrate-congestion.js [--min-length 300] [--interval 9] [--profile v1|v2]
+//
+// --profile v2 uses the stop-inclusive speeds of step 08 (what the routing
+// costs use since step 09); v1 the moving-only speeds of 02b.
 //
 // For each edge, direction and 15-min slot of 7–9 Dhul Hijjah 1446 it takes
 //   slowdown  y = free-flow time / observed time − 1
@@ -19,11 +22,15 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env'), quiet: true });
 const { Pool } = require('pg');
 
-const args = { 'min-length': 300, interval: 9, alpha: 0.5, bins: 20 };
+const args = { 'min-length': 300, interval: 9, alpha: 0.5, bins: 20, profile: 'v1' };
 process.argv.slice(2).forEach((a, i, all) => {
     const key = a.replace(/^--/, '');
-    if (key in args) args[key] = Number(all[i + 1]);
+    if (key in args) args[key] = key === 'profile' ? all[i + 1] : Number(all[i + 1]);
 });
+// Speed table and the condition for a slot to count, per profile.
+const SPEEDS = args.profile === 'v2'
+    ? { table: 'routing.edge_speed_profile_v2', ok: 'time_s >= 120 AND dist_m >= 200 AND speed_kmh >= 1' }
+    : { table: 'routing.edge_speed_profile', ok: 'n_points >= 10 AND speed_kmh >= 2' };
 
 const LANE_BUSES_PER_SLOT = 1800 / 4 / 2.5;
 const DEFAULT_LANES = { motorway: 3, trunk: 3, primary: 2, secondary: 2, tertiary: 1 };
@@ -42,20 +49,19 @@ async function loadObservations() {
     const { rows } = await net.query(`
         WITH ff AS (
             SELECT edge_id, dir, percentile_cont(0.85) WITHIN GROUP (ORDER BY speed_kmh) AS ff_kmh
-            FROM routing.edge_speed_profile
-            WHERE n_points >= 10
+            FROM ${SPEEDS.table}
+            WHERE ${SPEEDS.ok}
             GROUP BY 1, 2
             HAVING count(*) >= 20
         )
         SELECT e.highway, e.lanes, e.length_m, p.speed_kmh, ff.ff_kmh, coalesce(f.n_buses, 0) AS n_buses
-        FROM routing.edge_speed_profile p
+        FROM ${SPEEDS.table} p
         JOIN ff USING (edge_id, dir)
         JOIN routing.edge e ON e.id = p.edge_id
         LEFT JOIN routing.edge_flow f USING (edge_id, dir, slot)
         WHERE e.length_m >= $1
           AND e.highway = ANY($2)
-          AND p.n_points >= 10
-          AND p.speed_kmh >= 2
+          AND ${SPEEDS.ok.replace(/(time_s|dist_m|speed_kmh|n_points)/g, 'p.$1')}
           AND p.slot >= TIMESTAMPTZ '2025-06-03 00:00+03' AND p.slot < TIMESTAMPTZ '2025-06-06 00:00+03'`,
         [args['min-length'], CLASSES]);
     return rows.map(r => {

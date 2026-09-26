@@ -143,7 +143,7 @@ async function shortestPath(from, to, bbox, penalties) {
 let speedProfileExists = null;
 async function hasSpeedProfile() {
     if (speedProfileExists === null) {
-        const { rows: [r] } = await net.query(`SELECT to_regclass('routing.edge_speed_profile') IS NOT NULL AS ok`);
+        const { rows: [r] } = await net.query(`SELECT to_regclass('routing.edge_slot_speed') IS NOT NULL AS ok`);
         speedProfileExists = r.ok;
     }
     return speedProfileExists;
@@ -173,16 +173,18 @@ async function describePath(path) {
             ), slots AS (
                 SELECT DISTINCT slot FROM routing.edge_speed_profile
             )
+            -- Per-slot stop-inclusive speed (routing.edge_slot_speed, step 09) where the
+            -- slot has enough history, else the edge's all-day cost.
             SELECT s.slot,
-                   sum(CASE WHEN sp.n_points >= 5 AND sp.speed_kmh >= 3
+                   sum(CASE WHEN sp.speed_kmh IS NOT NULL
                             THEN e.length_m / (sp.speed_kmh / 3.6)
                             ELSE CASE WHEN p.dir = 1 THEN c.cost_s ELSE c.reverse_cost_s END END) AS travel_s,
-                   sum(e.length_m) FILTER (WHERE sp.n_points >= 5) / sum(e.length_m) AS observed_share
+                   coalesce(sum(e.length_m) FILTER (WHERE sp.speed_kmh IS NOT NULL), 0) / sum(e.length_m) AS observed_share
             FROM p
             CROSS JOIN slots s
             JOIN routing.edge e ON e.id = p.edge_id
             JOIN ${costColumns.table} c ON c.id = p.edge_id
-            LEFT JOIN routing.edge_speed_profile sp
+            LEFT JOIN routing.edge_slot_speed sp
                    ON sp.edge_id = p.edge_id AND sp.dir = p.dir AND sp.slot = s.slot
             GROUP BY s.slot`,
             [path.edgeIds, path.edgeDirs]));

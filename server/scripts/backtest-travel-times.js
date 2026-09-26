@@ -38,7 +38,7 @@ const net = new Pool({
 const V2_SPEED = (alias, dir, minTime) => `(SELECT e.length_m / (v.speed_kmh / 3.6) FROM routing.${alias} v
      WHERE v.edge_id = e.id AND v.dir = ${dir} AND v.time_s >= ${minTime} AND v.dist_m >= 200 AND v.speed_kmh >= 1`;
 const STATIC_SQL = PROFILE === 'v1'
-    ? 'SELECT id, source, target, cost_s AS cost, reverse_cost_s AS reverse_cost FROM routing.edge_cost'
+    ? 'SELECT id, source, target, cost_s AS cost, reverse_cost_s AS reverse_cost FROM routing.edge_cost_v1'
     : `SELECT e.id, e.source, e.target,
               CASE WHEN c.cost_s < 0 THEN -1 ELSE coalesce(${V2_SPEED('edge_speed_static_v2', 1, 600)}), c.cost_s) END AS cost,
               CASE WHEN c.reverse_cost_s < 0 THEN -1 ELSE coalesce(${V2_SPEED('edge_speed_static_v2', -1, 600)}), c.reverse_cost_s) END AS reverse_cost
@@ -57,7 +57,7 @@ const slotSql = (slotIso) => PROFILE === 'v2' ? `
            CASE WHEN c.cost_s < 0 THEN -1 ELSE coalesce(e.length_m / (pf.speed_kmh / 3.6), c.cost_s) END AS cost,
            CASE WHEN c.reverse_cost_s < 0 THEN -1 ELSE coalesce(e.length_m / (pr.speed_kmh / 3.6), c.reverse_cost_s) END AS reverse_cost
     FROM routing.edge e
-    JOIN routing.edge_cost c ON c.id = e.id
+    JOIN routing.edge_cost_v1 c ON c.id = e.id
     LEFT JOIN routing.edge_speed_profile pf ON pf.edge_id = e.id AND pf.dir = 1 AND pf.slot = '${slotIso}'
          AND pf.n_points >= 5 AND pf.speed_kmh >= 3
     LEFT JOIN routing.edge_speed_profile pr ON pr.edge_id = e.id AND pr.dir = -1 AND pr.slot = '${slotIso}'
