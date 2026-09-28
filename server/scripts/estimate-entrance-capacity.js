@@ -208,6 +208,7 @@ async function estimate() {
         await client.query('DELETE FROM routing.entrance_capacity_estimate');
         const method = {
             source: 'your_db.public.hajj_days_2, 7–10 Dhul Hijjah 1446', approach_m: APPROACH_M,
+            entry: 'crossing where the bus slowed to ≤ 15 km/h within 2 min; a bus counts once per 60 min per entrance',
             capacity_per_hour: 'busiest rolling 60 min of bus entries (a lower bound)',
             capacity_per_15min: 'busiest 15-min slot',
             at_capacity: `≥ 2 slots of the peak hour with median approach ≥ ${SAT_APPROACH_S} s and ≤ ${SAT_MAX_KMH} km/h`,

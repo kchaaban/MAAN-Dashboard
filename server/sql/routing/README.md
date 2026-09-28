@@ -11,12 +11,13 @@ databases, so no cross-database link (postgres_fdw/dblink) is needed.
 | `02a_gps_bins.sql` | your_db | postgres | GPS points binned to ~20 m cell × heading × 15-min slot (`routing.gps_bin`, ~9 min) |
 | `02b_speed_profiles.sql` | your_db | postgres | bins matched to edges; observed speed per edge, direction and slot (`routing.edge_speed_profile`, ~2 min) |
 | `03_candidates.sql` | transport | postgres | `routing.od_pair`, `route_candidate`, `route_candidate_slot`, `plan_route` |
-| `scripts/generate-route-candidates.js` | both | ro_user reads, PGW_USER writes | up to k diverse routes per residence → entrance pair. Road hierarchy: major roads (motorway/trunk/primary) priced by 1446 time, other roads by free-flow time × `--local-weight` (default 3); keeps out of `data/geofences_to_avoid.geojson` (Mina, Arafat) with `--avoid-penalty` (default 5×; 0 = ban). `--residence` / `--geojson-out` for testing |
+| `scripts/generate-route-candidates.js` | both | ro_user reads, PGW_USER writes | up to k diverse routes per residence → entrance pair. Road hierarchy: major roads (motorway/trunk/primary) priced by 1446 time, other roads by free-flow time × `--local-weight` (default 3); keeps out of `data/geofences_to_avoid_v2.geojson` (Mina, Arafat): roads touching them are banned by default (`--avoid-penalty 0`; a positive value makes them that many × dearer instead); the optimizer drops any candidate running more than `--avoid-max-m` (default 0 m) inside. `--residence` / `--geojson-out` for testing |
 | `04_optimizer.sql` | transport | postgres | `routing.optimization_run`, `routing.plan_dispatch` |
 | `scripts/optimize-routes.js` | both | ro_user reads, PGW_USER writes | route + departure slots per plan (MILP, HiGHS) |
 | `05_edge_flow.sql` | your_db | postgres | distinct 1446 buses per edge, direction and slot (`routing.edge_flow`, ~8 min, run on the VM) |
 | `scripts/calibrate-congestion.js` | your_db | ro_user | fits the BPR congestion curve to 1446 speeds vs bus flow |
 | `06_entrance_flow.sql` | your_db | postgres | buses entering each entrance per 15-min slot in 1446 (`routing.entrance_entry`, `entrance_flow_slot`; run on the VM) |
+| `06b_entrance_entries.sql` | your_db | postgres | pass 2 of step 6, run by it: gate entries only (bus slowed to ≤ 15 km/h), each bus once per hour; rerun alone while `routing.entrance_pts` exists |
 | `scripts/estimate-entrance-capacity.js` | both | PGW_USER | `--step prepare` writes entrance zones to your_db; `--step estimate` writes `transport.routing.entrance_capacity_estimate` for review (never `entrances.capacity`) |
 | `scripts/h3-cluster-analysis.js` | both | ro_user | read-only: how residences group into H3 cells and what a cell-level route would cost (needs the `h3` extension in transport) |
 

@@ -316,6 +316,18 @@ app.get('/maan-dashboard/api/routing/runs', authenticateToken, async (req, res) 
     }
 });
 
+// The zones route generation and the optimizer keep out of (the Mashaer), for
+// drawing on the map; the same file the scripts read by default.
+app.get('/maan-dashboard/api/routing/avoid-zones', authenticateToken, async (req, res) => {
+    try {
+        const file = path.join(__dirname, 'data', 'geofences_to_avoid_v2.geojson');
+        res.type('application/geo+json').send(await fs.promises.readFile(file, 'utf8'));
+    } catch (err) {
+        console.error('[api] avoid zones failed:', err.message);
+        res.status(500).json({ error: 'Avoid zones unavailable' });
+    }
+});
+
 app.get('/maan-dashboard/api/routing/runs/:id', authenticateToken, async (req, res) => {
     if (!req.user.scope) {
         return res.status(401).json({ error: 'Session predates access scoping; please sign in again' });

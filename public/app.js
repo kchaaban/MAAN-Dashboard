@@ -7352,6 +7352,8 @@ function togglePlanHeatmap() {
 const optView = {
     active: false, runs: null, runId: null, data: null, error: '',
     scenario: 'optimized', hour: 'all', chart: null,
+    // Avoid zones overlay (testing aid): drawn under the routes, never clickable.
+    showAvoid: false, avoidLayer: null,
 };
 const OPT_SCENARIOS = [
     { key: 'baseline', label: 'خط الأساس' },
@@ -7383,6 +7385,7 @@ async function toggleOptimizationView() {
     }
     document.body.classList.toggle('opt-view-on', optView.active);
     renderMakafPaths();
+    renderAvoidZones();
     if (!optView.active) {
         clearOptimizationPanel();
     } else if (!optView.runs) {
@@ -7410,8 +7413,12 @@ async function selectOptimizationRun(runId) {
     optCandidateCellCache.clear();
     renderOptimizationPanel();
     try {
-        optView.data = await optFetch(`/maan-dashboard/api/routing/runs/${runId}`);
+        const data = await optFetch(`/maan-dashboard/api/routing/runs/${runId}`);
+        // A later pick may have landed first: keep only the run still selected.
+        if (optView.runId !== runId) return;
+        optView.data = data;
     } catch (error) {
+        if (optView.runId !== runId) return;
         optView.error = 'تعذّر تحميل تفاصيل التشغيل';
         console.error('optimization run:', error.message);
     }
@@ -7590,6 +7597,32 @@ function renderOptimizationRoutes() {
     if (bounds.isValid() && (selectedPlanId || hasActiveMapFilter())) fitMapToGeometry(bounds);
 }
 
+// Shows or hides the avoid zones; the file is fetched once, on first show.
+async function renderAvoidZones() {
+    const show = optView.active && optView.showAvoid;
+    if (!show) {
+        if (optView.avoidLayer) map.removeLayer(optView.avoidLayer);
+        return;
+    }
+    if (!optView.avoidLayer) {
+        try {
+            const geojson = await optFetch('/maan-dashboard/api/routing/avoid-zones');
+            // Own pane below the overlay pane (400), so the routes always draw on top.
+            if (!map.getPane('avoidZones')) map.createPane('avoidZones').style.zIndex = 350;
+            optView.avoidLayer = L.geoJSON(geojson, {
+                pane: 'avoidZones',
+                interactive: false,
+                style: { color: '#ef4444', weight: 2, dashArray: '6 4', fillColor: '#ef4444', fillOpacity: 0.12 },
+            });
+        } catch (error) {
+            console.error('avoid zones:', error.message);
+            return;
+        }
+    }
+    // The toggle may have been switched off while the file was loading.
+    if (optView.active && optView.showAvoid) optView.avoidLayer.addTo(map);
+}
+
 function clearOptimizationPanel() {
     const host = document.getElementById('optPanel');
     if (host) { host.hidden = true; host.innerHTML = ''; }
@@ -7696,7 +7729,7 @@ function renderOptimizationPanel() {
     const runs = optView.runs || [];
     const runOptions = runs.map(r => `
         <option value="${r.id}"${r.id === optView.runId ? ' selected' : ''} title="${escapeHtml(r.notes || '')}">
-            #${r.id}${/^recommended/i.test(r.notes || '') ? ' ★ موصى به' : ''} — β ${r.params.beta} · سعة ${r.params['capacity-share']}
+            #${r.id}${/^recommended/i.test(r.notes || '') ? ' ★ موصى به' : ''} — مسارات ${r.generation_run_id} · β ${r.params.beta} · سعة ${r.params['capacity-share']}
         </option>`).join('');
     let body;
     if (optView.error) body = `<div class="map-legend-hint">${escapeHtml(optView.error)}</div>`;
@@ -7729,6 +7762,10 @@ function renderOptimizationPanel() {
                 <span><i class="opt-dot" style="border-color:${OPT_COLORS.current}"></i>المسار الحالي (OSM، للخطة المختارة)</span>
                 ${optView.hour !== 'all' ? `<span><i class="opt-dot" style="border-color:${OPT_COLORS.same}"></i>لا انطلاق في هذه الساعة</span>` : ''}
             </div>
+            <label class="opt-field opt-avoid-toggle" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" id="optAvoidToggle"${optView.showAvoid ? ' checked' : ''}>
+                <span>إظهار مناطق التجنب (المشاعر) — للاختبار</span>
+            </label>
             <div class="map-legend-sub opt-count">${inView.length.toLocaleString()} خطة معروضة · ${changed.toLocaleString()} تغيّر مسارها</div>
             ${optPlanDetail()}`;
     }
@@ -7744,6 +7781,10 @@ function renderOptimizationPanel() {
         optView.hour = e.target.value;
         cachedMapRenderKey = null;
         updateMap();
+    });
+    host.querySelector('#optAvoidToggle')?.addEventListener('change', (e) => {
+        optView.showAvoid = e.target.checked;
+        renderAvoidZones();
     });
     host.querySelectorAll('[data-opt-scenario]').forEach(btn => btn.addEventListener('click', () => {
         optView.scenario = btn.dataset.optScenario;

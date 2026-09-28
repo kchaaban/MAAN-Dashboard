@@ -15,10 +15,11 @@
 // would return near-identical variants differing by one side street.
 //
 // --avoid <geojson>: zones to keep routes out of (the Mashaer: Mina, Arafat).
-// Default data/geofences_to_avoid.geojson; '' = off. Road segments touching
-// them cost --avoid-penalty × their time in the search and ranking (default 5):
-// routes cross only when going around costs more; --avoid-penalty 0 bans them
-// outright. Origins and destinations snap to junctions outside the zones.
+// Default data/geofences_to_avoid_v2.geojson; '' = off. By default
+// (--avoid-penalty 0) road segments touching them are banned outright; a
+// positive --avoid-penalty instead makes them cost that × their time in the
+// search and ranking, so routes cross only when going around costs more.
+// Origins and destinations snap to junctions outside the zones.
 // Road hierarchy, one rule everywhere: major roads (--major-classes, default
 // motorway, trunk, primary and their links) are priced in the search by their
 // observed 1446 time; every other road by its free-flow time × --local-weight
@@ -37,7 +38,7 @@ const { Pool } = require('pg');
 const args = parseArgs(process.argv.slice(2), {
     k: 5, cost: 'observed', penalty: 1.4, 'max-overlap': 0.7, 'max-detour': 0.5,
     'max-iterations': 12, 'max-snap': 400, limit: 0, 'dry-run': false,
-    avoid: 'data/geofences_to_avoid.geojson', 'avoid-penalty': 5,
+    avoid: 'data/geofences_to_avoid_v2.geojson', 'avoid-penalty': 0,
     'major-classes': 'motorway,trunk,primary', 'local-weight': 3,
     residence: '', 'geojson-out': '',
 });

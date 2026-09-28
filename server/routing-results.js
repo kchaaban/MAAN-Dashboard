@@ -7,7 +7,7 @@ const { pool, scopeClause } = require('./db');
 // Run KPIs cover every plan, so only callers who can see every plan get them.
 async function listRuns(scope) {
     const { rows } = await pool.query(`
-        SELECT id, created_at, params, notes, solver_status, solve_seconds,
+        SELECT id, generation_run_id, created_at, params, notes, solver_status, solve_seconds,
                baseline_kpis, optimized_kpis
         FROM routing.optimization_run
         WHERE finished_at IS NOT NULL

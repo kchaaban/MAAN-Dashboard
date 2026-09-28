@@ -18,6 +18,13 @@ const nonNegativeInt = (max) => (value) => {
     return n;
 };
 
+// Optional count of at least 1: an empty field clears it to NULL.
+const optionalPositiveInt = (max) => (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const n = nonNegativeInt(max)(value);
+    return n === undefined || n === 0 ? undefined : n;
+};
+
 const uuid = (value) => (typeof value === 'string' && UUID_RE.test(value) ? value : undefined);
 
 const PARKING_SOURCES = {
@@ -246,7 +253,7 @@ Object.assign(RESOURCES, {
         table: 'entrances', label: 'المداخل', icon: 'fa-door-open',
         scoped: ({ plans }) => `EXISTS (SELECT 1 FROM plans p WHERE p.entrance_id = t.id${plans})`,
         colorBy: { sql: '(SELECT pl.name FROM platforms pl WHERE pl.id = t.platform_id)', label: 'المشعر' },
-        list: ['name', 'asm_code', 'capacity'],
+        list: ['name', 'asm_code', 'capacity', 'gate_lanes'],
         search: ['name', 'asm_code'],
         geom: 'gis',
         anchor: { lon: `COALESCE(t.longitude, ${centroid('X')})`, lat: `COALESCE(t.latitude, ${centroid('Y')})` },
@@ -256,6 +263,8 @@ Object.assign(RESOURCES, {
             name: { validate: requiredText(200), label: 'الاسم', type: 'text', required: true },
             asm_code: { validate: text(40), label: 'رمز ASM', type: 'text' },
             capacity: { validate: nonNegativeInt(1000000), label: 'الطاقة', type: 'number' },
+            // Entering lanes at the gate, counted manually; gate capacity = lanes × per-lane rate.
+            gate_lanes: { validate: optionalPositiveInt(20), label: 'عدد مسارات البوابة', type: 'number' },
             platform_id: { validate: uuid, label: 'المشعر', type: 'select', options: 'platforms', check: fk('platforms') },
         },
     }),
@@ -279,7 +288,7 @@ Object.assign(RESOURCES, {
         table: 'bus_stops', label: 'محطات الحافلات', icon: 'fa-bus-simple',
         scoped: ({ plans }) => `EXISTS (SELECT 1 FROM plans p WHERE p.end_point_type = 'bus_stop' AND p.end_point_id = t.id${plans})`,
         colorBy: { sql: 't.area', label: 'المنطقة' },
-        list: ['name', 'area'],
+        list: ['name', 'area', 'capacity'],
         search: ['name', 'area'],
         geom: 'gis',
         anchor: { lon: centroid('X'), lat: centroid('Y') },
@@ -287,6 +296,8 @@ Object.assign(RESOURCES, {
         columns: {
             name: { validate: requiredText(200), label: 'الاسم', type: 'text', required: true },
             area: { validate: text(120), label: 'المنطقة', type: 'text' },
+            // Pilgrims per prayer, from the 1446 station capacity table.
+            capacity: { validate: nonNegativeInt(1000000), label: 'الطاقة (حاج/صلاة)', type: 'number' },
         },
     }),
     bus_warehouses: referenceResource({
