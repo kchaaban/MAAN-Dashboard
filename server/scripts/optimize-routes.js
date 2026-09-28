@@ -131,8 +131,8 @@ function slotLabel(slot) {
 async function loadInputs() {
     const { rows: [gen] } = await db.query(
         args['generation-run'] > 0
-            ? 'SELECT id FROM routing.generation_run WHERE id = $1'
-            : 'SELECT id FROM routing.generation_run WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1',
+            ? 'SELECT id, params FROM routing.generation_run WHERE id = $1'
+            : 'SELECT id, params FROM routing.generation_run WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1',
         args['generation-run'] > 0 ? [args['generation-run']] : []);
     if (!gen) throw new Error('No finished generation run; run generate-route-candidates.js first');
 
@@ -146,7 +146,8 @@ async function loadInputs() {
         JOIN public.plan_types pt ON pt.id = p.plan_type_id
         JOIN public.timing t      ON t.id = p.timing_id
         JOIN public.entrances e   ON e.id = p.entrance_id
-        JOIN routing.od_pair od   ON od.residence_id = p.start_point_id AND od.entrance_id = p.entrance_id
+        -- LEFT: a plan with no residence → entrance pair is skipped and recorded, not silently dropped.
+        LEFT JOIN routing.od_pair od ON od.residence_id = p.start_point_id AND od.entrance_id = p.entrance_id
         WHERE p.start_point_type = 'residence' AND p.number_of_buses > 0`);
 
     // Metres each candidate runs inside the avoid zones.
@@ -167,8 +168,8 @@ async function loadInputs() {
     // Keep only candidates within the zone allowance. A pair left with none
     // has no route; its plans are skipped (and listed) rather than routed in.
     const candidates = allCandidates.filter(c => (c.zone_m = Number(c.zone_m)) <= args['avoid-max-m']);
-    const pairsLeft = new Set(candidates.map(c => c.od_pair_id));
-    const pairsLost = new Set(allCandidates.map(c => c.od_pair_id).filter(id => !pairsLeft.has(id)));
+    const pairsLeft = new Set(candidates.map(c => Number(c.od_pair_id)));
+    const pairsLost = new Set(allCandidates.map(c => Number(c.od_pair_id)).filter(id => !pairsLeft.has(id)));
     if (args.avoid) console.log(`avoid zones: dropped ${allCandidates.length - candidates.length} of ${allCandidates.length} candidates running > ${args['avoid-max-m']} m inside; ${pairsLost.size} pairs left without a route`);
 
     const minDay = Math.min(...plans.map(p => p.start_at_hijri));
@@ -185,7 +186,10 @@ async function loadInputs() {
         FROM routing.edge e JOIN routing.edge_cost c ON c.id = e.id
         WHERE e.id = ANY($1::bigint[])`, [edgeIds]);
 
-    return { generationRunId: gen.id, plans, candidates, slotRows, edges };
+    // Did the generator ban the avoid zones? Then a pair it left without a route
+    // had no path outside them.
+    const genBanned = Boolean(gen.params?.avoid) && !(Number(gen.params['avoid-penalty']) > 0);
+    return { generationRunId: gen.id, plans, candidates, pairsLost, genBanned, slotRows, edges };
 }
 
 // ── Preparation ─────────────────────────────────────────────────────────────
@@ -196,7 +200,7 @@ function laneCapacityPerSlot(edge) {
     return lanes * PCU_PER_LANE_HOUR / 4 / BUS_PCU;
 }
 
-function prepare({ plans, candidates, slotRows, edges }) {
+function prepare({ plans, candidates, pairsLost, genBanned, slotRows, edges }) {
     const edgeById = new Map(edges.map(e => [Number(e.id), e]));
 
     // Route travel time per departure slot; a missing slot falls back to the
@@ -238,8 +242,15 @@ function prepare({ plans, candidates, slotRows, edges }) {
     const planList = [];
     const skipped = [];
     for (const p of plans) {
-        const options = routesByOd.get(Number(p.od_pair_id)) || [];
-        if (!options.length) { skipped.push({ plan: p.plan_id, reason: 'no candidate routes' }); continue; }
+        const options = p.od_pair_id == null ? [] : routesByOd.get(Number(p.od_pair_id)) || [];
+        if (!options.length) {
+            const reason = p.od_pair_id == null ? 'no residence → entrance pair'
+                : pairsLost?.has(Number(p.od_pair_id)) ? 'all routes inside the avoid zones'
+                : genBanned ? 'no path outside the avoid zones'
+                : 'no route in the generation run';
+            skipped.push({ plan: p.plan_id, reason, buses: Number(p.buses) });
+            continue;
+        }
         const first = slotOf(p.start_at_hijri, p.start_at);
         // An end exactly on a slot boundary (08:00) closes the window; 03:59 is inside its slot.
         const [eh, em, es = 0] = String(p.end_at).split(':').map(Number);
@@ -630,10 +641,18 @@ async function main() {
     const relevant = prep.bundleList.filter(b => b.relevant).length;
     console.log(`generation run ${inputs.generationRunId}: ${prep.planList.length} plans, ` +
                 `${prep.routes.size} routes, ${prep.bundleList.length} road bundles (${relevant} can be overloaded)`);
-    prep.skipped.slice(0, 10).forEach(s => console.log(`  skipped plan ${s.plan}: ${s.reason}`));
+    const skippedBuses = prep.skipped.reduce((n, s) => n + s.buses, 0);
+    if (prep.skipped.length) {
+        const byReason = {};
+        prep.skipped.forEach(s => { byReason[s.reason] = (byReason[s.reason] || 0) + 1; });
+        console.log(`skipped ${prep.skipped.length} plans (${skippedBuses} buses): ${JSON.stringify(byReason)}${args['dry-run'] ? '' : '; saved in routing.plan_skipped'}`);
+    }
 
     const baseline = baselineAssignments(prep);
     const baselineKpis = evaluate(baseline, prep);
+    // Skipped plans are in neither scenario, so both carry the same counts.
+    baselineKpis.plans_skipped = prep.skipped.length;
+    baselineKpis.buses_skipped = skippedBuses;
     console.log('baseline  (fastest route, buses spread evenly):', JSON.stringify(baselineKpis));
     const sameYardstick = JSON.stringify(evalParams) === JSON.stringify(modelParams);
 
@@ -662,6 +681,8 @@ async function main() {
         return used && used.route !== p.routes[0];
     }).length;
     optimizedKpis.plans_not_on_fastest_route = changedRoute;
+    optimizedKpis.plans_skipped = prep.skipped.length;
+    optimizedKpis.buses_skipped = skippedBuses;
     console.log('optimized:', JSON.stringify(optimizedKpis));
     if (!sameYardstick) {
         baselineKpis.reference = evaluate(baseline, prep, evalParams);
@@ -696,6 +717,13 @@ async function main() {
                      chunk.map(a => a.hijriDay), chunk.map(a => a.localTime), chunk.map(a => a.buses),
                      chunk.map(a => a.route.travelAt(a.slot))]);
             }
+        }
+        if (prep.skipped.length) {
+            await client.query(`
+                INSERT INTO routing.plan_skipped (run_id, plan_id, reason, buses)
+                SELECT $1, u.plan_id, u.reason, u.buses
+                FROM unnest($2::uuid[], $3::text[], $4::int[]) AS u(plan_id, reason, buses)`,
+                [run.id, prep.skipped.map(s => s.plan), prep.skipped.map(s => s.reason), prep.skipped.map(s => s.buses)]);
         }
         await client.query('COMMIT');
         console.log(`Saved as optimization run ${run.id} (${((Date.now() - t0) / 1000).toFixed(0)} s total)`);

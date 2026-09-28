@@ -12,7 +12,7 @@ databases, so no cross-database link (postgres_fdw/dblink) is needed.
 | `02b_speed_profiles.sql` | your_db | postgres | bins matched to edges; observed speed per edge, direction and slot (`routing.edge_speed_profile`, ~2 min) |
 | `03_candidates.sql` | transport | postgres | `routing.od_pair`, `route_candidate`, `route_candidate_slot`, `plan_route` |
 | `scripts/generate-route-candidates.js` | both | ro_user reads, PGW_USER writes | up to k diverse routes per residence → entrance pair. Road hierarchy: major roads (motorway/trunk/primary) priced by 1446 time, other roads by free-flow time × `--local-weight` (default 3); keeps out of `data/geofences_to_avoid_v2.geojson` (Mina, Arafat): roads touching them are banned by default (`--avoid-penalty 0`; a positive value makes them that many × dearer instead); the optimizer drops any candidate running more than `--avoid-max-m` (default 0 m) inside. `--residence` / `--geojson-out` for testing |
-| `04_optimizer.sql` | transport | postgres | `routing.optimization_run`, `routing.plan_dispatch` |
+| `04_optimizer.sql` | transport | postgres | `routing.optimization_run`, `routing.plan_dispatch`, `routing.plan_skipped` (plans a run could not route, with the reason) |
 | `scripts/optimize-routes.js` | both | ro_user reads, PGW_USER writes | route + departure slots per plan (MILP, HiGHS) |
 | `05_edge_flow.sql` | your_db | postgres | distinct 1446 buses per edge, direction and slot (`routing.edge_flow`, ~8 min, run on the VM) |
 | `scripts/calibrate-congestion.js` | your_db | ro_user | fits the BPR congestion curve to 1446 speeds vs bus flow |
@@ -31,7 +31,7 @@ node scripts/generate-route-candidates.js
 psql -h 127.0.0.1 -p 5431 -U postgres -d transport -f sql/routing/04_optimizer.sql
 brew install highs                                    # native solver; the npm build only copes with small models
 node scripts/optimize-routes.js --dry-run             # prints baseline vs optimized KPIs
-node scripts/optimize-routes.js                       # saves a run to routing.optimization_run / plan_dispatch
+node scripts/optimize-routes.js                       # saves a run to routing.optimization_run / plan_dispatch / plan_skipped
 ```
 
 The optimizer works in Hajj-relative time (Hijri day + local time) and uses the

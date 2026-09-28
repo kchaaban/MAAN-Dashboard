@@ -21,6 +21,9 @@ SET work_mem = '512MB';
 SET temp_file_limit = '12GB';
 SET statement_timeout = 0;
 
+-- The views of step 09 read these tables; 09 recreates them afterwards.
+DROP VIEW  IF EXISTS routing.edge_slot_speed;
+DROP VIEW  IF EXISTS routing.edge_cost;
 DROP TABLE IF EXISTS routing.edge_speed_static_v2;
 DROP TABLE IF EXISTS routing.edge_speed_profile_v2;
 DROP TABLE IF EXISTS routing.edge_time_obs;

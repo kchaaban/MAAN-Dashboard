@@ -35,4 +35,15 @@ CREATE TABLE IF NOT EXISTS routing.plan_dispatch (
 );
 CREATE INDEX IF NOT EXISTS plan_dispatch_plan_idx ON routing.plan_dispatch (plan_id);
 
-GRANT SELECT ON routing.optimization_run, routing.plan_dispatch TO ro_user;
+-- Plans a run could not route, and why: no residence → entrance pair, no
+-- route in the generation run, or every route inside the avoid zones.
+-- They are in neither scenario, so the run's KPIs leave their buses out.
+CREATE TABLE IF NOT EXISTS routing.plan_skipped (
+    run_id   int  NOT NULL REFERENCES routing.optimization_run(id) ON DELETE CASCADE,
+    plan_id  uuid NOT NULL REFERENCES public.plans(id) ON DELETE CASCADE,
+    reason   text NOT NULL,
+    buses    int  NOT NULL,
+    PRIMARY KEY (run_id, plan_id)
+);
+
+GRANT SELECT ON routing.optimization_run, routing.plan_dispatch, routing.plan_skipped TO ro_user;
