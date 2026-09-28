@@ -6,6 +6,9 @@ node_modules
 *.swp
 *.swo
 
-# Data directories
-data/
-**/data/   
+# Build output and its backups (the deploy script builds dist/ fresh)
+dist/
+dist.bak/
+
+# Large data exports: kept out of git, copied into data/ by hand
+simulation_data_view*.csv
